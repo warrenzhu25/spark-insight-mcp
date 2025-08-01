@@ -999,7 +999,7 @@ def get_resource_usage_timeline(
     app = client.get_application(app_id)
 
     # Get all executors
-    executors = client.get_all_executors(app_id=app_id)
+    executors = client.list_all_executors(app_id=app_id)
 
     # Get stages
     stages = client.list_stages(app_id=app_id, details=True)

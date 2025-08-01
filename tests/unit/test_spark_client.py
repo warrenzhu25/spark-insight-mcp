@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.config.config import ServerConfig
 
@@ -42,7 +44,6 @@ class TestSparkClient(unittest.TestCase):
         # Call the method
         apps = self.client.list_applications(status=["COMPLETED"], limit=10)
 
-        # Assertions
         mock_get.assert_called_once_with(
             "http://spark-history-server:18080/api/v1/applications",
             params={"status": ["COMPLETED"], "limit": 10},
@@ -50,6 +51,7 @@ class TestSparkClient(unittest.TestCase):
             auth=None,
             timeout=30,
             verify=True,
+            proxies=None,
         )
 
         self.assertEqual(len(apps), 1)
@@ -103,6 +105,7 @@ class TestSparkClient(unittest.TestCase):
             auth=None,
             timeout=30,
             verify=True,
+            proxies=None,
         )
 
         self.assertEqual(len(apps), 1)
@@ -121,3 +124,117 @@ class TestSparkClient(unittest.TestCase):
         # Assertions
         mock_get.assert_called_once()
         self.assertEqual(len(apps), 0)
+
+    @patch("spark_history_mcp.api.spark_client.requests.get")
+    def test_fallback_behavior(self, mock_get):
+        # First request fails with 404
+        error_response = MagicMock()
+        error_response.status_code = 404
+        error_response.text = "no such app"
+        http_error = requests.exceptions.HTTPError(response=error_response)
+        error_response.raise_for_status.side_effect = http_error
+
+        # Second request succeeds
+        success_response = MagicMock()
+        success_response.json.return_value = {"key": "value"}
+        success_response.raise_for_status.return_value = None
+
+        # Configure mock to return different responses
+        mock_get.side_effect = [error_response, success_response]
+
+        # Call method that should trigger EMR fallback
+        result = self.client._get("applications/app-123/jobs")
+
+        # Verify both URLs were tried
+        mock_get.assert_any_call(
+            "http://spark-history-server:18080/api/v1/applications/app-123/jobs",
+            params=None,
+            headers={"Accept": "application/json"},
+            auth=None,
+            timeout=30,
+            verify=True,
+            proxies=self.client.proxies,  # Use actual proxies value
+        )
+        mock_get.assert_any_call(
+            "http://spark-history-server:18080/api/v1/applications/app-123/1/jobs",
+            params=None,
+            headers={"Accept": "application/json"},
+            auth=None,
+            timeout=30,
+            verify=True,
+            proxies=self.client.proxies,  # Use actual proxies value
+        )
+
+        # Verify we got the success response
+        self.assertEqual(result, {"key": "value"})
+
+    @patch("spark_history_mcp.api.spark_client.requests.get")
+    def test_fallback_fail(self, mock_get):
+        # Create 404 response
+        error_response = MagicMock()
+        error_response.status_code = 404
+        error_response.text = "no such app"
+        http_error = requests.exceptions.HTTPError(response=error_response)
+        error_response.raise_for_status.side_effect = http_error
+
+        # Both requests fail
+        mock_get.side_effect = [error_response, error_response]
+
+        # Call method and expect exception
+        with self.assertRaises(requests.exceptions.HTTPError):
+            self.client._get("applications/app-123/jobs")
+
+        # Verify both URLs were tried
+        self.assertEqual(mock_get.call_count, 2)
+
+    @patch("spark_history_mcp.api.spark_client.requests.get")
+    def test_proxy_configuration(self, mock_get):
+        # Test with proxy enabled
+        client = SparkRestClient(
+            ServerConfig(url="http://spark-history-server:18080", use_proxy=True)
+        )
+        self.assertEqual(
+            client.proxies,
+            {"http": "socks5h://localhost:8157", "https": "socks5h://localhost:8157"},
+        )
+
+        # Test with proxy disabled
+        client = SparkRestClient(
+            ServerConfig(url="http://spark-history-server:18080", use_proxy=False)
+        )
+        self.assertIsNone(client.proxies)
+
+    def test_url_modification(self):
+        """Test the URL modification logic for different URL patterns"""
+        test_cases = [
+            # Test case 1: Standard URL that can be modified
+            {
+                "input": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/applications/application_1753825693853_1003/allexecutors",
+                "expected": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/applications/application_1753825693853_1003/1/allexecutors",
+            },
+            # Test case 2: URL that already has an attempt number (should not be modified)
+            {
+                "input": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/applications/application_1753825693853_1003/2/allexecutors",
+                "expected": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/applications/application_1753825693853_1003/2/allexecutors",
+            },
+            # Test case 3: URL without applications path (should not be modified)
+            {
+                "input": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/metrics",
+                "expected": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/metrics",
+            },
+            # Test case 4: URL with another endpoint after application ID
+            {
+                "input": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/applications/application_1753825693853_1003/stages",
+                "expected": "http://ip-10-0-119-23.ec2.internal:18080/api/v1/applications/application_1753825693853_1003/1/stages",
+            },
+        ]
+
+        for test_case in test_cases:
+            input_url = test_case["input"]
+            expected_url = test_case["expected"]
+            modified_url = self.client._modify_url(input_url)
+            self.assertEqual(
+                modified_url,
+                expected_url,
+                f"Failed to correctly modify URL.\nInput: {input_url}\nExpected: {expected_url}\nGot: {modified_url}",
+            )

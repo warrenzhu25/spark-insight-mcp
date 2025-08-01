@@ -83,7 +83,7 @@ If you just want to run the MCP server without cloning the repository:
 
 ```bash
 # Run with uv without installing the module
-uvx --from mcp-apache-spark-history-server  spark-mcp
+uvx --from mcp-apache-spark-history-server spark-mcp
 
 # OR run with pip and python. Use of venv is highly encouraged.
 python3 -m venv spark-mcp && source spark-mcp/bin/activate

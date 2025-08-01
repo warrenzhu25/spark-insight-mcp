@@ -26,6 +26,7 @@ class ServerConfig(BaseSettings):
     default: bool = False
     verify_ssl: bool = True
     emr_cluster_arn: Optional[str] = None  # EMR specific field
+    use_proxy: bool = False
 
 
 class McpConfig(BaseSettings):

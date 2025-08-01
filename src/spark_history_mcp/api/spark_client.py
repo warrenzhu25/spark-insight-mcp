@@ -1,3 +1,4 @@
+import re
 from typing import Any, Dict, List, Optional, Type, TypeVar
 from urllib.parse import urljoin
 
@@ -43,6 +44,16 @@ class SparkRestClient:
         self.base_url = self.config.url.rstrip("/") + "/api/v1"
         self.auth = None
         self.session = None
+        self.use_proxy = self.config.use_proxy
+        self.proxies = (
+            self.use_proxy
+            and {
+                "http": "socks5h://localhost:8157",
+                "https": "socks5h://localhost:8157",
+            }
+            or None
+        )
+        self.pattern = re.compile(r"(.*?/applications/[^/]+/)(.+)")
 
         # Determine whether to verify SSL certificates
         # Default to True, but if verify_ssl is explicitly set to False, use that value
@@ -53,18 +64,19 @@ class SparkRestClient:
             if self.config.auth.username and self.config.auth.password:
                 self.auth = (self.config.auth.username, self.config.auth.password)
 
-    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    def _make_request(
+        self, request_url: str, params: Optional[Dict[str, Any]]
+    ) -> requests.Response:
         """
         Make a GET request to the Spark REST API.
 
         Args:
-            endpoint: The API endpoint to call
+            request_url: The request URL
             params: Optional query parameters
 
         Returns:
-            The JSON response from the API
+            The response from the API
         """
-        url = urljoin(self.base_url + "/", endpoint.lstrip("/"))
         headers = {"Accept": "application/json"}
 
         # Add token to headers if provided
@@ -81,23 +93,65 @@ class SparkRestClient:
                 self.session.headers[key] = value
 
             response = self.session.get(
-                url,
+                request_url,
                 params=params,
                 timeout=30,
                 verify=verify,
+                proxies=self.proxies,
             )
         else:
             response = requests.get(
-                url,
+                request_url,
                 params=params,
                 headers=headers,
                 auth=self.auth,
                 timeout=30,
                 verify=verify,
+                proxies=self.proxies,
             )
+        return response
 
-        response.raise_for_status()
-        return response.json()
+    def _modify_url(self, url):
+        match = self.pattern.search(url)
+        if match:
+            prefix = match.group(1)
+            suffix = match.group(2)
+            # Check if the suffix already starts with a number (attempt ID)
+            if not re.match(r"^\d+/", suffix):
+                # If no attempt ID present, add the first (and probably only) attempt of the app running on YARN
+                app_attempt_id = 1
+                return f"{prefix}{app_attempt_id}/{suffix}"
+        return url
+
+    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
+        """
+        Make a GET request to the Spark REST API.
+
+        Args:
+            endpoint: The API endpoint to call
+            params: Optional query parameters
+
+        Returns:
+            The JSON response from the API
+        """
+        url = urljoin(self.base_url + "/", endpoint.lstrip("/"))
+
+        try:
+            # Try original URL first
+            first_response = self._make_request(url, params)
+            first_response.raise_for_status()
+            return first_response.json()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404 and "/applications/" in url:
+                modified_url = self._modify_url(url)
+                try:
+                    second_response = self._make_request(modified_url, params)
+                    second_response.raise_for_status()
+                    return second_response.json()
+                except requests.exceptions.HTTPError as e2:
+                    raise e2 from e  # Chain the exception with the original error
+            # Raise the original error
+            raise e from None
 
     def _parse_model(self, data: Dict[str, Any], model_class: Type[T]) -> T:
         """
@@ -534,9 +588,9 @@ class SparkRestClient:
         )
 
         if self.session:
-            response = self.session.get(url, timeout=30)
+            response = self.session.get(url, timeout=30, proxies=self.proxies)
         else:
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=30, proxies=self.proxies)
 
         response.raise_for_status()
         return response.text
