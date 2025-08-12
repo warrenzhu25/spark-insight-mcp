@@ -96,12 +96,23 @@ config:
 # Authentication configuration
 auth:
   enabled: false
+
+  # secret: use Kubernetes Secret to store spark history server credentials as environment variables
   secret:
     create: false
     name: ""
     username: ""
     password: ""
     token: ""
+
+  # externalsecret: use External Secrets Operator to sync a Secret from a secret provider.
+  # Requiring External Secrets Operator to be installed in the k8s cluster.
+  externalsecret:
+    create: false
+    secretStoreRef:
+      name: ""           # e.g. my-secret-store
+      kind: ClusterSecretStore  # or SecretStore
+    secretPath: ""        # e.g. path/to/secret containing username/password/token properties
 
 # Environment variables
 env: []
