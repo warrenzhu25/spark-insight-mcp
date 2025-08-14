@@ -820,16 +820,34 @@ class TestTools(unittest.TestCase):
         sql1.id = 1
         sql1.duration = 5000  # 5 seconds
         sql1.status = "COMPLETED"
+        sql1.success_job_ids = [1, 2]
+        sql1.failed_job_ids = []
+        sql1.running_job_ids = []
+        sql1.description = "Query 1"
+        sql1.submission_time = datetime.now()
+        sql1.plan_description = "Sample plan description"
 
         sql2 = MagicMock(spec=ExecutionData)
         sql2.id = 2
         sql2.duration = 10000  # 10 seconds
         sql2.status = "COMPLETED"
+        sql2.success_job_ids = [3, 4]
+        sql2.failed_job_ids = []
+        sql2.running_job_ids = []
+        sql2.description = "Query 2"
+        sql2.submission_time = datetime.now()
+        sql2.plan_description = "Sample plan description"
 
         sql3 = MagicMock(spec=ExecutionData)
         sql3.id = 3
         sql3.duration = 2000  # 2 seconds
         sql3.status = "COMPLETED"
+        sql3.success_job_ids = [5]
+        sql3.failed_job_ids = []
+        sql3.running_job_ids = []
+        sql3.description = "Query 3"
+        sql3.submission_time = datetime.now()
+        sql3.plan_description = "Sample plan description"
 
         mock_client.get_sql_list.return_value = [sql1, sql2, sql3]
         mock_get_client.return_value = mock_client
@@ -853,11 +871,23 @@ class TestTools(unittest.TestCase):
         sql1.id = 1
         sql1.duration = 5000
         sql1.status = "RUNNING"
+        sql1.success_job_ids = []
+        sql1.failed_job_ids = []
+        sql1.running_job_ids = [1]
+        sql1.description = "Running Query"
+        sql1.submission_time = datetime.now()
+        sql1.plan_description = "Running plan description"
 
         sql2 = MagicMock(spec=ExecutionData)
         sql2.id = 2
         sql2.duration = 10000
         sql2.status = "COMPLETED"
+        sql2.success_job_ids = [2, 3]
+        sql2.failed_job_ids = []
+        sql2.running_job_ids = []
+        sql2.description = "Completed Query"
+        sql2.submission_time = datetime.now()
+        sql2.plan_description = "Completed plan description"
 
         mock_client.get_sql_list.return_value = [sql1, sql2]
         mock_get_client.return_value = mock_client
@@ -880,11 +910,23 @@ class TestTools(unittest.TestCase):
         sql1.id = 1
         sql1.duration = 5000
         sql1.status = "RUNNING"
+        sql1.success_job_ids = []
+        sql1.failed_job_ids = []
+        sql1.running_job_ids = [1]
+        sql1.description = "Running Query"
+        sql1.submission_time = datetime.now()
+        sql1.plan_description = "Running plan description"
 
         sql2 = MagicMock(spec=ExecutionData)
         sql2.id = 2
         sql2.duration = 10000
         sql2.status = "COMPLETED"
+        sql2.success_job_ids = [2, 3]
+        sql2.failed_job_ids = []
+        sql2.running_job_ids = []
+        sql2.description = "Completed Query"
+        sql2.submission_time = datetime.now()
+        sql2.plan_description = "Completed plan description"
 
         mock_client.get_sql_list.return_value = [sql1, sql2]
         mock_get_client.return_value = mock_client
@@ -924,6 +966,12 @@ class TestTools(unittest.TestCase):
             sql.id = i
             sql.duration = (10 - i) * 1000  # Decreasing durations
             sql.status = "COMPLETED"
+            sql.success_job_ids = [i]
+            sql.failed_job_ids = []
+            sql.running_job_ids = []
+            sql.description = f"Query {i}"
+            sql.submission_time = datetime.now()
+            sql.plan_description = f"Plan description for query {i}"
             sql_execs.append(sql)
 
         mock_client.get_sql_list.return_value = sql_execs

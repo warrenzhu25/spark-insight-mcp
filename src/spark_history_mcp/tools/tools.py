@@ -2,6 +2,10 @@ import heapq
 from typing import Any, Dict, List, Optional
 
 from spark_history_mcp.core.app import mcp
+from spark_history_mcp.models.mcp_types import (
+    JobSummary,
+    SqlQuerySummary,
+)
 from spark_history_mcp.models.spark_types import (
     ApplicationInfo,
     ExecutionData,
@@ -762,6 +766,31 @@ def get_stage_task_summary(
     )
 
 
+def truncate_plan_description(plan_desc: str, max_length: int) -> str:
+    """
+    Truncate plan description while preserving structure.
+
+    Args:
+        plan_desc: The plan description to truncate
+        max_length: Maximum length in characters
+
+    Returns:
+        Truncated plan description with indicator if truncated
+    """
+    if not plan_desc or len(plan_desc) <= max_length:
+        return plan_desc
+
+    # Try to truncate at a logical boundary (end of a line)
+    truncated = plan_desc[:max_length]
+    last_newline = truncated.rfind("\n")
+
+    # If we can preserve most content by truncating at newline, do so
+    if last_newline > max_length * 0.8:
+        truncated = truncated[:last_newline]
+
+    return truncated + "\n... [truncated]"
+
+
 @mcp.tool()
 def list_slowest_sql_queries(
     app_id: str,
@@ -770,22 +799,24 @@ def list_slowest_sql_queries(
     top_n: int = 1,
     page_size: int = 100,
     include_running: bool = False,
-) -> List[ExecutionData]:
+    include_plan_description: bool = True,
+    plan_description_max_length: int = 2000,
+) -> List[SqlQuerySummary]:
     """
-    Get a summary of the top N slowest SQL queries for an application.
+    Get the N slowest SQL queries for a Spark application.
 
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         attempt_id: Optional attempt ID
-        top_n: Number of slowest queries to return
-        page_size: Number of executions to fetch per page
-        include_running: Whether to include running queries in the results
+        top_n: Number of slowest queries to return (default: 1)
+        page_size: Number of executions to fetch per page (default: 100)
+        include_running: Whether to include running queries (default: False)
+        include_plan_description: Whether to include execution plans (default: True)
+        plan_description_max_length: Max characters for plan description (default: 1500)
 
     Returns:
-        List of ExecutionData objects for the slowest queries
-        The total time metric (shown with time unit "m" for minutes) represents cumulative CPU time spent across all parallel tasks performing the scan operation
-        This should be interpreted alongside the min/median/max metrics, which show the distribution of individual task durations.
+        List of SqlQuerySummary objects for the slowest queries
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -799,7 +830,7 @@ def list_slowest_sql_queries(
             app_id=app_id,
             attempt_id=attempt_id,
             details=True,
-            plan_description=False,
+            plan_description=True,
             offset=offset,
             length=page_size,
         )
@@ -820,7 +851,40 @@ def list_slowest_sql_queries(
             e for e in all_executions if e.status != SQLExecutionStatus.RUNNING.value
         ]
 
-    return heapq.nlargest(top_n, all_executions, key=lambda e: e.duration)
+    # Get the top N slowest executions
+    slowest_executions = heapq.nlargest(top_n, all_executions, key=lambda e: e.duration)
+
+    # Create simplified results without additional API calls. Raw object is too verbose.
+    simplified_results = []
+    for execution in slowest_executions:
+        job_summary = JobSummary(
+            success_job_ids=execution.success_job_ids,
+            failed_job_ids=execution.failed_job_ids,
+            running_job_ids=execution.running_job_ids,
+        )
+
+        # Handle plan description based on include_plan_description flag
+        plan_description = ""
+        if include_plan_description and execution.plan_description:
+            plan_description = truncate_plan_description(
+                execution.plan_description, plan_description_max_length
+            )
+
+        query_summary = SqlQuerySummary(
+            id=execution.id,
+            duration=execution.duration,
+            description=execution.description,
+            status=execution.status,
+            submission_time=execution.submission_time.isoformat()
+            if execution.submission_time
+            else None,
+            plan_description=plan_description,
+            job_summary=job_summary,
+        )
+
+        simplified_results.append(query_summary)
+
+    return simplified_results
 
 
 @mcp.tool()

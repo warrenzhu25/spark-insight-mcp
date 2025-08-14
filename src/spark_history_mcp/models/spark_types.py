@@ -949,7 +949,7 @@ class ExecutionData(BaseModel):
 
     id: int
     status: str  # SQLExecutionStatus as string
-    description: Optional[str] = Field(None, alias="planDescription")
+    description: Optional[str] = Field(None, alias="description")
     plan_description: str = Field(..., alias="planDescription")
     submission_time: datetime = Field(..., alias="submissionTime")
     duration: Optional[int] = Field(None, alias="durationMilliSeconds")
