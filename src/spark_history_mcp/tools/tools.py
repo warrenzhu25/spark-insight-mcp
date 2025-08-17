@@ -1,5 +1,7 @@
 import heapq
-from typing import Any, Dict, List, Optional
+import statistics
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 from spark_history_mcp.core.app import mcp
 from spark_history_mcp.models.mcp_types import (
@@ -1165,3 +1167,568 @@ def get_resource_usage_timeline(
             "peak_cores": max([r["total_cores"] for r in resource_timeline] + [0]),
         },
     }
+
+
+# SparkInsight Analysis Tools
+
+@mcp.tool()
+def analyze_auto_scaling(
+    app_id: str, 
+    server: Optional[str] = None,
+    target_stage_duration_minutes: int = 2
+) -> Dict[str, Any]:
+    """
+    Analyze application workload and provide auto-scaling recommendations.
+    
+    Provides recommendations for dynamic allocation configuration based on 
+    application workload patterns. Calculates optimal initial and maximum 
+    executor counts to achieve target stage completion times.
+    
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        target_stage_duration_minutes: Target duration for stage completion (default: 2 minutes)
+        
+    Returns:
+        Dictionary containing auto-scaling analysis and recommendations
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+    
+    # Get application data
+    app = client.get_application(app_id)
+    environment = client.get_environment(app_id)
+    stages = client.list_stages(app_id=app_id)
+    
+    if not stages:
+        return {"error": "No stages found for application", "application_id": app_id}
+    
+    target_duration_ms = target_stage_duration_minutes * 60 * 1000
+    
+    # Get app start time and analyze initial stages (first 2 minutes)
+    app_start = app.attempts[0].start_time if app.attempts else datetime.now()
+    initial_window = app_start + timedelta(minutes=2)
+    
+    # Filter stages that were running in the first 2 minutes
+    initial_stages = [
+        s for s in stages 
+        if s.submission_time and s.completion_time and
+        s.submission_time <= initial_window and s.completion_time >= initial_window
+    ]
+    
+    # Calculate recommended initial executors
+    initial_executor_demand = 0
+    for stage in initial_stages:
+        if stage.executor_run_time and stage.num_tasks:
+            # Estimate executors needed to complete stage in target duration
+            executors_needed = min(
+                stage.executor_run_time / target_duration_ms, 
+                stage.num_tasks
+            ) / 4  # Conservative scaling factor
+            initial_executor_demand += executors_needed
+    
+    recommended_initial = max(2, int(initial_executor_demand))
+    
+    # Calculate maximum executors needed during peak load
+    # Create timeline of executor demand
+    stage_events = []
+    for stage in stages:
+        if stage.submission_time and stage.completion_time and stage.executor_run_time and stage.num_tasks:
+            executors_needed = int(min(
+                stage.executor_run_time / target_duration_ms, 
+                stage.num_tasks
+            ) / 4)
+            stage_events.append((stage.submission_time, executors_needed))
+            stage_events.append((stage.completion_time, -executors_needed))
+    
+    # Sort events and calculate peak demand
+    stage_events.sort(key=lambda x: x[0])
+    current_demand = 0
+    max_demand = 2
+    
+    for timestamp, demand_change in stage_events:
+        current_demand += demand_change
+        max_demand = max(max_demand, current_demand)
+    
+    recommended_max = max(recommended_initial, max_demand)
+    
+    # Get current configuration
+    spark_props = {k: v for k, v in environment.spark_properties} if environment.spark_properties else {}
+    current_initial = spark_props.get("spark.dynamicAllocation.initialExecutors", "Not set")
+    current_max = spark_props.get("spark.dynamicAllocation.maxExecutors", "Not set")
+    
+    return {
+        "application_id": app_id,
+        "analysis_type": "Auto-scaling Configuration",
+        "target_stage_duration_minutes": target_stage_duration_minutes,
+        "recommendations": {
+            "initial_executors": {
+                "current": current_initial,
+                "recommended": str(recommended_initial),
+                "description": "Based on stages running in first 2 minutes"
+            },
+            "max_executors": {
+                "current": current_max,
+                "recommended": str(recommended_max),
+                "description": "Based on peak concurrent stage demand"
+            }
+        },
+        "analysis_details": {
+            "total_stages": len(stages),
+            "initial_stages_analyzed": len(initial_stages),
+            "peak_concurrent_demand": max_demand,
+            "calculation_method": f"Aims to complete stages in {target_stage_duration_minutes} minutes"
+        }
+    }
+
+
+@mcp.tool()
+def analyze_shuffle_skew(
+    app_id: str,
+    server: Optional[str] = None,
+    shuffle_threshold_gb: int = 10,
+    skew_ratio_threshold: float = 2.0
+) -> Dict[str, Any]:
+    """
+    Analyze shuffle operations to identify data skew issues.
+    
+    Identifies stages with significant shuffle data skew by comparing
+    maximum vs median shuffle write bytes across tasks. Helps identify
+    performance bottlenecks caused by uneven data distribution.
+    
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        shuffle_threshold_gb: Minimum total shuffle write in GB to analyze (default: 10)
+        skew_ratio_threshold: Minimum ratio of max/median to flag as skewed (default: 2.0)
+        
+    Returns:
+        Dictionary containing shuffle skew analysis results
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+    
+    stages = client.list_stages(app_id=app_id, with_summaries=True)
+    shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
+    
+    skewed_stages = []
+    
+    for stage in stages:
+        # Check if stage has significant shuffle write
+        if not stage.shuffle_write_bytes or stage.shuffle_write_bytes < shuffle_threshold_bytes:
+            continue
+            
+        # Get task metric distributions for this stage
+        try:
+            task_summary = client.get_stage_task_summary(
+                app_id=app_id,
+                stage_id=stage.stage_id,
+                attempt_id=stage.attempt_id
+            )
+            
+            if task_summary.shuffle_write_bytes:
+                # Extract quantiles (typically [min, 25th, 50th, 75th, max])
+                quantiles = task_summary.shuffle_write_bytes
+                if len(quantiles) >= 5:
+                    median = quantiles[2]  # 50th percentile
+                    max_val = quantiles[4]  # 100th percentile (max)
+                    
+                    if median > 0:
+                        skew_ratio = max_val / median
+                        if skew_ratio > skew_ratio_threshold:
+                            skewed_stages.append({
+                                "stage_id": stage.stage_id,
+                                "attempt_id": stage.attempt_id,
+                                "name": stage.name,
+                                "skew_ratio": round(skew_ratio, 2),
+                                "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
+                                "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
+                                "total_shuffle_write_gb": round(stage.shuffle_write_bytes / (1024 * 1024 * 1024), 2),
+                                "task_count": stage.num_tasks,
+                                "failed_tasks": stage.num_failed_tasks
+                            })
+        except Exception as e:
+            # Skip stages where we can't get task summaries
+            continue
+    
+    # Sort by skew ratio (highest first)
+    skewed_stages.sort(key=lambda x: x["skew_ratio"], reverse=True)
+    
+    recommendations = []
+    if skewed_stages:
+        recommendations.append({
+            "type": "data_partitioning",
+            "priority": "high",
+            "issue": f"Found {len(skewed_stages)} stages with shuffle skew",
+            "suggestion": "Consider repartitioning data by key distribution or using salting techniques"
+        })
+        
+        max_skew = max(s["skew_ratio"] for s in skewed_stages)
+        if max_skew > 10:
+            recommendations.append({
+                "type": "performance",
+                "priority": "critical", 
+                "issue": f"Extreme skew detected (ratio: {max_skew})",
+                "suggestion": "Investigate data distribution and consider custom partitioning strategies"
+            })
+    
+    return {
+        "application_id": app_id,
+        "analysis_type": "Shuffle Skew Analysis",
+        "parameters": {
+            "shuffle_threshold_gb": shuffle_threshold_gb,
+            "skew_ratio_threshold": skew_ratio_threshold
+        },
+        "skewed_stages": skewed_stages,
+        "summary": {
+            "total_stages_analyzed": len([s for s in stages if s.shuffle_write_bytes and s.shuffle_write_bytes >= shuffle_threshold_bytes]),
+            "skewed_stages_count": len(skewed_stages),
+            "max_skew_ratio": max([s["skew_ratio"] for s in skewed_stages]) if skewed_stages else 0
+        },
+        "recommendations": recommendations
+    }
+
+
+@mcp.tool()
+def analyze_failed_tasks(
+    app_id: str,
+    server: Optional[str] = None,
+    failure_threshold: int = 1
+) -> Dict[str, Any]:
+    """
+    Analyze failed tasks to identify patterns and root causes.
+    
+    Examines stages and executors with task failures to identify common
+    failure patterns, problematic executors, and potential root causes.
+    
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        failure_threshold: Minimum number of failures to include in analysis (default: 1)
+        
+    Returns:
+        Dictionary containing failed task analysis results
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+    
+    stages = client.list_stages(app_id=app_id)
+    executors = client.list_all_executors(app_id=app_id)
+    
+    # Analyze stages with failures
+    failed_stages = []
+    total_failed_tasks = 0
+    
+    for stage in stages:
+        if stage.num_failed_tasks and stage.num_failed_tasks >= failure_threshold:
+            failed_stages.append({
+                "stage_id": stage.stage_id,
+                "attempt_id": stage.attempt_id,
+                "name": stage.name,
+                "failed_tasks": stage.num_failed_tasks,
+                "total_tasks": stage.num_tasks,
+                "failure_rate": round(stage.num_failed_tasks / max(stage.num_tasks, 1) * 100, 2),
+                "status": stage.status
+            })
+            total_failed_tasks += stage.num_failed_tasks
+    
+    # Analyze executor failures
+    problematic_executors = []
+    for executor in executors:
+        if executor.failed_tasks and executor.failed_tasks >= failure_threshold:
+            problematic_executors.append({
+                "executor_id": executor.id,
+                "host": executor.host,
+                "failed_tasks": executor.failed_tasks,
+                "completed_tasks": executor.completed_tasks,
+                "failure_rate": round(executor.failed_tasks / max(executor.failed_tasks + executor.completed_tasks, 1) * 100, 2),
+                "remove_reason": executor.remove_reason,
+                "is_active": executor.is_active
+            })
+    
+    # Sort by failure counts
+    failed_stages.sort(key=lambda x: x["failed_tasks"], reverse=True)
+    problematic_executors.sort(key=lambda x: x["failed_tasks"], reverse=True)
+    
+    # Generate recommendations
+    recommendations = []
+    
+    if failed_stages:
+        avg_failure_rate = statistics.mean([s["failure_rate"] for s in failed_stages])
+        recommendations.append({
+            "type": "reliability",
+            "priority": "high" if avg_failure_rate > 10 else "medium",
+            "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
+            "suggestion": "Investigate task failure logs and consider increasing task retry settings"
+        })
+    
+    if problematic_executors:
+        # Check for host-specific issues
+        host_failures = {}
+        for executor in problematic_executors:
+            host = executor["host"]
+            host_failures[host] = host_failures.get(host, 0) + executor["failed_tasks"]
+        
+        max_host_failures = max(host_failures.values()) if host_failures else 0
+        if max_host_failures > total_failed_tasks * 0.5:
+            recommendations.append({
+                "type": "infrastructure",
+                "priority": "high",
+                "issue": "High concentration of failures on specific hosts",
+                "suggestion": "Check infrastructure health and consider blacklisting problematic nodes"
+            })
+    
+    return {
+        "application_id": app_id,
+        "analysis_type": "Failed Task Analysis",
+        "parameters": {
+            "failure_threshold": failure_threshold
+        },
+        "failed_stages": failed_stages,
+        "problematic_executors": problematic_executors,
+        "summary": {
+            "total_failed_tasks": total_failed_tasks,
+            "stages_with_failures": len(failed_stages),
+            "executors_with_failures": len(problematic_executors),
+            "overall_failure_impact": "high" if total_failed_tasks > 100 else "medium" if total_failed_tasks > 10 else "low"
+        },
+        "recommendations": recommendations
+    }
+
+
+@mcp.tool()
+def analyze_executor_utilization(
+    app_id: str,
+    server: Optional[str] = None,
+    interval_minutes: int = 1
+) -> Dict[str, Any]:
+    """
+    Analyze executor utilization patterns over time.
+    
+    Tracks executor allocation and usage throughout the application lifecycle
+    to identify periods of over/under-provisioning and optimization opportunities.
+    
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        interval_minutes: Time interval for analysis in minutes (default: 1)
+        
+    Returns:
+        Dictionary containing executor utilization analysis
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+    
+    app = client.get_application(app_id)
+    executors = client.list_all_executors(app_id=app_id)
+    
+    if not app.attempts:
+        return {"error": "No application attempts found", "application_id": app_id}
+    
+    start_time = app.attempts[0].start_time
+    end_time = app.attempts[0].end_time
+    
+    if not start_time or not end_time:
+        return {"error": "Application start/end times not available", "application_id": app_id}
+    
+    # Create time intervals
+    duration = end_time - start_time
+    total_minutes = int(duration.total_seconds() / 60)
+    intervals = []
+    
+    for minute in range(0, total_minutes + 1, interval_minutes):
+        interval_time = start_time + timedelta(minutes=minute)
+        
+        # Count active executors at this time
+        active_executors = 0
+        total_cores = 0
+        total_memory_mb = 0
+        
+        for executor in executors:
+            add_time = executor.add_time
+            remove_time = executor.remove_time or end_time
+            
+            if add_time <= interval_time < remove_time:
+                active_executors += 1
+                total_cores += executor.total_cores
+                if executor.max_memory:
+                    total_memory_mb += executor.max_memory / (1024 * 1024)
+        
+        intervals.append({
+            "minute": minute,
+            "timestamp": interval_time.isoformat(),
+            "active_executors": active_executors,
+            "total_cores": total_cores,
+            "total_memory_mb": int(total_memory_mb)
+        })
+    
+    # Merge consecutive intervals with same executor count
+    merged_intervals = []
+    if intervals:
+        current_start = intervals[0]["minute"]
+        current_count = intervals[0]["active_executors"]
+        current_cores = intervals[0]["total_cores"]
+        current_memory = intervals[0]["total_memory_mb"]
+        
+        for i in range(1, len(intervals)):
+            if intervals[i]["active_executors"] != current_count:
+                # End current interval
+                time_range = f"{current_start}" if current_start == intervals[i-1]["minute"] else f"{current_start}-{intervals[i-1]['minute']}"
+                merged_intervals.append({
+                    "time_range_minutes": time_range,
+                    "active_executors": current_count,
+                    "total_cores": current_cores,
+                    "total_memory_mb": current_memory
+                })
+                
+                # Start new interval
+                current_start = intervals[i]["minute"]
+                current_count = intervals[i]["active_executors"]
+                current_cores = intervals[i]["total_cores"]
+                current_memory = intervals[i]["total_memory_mb"]
+        
+        # Add final interval
+        time_range = f"{current_start}" if current_start == intervals[-1]["minute"] else f"{current_start}-{intervals[-1]['minute']}"
+        merged_intervals.append({
+            "time_range_minutes": time_range,
+            "active_executors": current_count,
+            "total_cores": current_cores,
+            "total_memory_mb": current_memory
+        })
+    
+    # Calculate utilization metrics
+    executor_counts = [interval["active_executors"] for interval in intervals]
+    peak_executors = max(executor_counts) if executor_counts else 0
+    avg_executors = statistics.mean(executor_counts) if executor_counts else 0
+    min_executors = min(executor_counts) if executor_counts else 0
+    
+    # Calculate efficiency metrics
+    total_executor_minutes = sum(interval["active_executors"] for interval in intervals)
+    utilization_efficiency = (avg_executors / peak_executors * 100) if peak_executors > 0 else 0
+    
+    recommendations = []
+    if utilization_efficiency < 70:
+        recommendations.append({
+            "type": "resource_efficiency",
+            "priority": "medium",
+            "issue": f"Low executor utilization efficiency ({utilization_efficiency:.1f}%)",
+            "suggestion": "Consider optimizing dynamic allocation settings or job scheduling"
+        })
+    
+    if peak_executors > avg_executors * 2:
+        recommendations.append({
+            "type": "resource_planning", 
+            "priority": "medium",
+            "issue": "High variance in executor demand",
+            "suggestion": "Review workload patterns and consider more aggressive scaling policies"
+        })
+    
+    return {
+        "application_id": app_id,
+        "analysis_type": "Executor Utilization Analysis",
+        "timeline": merged_intervals,
+        "summary": {
+            "peak_executors": peak_executors,
+            "average_executors": round(avg_executors, 1),
+            "minimum_executors": min_executors,
+            "total_duration_minutes": total_minutes,
+            "utilization_efficiency_percent": round(utilization_efficiency, 1),
+            "total_executor_minutes": total_executor_minutes
+        },
+        "recommendations": recommendations
+    }
+
+
+@mcp.tool()
+def get_application_insights(
+    app_id: str,
+    server: Optional[str] = None,
+    include_auto_scaling: bool = True,
+    include_shuffle_skew: bool = True,
+    include_failed_tasks: bool = True,
+    include_executor_utilization: bool = True
+) -> Dict[str, Any]:
+    """
+    Get comprehensive SparkInsight-style analysis for an application.
+    
+    Runs multiple analysis tools to provide a complete performance and
+    optimization overview of a Spark application, similar to SparkInsight's
+    comprehensive analysis approach.
+    
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        include_auto_scaling: Whether to include auto-scaling analysis (default: True)
+        include_shuffle_skew: Whether to include shuffle skew analysis (default: True) 
+        include_failed_tasks: Whether to include failed task analysis (default: True)
+        include_executor_utilization: Whether to include executor utilization analysis (default: True)
+        
+    Returns:
+        Dictionary containing comprehensive application insights
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+    
+    # Get basic application info
+    app = client.get_application(app_id)
+    
+    insights = {
+        "application_id": app_id,
+        "application_name": app.name,
+        "analysis_timestamp": datetime.now().isoformat(),
+        "analysis_type": "Comprehensive SparkInsight Analysis",
+        "analyses": {}
+    }
+    
+    # Run requested analyses
+    if include_auto_scaling:
+        try:
+            insights["analyses"]["auto_scaling"] = analyze_auto_scaling(app_id, server)
+        except Exception as e:
+            insights["analyses"]["auto_scaling"] = {"error": str(e)}
+    
+    if include_shuffle_skew:
+        try:
+            insights["analyses"]["shuffle_skew"] = analyze_shuffle_skew(app_id, server)
+        except Exception as e:
+            insights["analyses"]["shuffle_skew"] = {"error": str(e)}
+    
+    if include_failed_tasks:
+        try:
+            insights["analyses"]["failed_tasks"] = analyze_failed_tasks(app_id, server)
+        except Exception as e:
+            insights["analyses"]["failed_tasks"] = {"error": str(e)}
+    
+    if include_executor_utilization:
+        try:
+            insights["analyses"]["executor_utilization"] = analyze_executor_utilization(app_id, server)
+        except Exception as e:
+            insights["analyses"]["executor_utilization"] = {"error": str(e)}
+    
+    # Aggregate recommendations from all analyses
+    all_recommendations = []
+    critical_issues = []
+    
+    for analysis_name, analysis_result in insights["analyses"].items():
+        if "recommendations" in analysis_result:
+            for rec in analysis_result["recommendations"]:
+                rec["source_analysis"] = analysis_name
+                all_recommendations.append(rec)
+                if rec.get("priority") == "critical":
+                    critical_issues.append(rec)
+    
+    # Sort recommendations by priority
+    priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    all_recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
+    
+    insights["summary"] = {
+        "total_analyses_run": len([a for a in insights["analyses"].values() if "error" not in a]),
+        "total_recommendations": len(all_recommendations),
+        "critical_issues": len(critical_issues),
+        "high_priority_recommendations": len([r for r in all_recommendations if r.get("priority") == "high"]),
+        "overall_health": "critical" if critical_issues else "good" if len(all_recommendations) < 3 else "needs_attention"
+    }
+    
+    insights["recommendations"] = all_recommendations
+    
+    return insights

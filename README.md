@@ -9,6 +9,8 @@
 
 Transform your Spark infrastructure monitoring with AI! This Model Context Protocol (MCP) server enables AI agents to analyze job performance, identify bottlenecks, and provide intelligent insights from your Spark History Server data.
 
+**✨ Now featuring SparkInsight-inspired intelligent analysis tools** for auto-scaling optimization, data skew detection, failure analysis, and comprehensive performance insights!
+
 ## 🎯 What is This?
 
 **Spark History Server MCP** bridges AI agents with your existing Apache Spark infrastructure, enabling:
@@ -132,7 +134,7 @@ mcp:
 
 > **Note**: These tools are subject to change as we scale and improve the performance of the MCP server.
 
-The MCP server provides **17 specialized tools** organized by analysis patterns. LLMs can intelligently select and combine these tools based on user queries:
+The MCP server provides **22 specialized tools** organized by analysis patterns. LLMs can intelligently select and combine these tools based on user queries:
 
 ### 📊 Application Information
 *Basic application metadata and overview*
@@ -191,6 +193,16 @@ The MCP server provides **17 specialized tools** organized by analysis patterns.
 | `compare_job_environments` | ⚙️ Compare Spark environment configurations between two jobs to identify differences in properties and settings |
 | `compare_job_performance` | 📈 Compare performance metrics between two Spark jobs including execution times, resource usage, and task distribution |
 
+### 🧠 SparkInsight Intelligence
+*AI-powered analysis tools inspired by SparkInsight for intelligent performance optimization*
+| 🔧 Tool | 📝 Description |
+|---------|----------------|
+| `analyze_auto_scaling` | 🚀 Analyze workload patterns and provide intelligent auto-scaling recommendations for dynamic allocation |
+| `analyze_shuffle_skew` | 📊 Detect and analyze data skew in shuffle operations with actionable optimization suggestions |
+| `analyze_failed_tasks` | 🚨 Investigate task failures to identify patterns, problematic executors, and root causes |
+| `analyze_executor_utilization` | 📈 Track executor utilization over time to identify over/under-provisioning and optimization opportunities |
+| `get_application_insights` | 🧠 **Comprehensive SparkInsight analysis** - Runs all analyzers to provide complete performance overview and recommendations |
+
 ### 🤖 How LLMs Use These Tools
 
 **Query Pattern Examples:**
@@ -199,6 +211,20 @@ The MCP server provides **17 specialized tools** organized by analysis patterns.
 - *"What's wrong with stage 5?"* → `get_stage` + `get_stage_task_summary`
 - *"Show me resource usage over time"* → `get_resource_usage_timeline` + `get_executor_summary`
 - *"Find my slowest SQL queries"* → `list_slowest_sql_queries` + `compare_sql_execution_plans`
+- *"Analyze my app performance with insights"* → `get_application_insights` (comprehensive SparkInsight analysis)
+- *"Help me optimize auto-scaling"* → `analyze_auto_scaling` + `analyze_executor_utilization`
+- *"Why are my tasks failing?"* → `analyze_failed_tasks` + `get_executor_summary`
+- *"Check for data skew issues"* → `analyze_shuffle_skew` + `get_stage_task_summary`
+
+## 🧠 SparkInsight Integration
+
+The MCP server now includes intelligent analysis capabilities inspired by SparkInsight! See the **[SparkInsight Integration Guide](examples/sparkinsight/README.md)** for:
+
+- 🚀 **Auto-scaling optimization** recommendations
+- 📊 **Data skew detection** and mitigation strategies  
+- 🚨 **Failure analysis** with root cause identification
+- 📈 **Executor utilization** optimization insights
+- 🧠 **Comprehensive analysis** combining all insights
 
 ## 📔 AWS Integration Guides
 
