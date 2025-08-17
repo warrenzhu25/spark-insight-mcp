@@ -4,14 +4,22 @@ from unittest.mock import MagicMock, patch
 
 from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.models.spark_types import (
+    ApplicationAttemptInfo,
+    ApplicationEnvironmentInfo,
     ApplicationInfo,
     ExecutionData,
+    ExecutorSummary,
     JobData,
     StageData,
     TaskMetricDistributions,
 )
 from spark_history_mcp.tools.tools import (
+    analyze_auto_scaling,
+    analyze_executor_utilization,
+    analyze_failed_tasks,
+    analyze_shuffle_skew,
     get_application,
+    get_application_insights,
     get_client_or_default,
     get_stage,
     get_stage_task_summary,
@@ -986,3 +994,440 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0].duration, 10000)
         self.assertEqual(result[1].duration, 9000)
         self.assertEqual(result[2].duration, 8000)
+
+
+class TestSparkInsightTools(unittest.TestCase):
+    """Test suite for SparkInsight analysis tools"""
+
+    def setUp(self):
+        # Create mock context
+        self.mock_ctx = MagicMock()
+        self.mock_lifespan_context = MagicMock()
+        self.mock_ctx.request_context.lifespan_context = self.mock_lifespan_context
+
+        # Create mock client
+        self.mock_client = MagicMock(spec=SparkRestClient)
+        self.mock_lifespan_context.clients = {"default": self.mock_client}
+        self.mock_lifespan_context.default_client = self.mock_client
+
+        # Mock datetime.now() to return a consistent time
+        self.mock_now = datetime(2024, 1, 1, 12, 0, 0)
+
+    def _create_mock_application(self, app_id="app-123", name="Test App"):
+        """Helper to create mock application"""
+        mock_app = MagicMock(spec=ApplicationInfo)
+        mock_app.id = app_id
+        mock_app.name = name
+        
+        # Create mock attempt
+        mock_attempt = MagicMock(spec=ApplicationAttemptInfo)
+        mock_attempt.start_time = self.mock_now
+        mock_attempt.end_time = self.mock_now + timedelta(minutes=30)
+        mock_app.attempts = [mock_attempt]
+        
+        return mock_app
+
+    def _create_mock_environment(self, spark_props=None):
+        """Helper to create mock environment"""
+        mock_env = MagicMock(spec=ApplicationEnvironmentInfo)
+        if spark_props is None:
+            spark_props = {
+                "spark.dynamicAllocation.initialExecutors": "2",
+                "spark.dynamicAllocation.maxExecutors": "10"
+            }
+        mock_env.spark_properties = [(k, v) for k, v in spark_props.items()]
+        return mock_env
+
+    def _create_mock_stage(self, stage_id, name="Test Stage", status="COMPLETE", 
+                          executor_run_time=None, num_tasks=10, num_failed_tasks=0,
+                          shuffle_write_bytes=0, submission_time=None, completion_time=None):
+        """Helper to create mock stage"""
+        mock_stage = MagicMock(spec=StageData)
+        mock_stage.stage_id = stage_id
+        mock_stage.attempt_id = 0
+        mock_stage.name = name
+        mock_stage.status = status
+        mock_stage.executor_run_time = executor_run_time or 60000  # 1 minute in ms
+        mock_stage.num_tasks = num_tasks
+        mock_stage.num_failed_tasks = num_failed_tasks
+        mock_stage.shuffle_write_bytes = shuffle_write_bytes
+        mock_stage.submission_time = submission_time or self.mock_now
+        mock_stage.completion_time = completion_time or (self.mock_now + timedelta(minutes=5))
+        return mock_stage
+
+    def _create_mock_executor(self, exec_id="1", host="worker1", failed_tasks=0, 
+                             completed_tasks=10, is_active=True, total_cores=4,
+                             max_memory=1024*1024*1024, add_time=None, remove_time=None):
+        """Helper to create mock executor"""
+        mock_executor = MagicMock(spec=ExecutorSummary)
+        mock_executor.id = exec_id
+        mock_executor.host = host
+        mock_executor.failed_tasks = failed_tasks
+        mock_executor.completed_tasks = completed_tasks
+        mock_executor.is_active = is_active
+        mock_executor.total_cores = total_cores
+        mock_executor.max_memory = max_memory
+        mock_executor.add_time = add_time or self.mock_now
+        mock_executor.remove_time = remove_time
+        mock_executor.remove_reason = None
+        return mock_executor
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_auto_scaling_success(self, mock_get_client):
+        """Test successful auto-scaling analysis"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Setup mock data
+        mock_app = self._create_mock_application()
+        mock_env = self._create_mock_environment()
+        
+        # Create stages with different patterns
+        stages = [
+            self._create_mock_stage(1, "Stage 1", executor_run_time=120000, num_tasks=20),
+            self._create_mock_stage(2, "Stage 2", executor_run_time=180000, num_tasks=30),
+        ]
+        
+        self.mock_client.get_application.return_value = mock_app
+        self.mock_client.get_environment.return_value = mock_env
+        self.mock_client.list_stages.return_value = stages
+
+        # Call the function
+        result = analyze_auto_scaling("app-123")
+
+        # Verify the result structure
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(result["analysis_type"], "Auto-scaling Configuration")
+        self.assertIn("recommendations", result)
+        self.assertIn("initial_executors", result["recommendations"])
+        self.assertIn("max_executors", result["recommendations"])
+        self.assertIn("analysis_details", result)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_auto_scaling_no_stages(self, mock_get_client):
+        """Test auto-scaling analysis with no stages"""
+        mock_get_client.return_value = self.mock_client
+        
+        mock_app = self._create_mock_application()
+        mock_env = self._create_mock_environment()
+        
+        self.mock_client.get_application.return_value = mock_app
+        self.mock_client.get_environment.return_value = mock_env
+        self.mock_client.list_stages.return_value = []
+
+        # Call the function
+        result = analyze_auto_scaling("app-123")
+
+        # Should return error
+        self.assertIn("error", result)
+        self.assertEqual(result["application_id"], "app-123")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_shuffle_skew_success(self, mock_get_client):
+        """Test successful shuffle skew analysis"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Create stage with significant shuffle write
+        mock_stage = self._create_mock_stage(
+            1, "Shuffle Stage", 
+            shuffle_write_bytes=15 * 1024 * 1024 * 1024  # 15 GB
+        )
+        
+        # Create mock task summary with skew
+        mock_task_summary = MagicMock(spec=TaskMetricDistributions)
+        mock_task_summary.shuffle_write_bytes = [
+            100 * 1024 * 1024,      # min: 100 MB
+            500 * 1024 * 1024,      # 25th: 500 MB  
+            1024 * 1024 * 1024,     # median: 1 GB
+            2048 * 1024 * 1024,     # 75th: 2 GB
+            5120 * 1024 * 1024      # max: 5 GB (5x median = high skew)
+        ]
+        
+        self.mock_client.list_stages.return_value = [mock_stage]
+        self.mock_client.get_stage_task_summary.return_value = mock_task_summary
+
+        # Call the function
+        result = analyze_shuffle_skew("app-123")
+
+        # Verify the result
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(result["analysis_type"], "Shuffle Skew Analysis")
+        self.assertIn("skewed_stages", result)
+        self.assertIn("recommendations", result)
+        
+        # Should detect skew (5 GB / 1 GB = 5.0 ratio > 2.0 threshold)
+        self.assertEqual(len(result["skewed_stages"]), 1)
+        self.assertEqual(result["skewed_stages"][0]["stage_id"], 1)
+        self.assertEqual(result["skewed_stages"][0]["skew_ratio"], 5.0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_shuffle_skew_no_skew(self, mock_get_client):
+        """Test shuffle skew analysis with no skew detected"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Create stage with small shuffle write (below threshold)
+        mock_stage = self._create_mock_stage(
+            1, "Small Shuffle Stage",
+            shuffle_write_bytes=5 * 1024 * 1024 * 1024  # 5 GB (below 10 GB threshold)
+        )
+        
+        self.mock_client.list_stages.return_value = [mock_stage]
+
+        # Call the function
+        result = analyze_shuffle_skew("app-123")
+
+        # Should not detect any skewed stages
+        self.assertEqual(len(result["skewed_stages"]), 0)
+        self.assertEqual(len(result["recommendations"]), 0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_failed_tasks_success(self, mock_get_client):
+        """Test successful failed task analysis"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Create stages with failures
+        failed_stage = self._create_mock_stage(1, "Failed Stage", num_failed_tasks=5, num_tasks=20)
+        good_stage = self._create_mock_stage(2, "Good Stage", num_failed_tasks=0, num_tasks=10)
+        
+        # Create executors with failures
+        failed_executor = self._create_mock_executor("1", "worker1", failed_tasks=3, completed_tasks=7)
+        good_executor = self._create_mock_executor("2", "worker2", failed_tasks=0, completed_tasks=10)
+        
+        self.mock_client.list_stages.return_value = [failed_stage, good_stage]
+        self.mock_client.list_all_executors.return_value = [failed_executor, good_executor]
+
+        # Call the function
+        result = analyze_failed_tasks("app-123")
+
+        # Verify the result
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(result["analysis_type"], "Failed Task Analysis")
+        self.assertIn("failed_stages", result)
+        self.assertIn("problematic_executors", result)
+        self.assertIn("recommendations", result)
+        
+        # Should detect failed stage and problematic executor
+        self.assertEqual(len(result["failed_stages"]), 1)
+        self.assertEqual(result["failed_stages"][0]["stage_id"], 1)
+        self.assertEqual(result["failed_stages"][0]["failed_tasks"], 5)
+        
+        self.assertEqual(len(result["problematic_executors"]), 1)
+        self.assertEqual(result["problematic_executors"][0]["executor_id"], "1")
+        self.assertEqual(result["problematic_executors"][0]["failed_tasks"], 3)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_failed_tasks_no_failures(self, mock_get_client):
+        """Test failed task analysis with no failures"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Create stages and executors with no failures
+        good_stage = self._create_mock_stage(1, "Good Stage", num_failed_tasks=0)
+        good_executor = self._create_mock_executor("1", "worker1", failed_tasks=0)
+        
+        self.mock_client.list_stages.return_value = [good_stage]
+        self.mock_client.list_all_executors.return_value = [good_executor]
+
+        # Call the function
+        result = analyze_failed_tasks("app-123")
+
+        # Should not detect any failures
+        self.assertEqual(len(result["failed_stages"]), 0)
+        self.assertEqual(len(result["problematic_executors"]), 0)
+        self.assertEqual(len(result["recommendations"]), 0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_executor_utilization_success(self, mock_get_client):
+        """Test successful executor utilization analysis"""
+        mock_get_client.return_value = self.mock_client
+        
+        mock_app = self._create_mock_application()
+        
+        # Create executors with different lifecycles
+        executor1 = self._create_mock_executor(
+            "1", "worker1", 
+            add_time=self.mock_now,
+            remove_time=self.mock_now + timedelta(minutes=20)
+        )
+        executor2 = self._create_mock_executor(
+            "2", "worker2",
+            add_time=self.mock_now + timedelta(minutes=10),
+            remove_time=None  # Still active
+        )
+        
+        self.mock_client.get_application.return_value = mock_app
+        self.mock_client.list_all_executors.return_value = [executor1, executor2]
+
+        # Call the function
+        result = analyze_executor_utilization("app-123")
+
+        # Verify the result
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(result["analysis_type"], "Executor Utilization Analysis")
+        self.assertIn("timeline", result)
+        self.assertIn("summary", result)
+        self.assertIn("recommendations", result)
+        
+        # Should have utilization metrics
+        self.assertIn("peak_executors", result["summary"])
+        self.assertIn("average_executors", result["summary"])
+        self.assertIn("utilization_efficiency_percent", result["summary"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_executor_utilization_no_attempts(self, mock_get_client):
+        """Test executor utilization analysis with no application attempts"""
+        mock_get_client.return_value = self.mock_client
+        
+        mock_app = self._create_mock_application()
+        mock_app.attempts = []  # No attempts
+        
+        self.mock_client.get_application.return_value = mock_app
+
+        # Call the function
+        result = analyze_executor_utilization("app-123")
+
+        # Should return error
+        self.assertIn("error", result)
+        self.assertEqual(result["application_id"], "app-123")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("spark_history_mcp.tools.tools.datetime")
+    def test_get_application_insights_success(self, mock_datetime, mock_get_client):
+        """Test comprehensive application insights analysis"""
+        mock_datetime.now.return_value = self.mock_now
+        mock_get_client.return_value = self.mock_client
+        
+        mock_app = self._create_mock_application()
+        self.mock_client.get_application.return_value = mock_app
+
+        # Call the function
+        result = get_application_insights("app-123")
+
+        # Verify the result structure
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(result["application_name"], "Test App")
+        self.assertEqual(result["analysis_type"], "Comprehensive SparkInsight Analysis")
+        self.assertIn("analyses", result)
+        self.assertIn("summary", result)
+        self.assertIn("recommendations", result)
+        
+        # Should include all analyses by default
+        expected_analyses = ["auto_scaling", "shuffle_skew", "failed_tasks", "executor_utilization"]
+        for analysis in expected_analyses:
+            self.assertIn(analysis, result["analyses"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("spark_history_mcp.tools.tools.datetime")
+    def test_get_application_insights_selective(self, mock_datetime, mock_get_client):
+        """Test application insights with selective analysis"""
+        mock_datetime.now.return_value = self.mock_now
+        mock_get_client.return_value = self.mock_client
+        
+        mock_app = self._create_mock_application()
+        self.mock_client.get_application.return_value = mock_app
+
+        # Call with only specific analyses enabled
+        result = get_application_insights(
+            "app-123", 
+            include_auto_scaling=True,
+            include_shuffle_skew=False,
+            include_failed_tasks=True,
+            include_executor_utilization=False
+        )
+
+        # Should only include requested analyses
+        self.assertIn("auto_scaling", result["analyses"])
+        self.assertNotIn("shuffle_skew", result["analyses"])
+        self.assertIn("failed_tasks", result["analyses"])
+        self.assertNotIn("executor_utilization", result["analyses"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_shuffle_skew_task_summary_error(self, mock_get_client):
+        """Test shuffle skew analysis when task summary fetch fails"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Create stage with shuffle write
+        mock_stage = self._create_mock_stage(
+            1, "Shuffle Stage",
+            shuffle_write_bytes=15 * 1024 * 1024 * 1024  # 15 GB
+        )
+        
+        self.mock_client.list_stages.return_value = [mock_stage]
+        # Make task summary fetch fail
+        self.mock_client.get_stage_task_summary.side_effect = Exception("Task summary not available")
+
+        # Call the function
+        result = analyze_shuffle_skew("app-123")
+
+        # Should handle the error gracefully and not include failed stages
+        self.assertEqual(len(result["skewed_stages"]), 0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_failed_tasks_host_concentration(self, mock_get_client):
+        """Test failed task analysis detecting host-specific issues"""
+        mock_get_client.return_value = self.mock_client
+        
+        # Create stage with failures
+        failed_stage = self._create_mock_stage(1, "Failed Stage", num_failed_tasks=10)
+        
+        # Create executors where most failures are on one host
+        executor1 = self._create_mock_executor("1", "problematic-host", failed_tasks=8, completed_tasks=2)
+        executor2 = self._create_mock_executor("2", "good-host", failed_tasks=1, completed_tasks=9)
+        executor3 = self._create_mock_executor("3", "another-good-host", failed_tasks=1, completed_tasks=9)
+        
+        self.mock_client.list_stages.return_value = [failed_stage]
+        self.mock_client.list_all_executors.return_value = [executor1, executor2, executor3]
+
+        # Call the function
+        result = analyze_failed_tasks("app-123")
+
+        # Should detect host concentration issue
+        # 8 failures on problematic-host > 50% of total 10 failures
+        recommendations = result["recommendations"]
+        host_issue_found = any(
+            rec.get("type") == "infrastructure" and "concentration" in rec.get("issue", "")
+            for rec in recommendations
+        )
+        self.assertTrue(host_issue_found)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_executor_utilization_low_efficiency(self, mock_get_client):
+        """Test executor utilization analysis detecting low efficiency"""
+        mock_get_client.return_value = self.mock_client
+        
+        mock_app = self._create_mock_application()
+        
+        # Create scenario with low utilization efficiency (high peak, low average)
+        # Executor 1: Active for 5 minutes
+        executor1 = self._create_mock_executor(
+            "1", "worker1",
+            add_time=self.mock_now,
+            remove_time=self.mock_now + timedelta(minutes=5)
+        )
+        # Executor 2: Active for full 30 minutes 
+        executor2 = self._create_mock_executor(
+            "2", "worker2",
+            add_time=self.mock_now,
+            remove_time=None
+        )
+        # Executor 3: Active for only 2 minutes (short burst)
+        executor3 = self._create_mock_executor(
+            "3", "worker3", 
+            add_time=self.mock_now + timedelta(minutes=10),
+            remove_time=self.mock_now + timedelta(minutes=12)
+        )
+        
+        self.mock_client.get_application.return_value = mock_app
+        self.mock_client.list_all_executors.return_value = [executor1, executor2, executor3]
+
+        # Call the function
+        result = analyze_executor_utilization("app-123")
+
+        # Should detect low efficiency and recommend optimization
+        recommendations = result["recommendations"]
+        efficiency_issue_found = any(
+            rec.get("type") == "resource_efficiency" and "Low executor utilization" in rec.get("issue", "")
+            for rec in recommendations
+        )
+        
+        # The efficiency calculation should trigger the recommendation if < 70%
+        if result["summary"]["utilization_efficiency_percent"] < 70:
+            self.assertTrue(efficiency_issue_found)
