@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 # Add root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from spark_history_mcp.api.emr_persistent_ui_client import EMRPersistentUIClient
-from spark_history_mcp.config.config import ServerConfig
+from sparkinsight_ai.api.emr_persistent_ui_client import EMRPersistentUIClient
+from sparkinsight_ai.config.config import ServerConfig
 
 
 class TestEMRBasic(unittest.TestCase):

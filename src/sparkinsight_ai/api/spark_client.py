@@ -5,8 +5,8 @@ from urllib.parse import urljoin
 import requests
 from pydantic import BaseModel
 
-from spark_history_mcp.config.config import ServerConfig
-from spark_history_mcp.models.spark_types import (
+from sparkinsight_ai.config.config import ServerConfig
+from sparkinsight_ai.models.spark_types import (
     ApplicationAttemptInfo,
     ApplicationEnvironmentInfo,
     ApplicationInfo,

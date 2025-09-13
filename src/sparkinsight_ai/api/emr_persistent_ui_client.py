@@ -15,7 +15,7 @@ import boto3
 import requests
 from botocore.exceptions import ClientError
 
-from spark_history_mcp.config.config import ServerConfig
+from sparkinsight_ai.config.config import ServerConfig
 
 # Configure logging
 logging.basicConfig(

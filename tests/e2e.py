@@ -7,7 +7,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import TextContent
 
-from spark_history_mcp.models.spark_types import ApplicationInfo, JobData
+from sparkinsight_ai.models.spark_types import ApplicationInfo, JobData
 
 mcp_endpoint = "http://localhost:18888/mcp/"
 test_app_id = "spark-cc4d115f011443d787f03a71a476a745"

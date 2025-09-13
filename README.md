@@ -1,19 +1,19 @@
-# MCP Server for Apache Spark History Server
+# SparkInsight AI
 
-[![CI](https://github.com/DeepDiagnostix-AI/mcp-apache-spark-history-server/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DeepDiagnostix-AI/mcp-apache-spark-history-server/actions)
+[![CI](https://github.com/DeepDiagnostix-AI/sparkinsight-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DeepDiagnostix-AI/sparkinsight-ai/actions)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> **🤖 Connect AI agents to Apache Spark History Server for intelligent job analysis and performance monitoring**
+> **🧠 AI-Powered Spark Analysis with MCP Integration for intelligent performance monitoring and optimization**
 
-Transform your Spark infrastructure monitoring with AI! This Model Context Protocol (MCP) server enables AI agents to analyze job performance, identify bottlenecks, and provide intelligent insights from your Spark History Server data.
+Transform your Spark infrastructure monitoring with AI intelligence! SparkInsight AI connects AI agents to Apache Spark History Server, enabling intelligent job performance analysis, bottleneck detection, and optimization recommendations through the Model Context Protocol.
 
-**✨ Now featuring SparkInsight-inspired intelligent analysis tools** for auto-scaling optimization, data skew detection, failure analysis, and comprehensive performance insights!
+**✨ Evolved from the original SparkInsight with advanced AI capabilities** including auto-scaling optimization, data skew detection, failure analysis, and comprehensive performance insights!
 
 ## 🎯 What is This?
 
-**Spark History Server MCP** bridges AI agents with your existing Apache Spark infrastructure, enabling:
+**SparkInsight AI** bridges AI agents with your existing Apache Spark infrastructure, enabling:
 
 - 🔍 **Query job details** through natural language
 - 📊 **Analyze performance metrics** across applications
@@ -62,8 +62,8 @@ graph TB
 ### 🚀 Setup & Testing
 
 ```bash
-git clone https://github.com/DeepDiagnostix-AI/mcp-apache-spark-history-server.git
-cd mcp-apache-spark-history-server
+git clone https://github.com/DeepDiagnostix-AI/sparkinsight-ai.git
+cd sparkinsight-ai
 
 # Install Task (if not already installed)
 brew install go-task  # macOS, see https://taskfile.dev/installation/ for others
@@ -85,12 +85,12 @@ If you just want to run the MCP server without cloning the repository:
 
 ```bash
 # Run with uv without installing the module
-uvx --from mcp-apache-spark-history-server spark-mcp
+uvx --from sparkinsight-ai sparkinsight-ai
 
 # OR run with pip and python. Use of venv is highly encouraged.
-python3 -m venv spark-mcp && source spark-mcp/bin/activate
-pip install mcp-apache-spark-history-server
-python3 -m spark_history_mcp.core.main
+python3 -m venv sparkinsight-ai && source sparkinsight-ai/bin/activate
+pip install sparkinsight-ai
+python3 -m sparkinsight_ai.core.main
 # Deactivate venv
 deactivate
 ```

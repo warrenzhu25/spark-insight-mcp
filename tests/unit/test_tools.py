@@ -2,8 +2,8 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from spark_history_mcp.api.spark_client import SparkRestClient
-from spark_history_mcp.models.spark_types import (
+from sparkinsight_ai.api.spark_client import SparkRestClient
+from sparkinsight_ai.models.spark_types import (
     ApplicationAttemptInfo,
     ApplicationEnvironmentInfo,
     ApplicationInfo,
@@ -13,7 +13,7 @@ from spark_history_mcp.models.spark_types import (
     StageData,
     TaskMetricDistributions,
 )
-from spark_history_mcp.tools.tools import (
+from sparkinsight_ai.tools.tools import (
     analyze_auto_scaling,
     analyze_executor_utilization,
     analyze_failed_tasks,
@@ -99,7 +99,7 @@ class TestTools(unittest.TestCase):
 
         self.assertIn("No Spark client found", str(context.exception))
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_jobs_empty(self, mock_get_client):
         """Test list_slowest_jobs when no jobs are found"""
         # Setup mock client
@@ -114,7 +114,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result, [])
         mock_client.list_jobs.assert_called_once_with(app_id="app-123")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_jobs_exclude_running(self, mock_get_client):
         """Test list_slowest_jobs excluding running jobs"""
         # Setup mock client and jobs
@@ -155,7 +155,7 @@ class TestTools(unittest.TestCase):
         # Running job (job1) should be excluded
         self.assertNotIn(job1, result)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_jobs_include_running(self, mock_get_client):
         """Test list_slowest_jobs including running jobs"""
         # Setup mock client and jobs
@@ -192,7 +192,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], job3)
         self.assertEqual(result[1], job2)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_jobs_limit_results(self, mock_get_client):
         """Test list_slowest_jobs limits results to n"""
         # Setup mock client and jobs
@@ -217,7 +217,7 @@ class TestTools(unittest.TestCase):
         # Verify results - should return only 3 jobs
         self.assertEqual(len(result), 3)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_with_attempt_id(self, mock_get_client):
         """Test get_stage with a specific attempt ID"""
         # Setup mock client
@@ -242,7 +242,7 @@ class TestTools(unittest.TestCase):
             with_summaries=False,
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_without_attempt_id_single_stage(self, mock_get_client):
         """Test get_stage without attempt ID when a single stage is returned"""
         # Setup mock client
@@ -266,7 +266,7 @@ class TestTools(unittest.TestCase):
             with_summaries=False,
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_without_attempt_id_multiple_stages(self, mock_get_client):
         """Test get_stage without attempt ID when multiple stages are returned"""
         # Setup mock client
@@ -296,7 +296,7 @@ class TestTools(unittest.TestCase):
             with_summaries=False,
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_with_summaries_missing_metrics(self, mock_get_client):
         """Test get_stage with summaries when metrics distributions are missing"""
         # Setup mock client
@@ -334,7 +334,7 @@ class TestTools(unittest.TestCase):
             attempt_id=0,
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_no_stages_found(self, mock_get_client):
         """Test get_stage when no stages are found"""
         # Setup mock client
@@ -348,7 +348,7 @@ class TestTools(unittest.TestCase):
         self.assertIn("No stage found with ID 1", str(context.exception))
 
     # Tests for get_application tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_application_success(self, mock_get_client):
         """Test successful application retrieval"""
         # Setup mock client
@@ -367,7 +367,7 @@ class TestTools(unittest.TestCase):
         mock_client.get_application.assert_called_once_with("spark-app-123")
         mock_get_client.assert_called_once_with(unittest.mock.ANY, None)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_application_with_server(self, mock_get_client):
         """Test application retrieval with specific server"""
         # Setup mock client
@@ -382,7 +382,7 @@ class TestTools(unittest.TestCase):
         # Verify server parameter is passed
         mock_get_client.assert_called_once_with(unittest.mock.ANY, "production")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_application_not_found(self, mock_get_client):
         """Test application retrieval when app doesn't exist"""
         # Setup mock client to raise exception
@@ -397,7 +397,7 @@ class TestTools(unittest.TestCase):
         self.assertIn("Application not found", str(context.exception))
 
     # Tests for list_jobs tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_jobs_no_filter(self, mock_get_client):
         """Test job retrieval without status filter"""
         # Setup mock client
@@ -415,7 +415,7 @@ class TestTools(unittest.TestCase):
             app_id="spark-app-123", status=None
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_jobs_with_status_filter(self, mock_get_client):
         """Test job retrieval with status filter"""
         # Setup mock client
@@ -432,7 +432,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].status, "SUCCEEDED")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_jobs_empty_result(self, mock_get_client):
         """Test job retrieval with empty result"""
         # Setup mock client
@@ -446,7 +446,7 @@ class TestTools(unittest.TestCase):
         # Verify results
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_jobs_status_filtering(self, mock_get_client):
         """Test job status filtering logic"""
         # Setup mock client
@@ -472,7 +472,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0].status, "SUCCEEDED")
 
     # Tests for list_stages tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stages_no_filter(self, mock_get_client):
         """Test stage retrieval without filters"""
         # Setup mock client
@@ -490,7 +490,7 @@ class TestTools(unittest.TestCase):
             app_id="spark-app-123", status=None, with_summaries=False
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stages_with_status_filter(self, mock_get_client):
         """Test stage retrieval with status filter"""
         # Setup mock client
@@ -515,7 +515,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].status, "COMPLETE")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stages_with_summaries(self, mock_get_client):
         """Test stage retrieval with summaries enabled"""
         # Setup mock client
@@ -532,7 +532,7 @@ class TestTools(unittest.TestCase):
             app_id="spark-app-123", status=None, with_summaries=True
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stages_empty_result(self, mock_get_client):
         """Test stage retrieval with empty result"""
         # Setup mock client
@@ -547,7 +547,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result, [])
 
     # Tests for get_stage_task_summary tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_task_summary_success(self, mock_get_client):
         """Test successful stage task summary retrieval"""
         # Setup mock client
@@ -568,7 +568,7 @@ class TestTools(unittest.TestCase):
             quantiles="0.05,0.25,0.5,0.75,0.95",
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_task_summary_with_quantiles(self, mock_get_client):
         """Test stage task summary with custom quantiles"""
         # Setup mock client
@@ -585,7 +585,7 @@ class TestTools(unittest.TestCase):
             app_id="spark-app-123", stage_id=1, attempt_id=0, quantiles="0.25,0.5,0.75"
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_stage_task_summary_not_found(self, mock_get_client):
         """Test stage task summary when stage doesn't exist"""
         # Setup mock client to raise exception
@@ -600,7 +600,7 @@ class TestTools(unittest.TestCase):
         self.assertIn("Stage not found", str(context.exception))
 
     # Tests for list_slowest_stages tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_slowest_stages_execution_time_vs_total_time(self, mock_get_client):
         """Test that list_slowest_stages prioritizes execution time over total stage duration"""
         mock_client = MagicMock()
@@ -645,7 +645,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], stage_b)  # Stage B first (7 min execution)
         self.assertEqual(result[1], stage_a)  # Stage A second (5 min execution)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_slowest_stages_exclude_running(self, mock_get_client):
         """Test that list_slowest_stages excludes running stages by default"""
         mock_client = MagicMock()
@@ -681,7 +681,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], completed_stage)
         self.assertNotIn(running_stage, result)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_slowest_stages_include_running(self, mock_get_client):
         """Test that list_slowest_stages includes running stages when requested"""
         mock_client = MagicMock()
@@ -718,7 +718,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], completed_stage)  # Has actual duration
         self.assertEqual(result[1], running_stage)  # Duration 0
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_slowest_stages_missing_timestamps(self, mock_get_client):
         """Test list_slowest_stages handles stages with missing timestamps"""
         # Setup mock client
@@ -770,7 +770,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0], valid_stage)  # Only one with valid duration
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_slowest_stages_empty_result(self, mock_get_client):
         """Test list_slowest_stages with no stages"""
         # Setup mock client
@@ -784,7 +784,7 @@ class TestTools(unittest.TestCase):
         # Should return empty list
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_slowest_stages_limit_results(self, mock_get_client):
         """Test list_slowest_stages limits results to n"""
         # Setup mock client
@@ -818,7 +818,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[2].stage_id, 2)  # 3 minutes
 
     # Tests for list_slowest_sql_queries tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_sql_queries_success(self, mock_get_client):
         """Test successful SQL query retrieval and sorting"""
         # Setup mock client
@@ -869,7 +869,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0].duration, 10000)  # Slowest first
         self.assertEqual(result[1].duration, 5000)  # Second slowest
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_sql_queries_exclude_running(self, mock_get_client):
         """Test SQL query retrieval excluding running queries"""
         # Setup mock client
@@ -908,7 +908,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].status, "COMPLETED")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_sql_queries_include_running(self, mock_get_client):
         """Test SQL query retrieval including running queries"""
         # Setup mock client
@@ -948,7 +948,7 @@ class TestTools(unittest.TestCase):
         # Should include both queries
         self.assertEqual(len(result), 2)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_sql_queries_empty_result(self, mock_get_client):
         """Test SQL query retrieval with empty result"""
         # Setup mock client
@@ -962,7 +962,7 @@ class TestTools(unittest.TestCase):
         # Verify results
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_get_slowest_sql_queries_limit(self, mock_get_client):
         """Test SQL query retrieval with limit"""
         # Setup mock client
@@ -997,7 +997,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[2].duration, 8000)
 
     # Tests for list_applications tool
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_no_filters(self, mock_get_client):
         """Test list_applications without any filters"""
         # Setup mock client
@@ -1022,7 +1022,7 @@ class TestTools(unittest.TestCase):
             limit=None,
         )
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_with_existing_filters(self, mock_get_client):
         """Test list_applications with existing filters (backward compatibility)"""
         # Setup mock client
@@ -1052,7 +1052,7 @@ class TestTools(unittest.TestCase):
         )
         mock_get_client.assert_called_once_with(unittest.mock.ANY, "production")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_name_filter_contains(self, mock_get_client):
         """Test list_applications with name filtering using 'contains' search"""
         # Setup mock client
@@ -1076,7 +1076,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0].name, "My ETL Job")
         self.assertEqual(result[1].name, "ETL Analytics Task")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_name_filter_exact(self, mock_get_client):
         """Test list_applications with exact name matching"""
         # Setup mock client
@@ -1097,7 +1097,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, "My App")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_name_filter_regex(self, mock_get_client):
         """Test list_applications with regex name matching"""
         # Setup mock client
@@ -1120,7 +1120,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, "Job_001_prod")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_name_filter_case_insensitive(self, mock_get_client):
         """Test that name filtering is case insensitive"""
         # Setup mock client
@@ -1141,7 +1141,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, "MySQL Backup")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_name_filter_empty_name(self, mock_get_client):
         """Test list_applications with apps that have empty/null names"""
         # Setup mock client
@@ -1164,7 +1164,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, "Named App")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_name_filter_no_matches(self, mock_get_client):
         """Test list_applications when no apps match the name filter"""
         # Setup mock client
@@ -1181,7 +1181,7 @@ class TestTools(unittest.TestCase):
         # Should return empty list
         self.assertEqual(len(result), 0)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_combine_name_and_status_filters(self, mock_get_client):
         """Test combining name filtering with other filters"""
         # Setup mock client
@@ -1221,7 +1221,7 @@ class TestTools(unittest.TestCase):
         self.assertIn("search_type must be one of", str(context.exception))
         self.assertIn("invalid", str(context.exception))
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_invalid_regex(self, mock_get_client):
         """Test list_applications with invalid regex pattern"""
         # Setup mock client
@@ -1237,7 +1237,7 @@ class TestTools(unittest.TestCase):
 
         self.assertIn("Invalid regex pattern", str(context.exception))
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_no_name_parameter_returns_all(self, mock_get_client):
         """Test that when no app_name is provided, all apps are returned"""
         # Setup mock client
@@ -1255,7 +1255,7 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result, mock_apps)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_list_applications_empty_app_name_returns_all(self, mock_get_client):
         """Test that empty app_name is treated as no filtering"""
         # Setup mock client
@@ -1348,7 +1348,7 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_executor.remove_reason = None
         return mock_executor
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_auto_scaling_success(self, mock_get_client):
         """Test successful auto-scaling analysis"""
         mock_get_client.return_value = self.mock_client
@@ -1378,7 +1378,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("max_executors", result["recommendations"])
         self.assertIn("analysis_details", result)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_auto_scaling_no_stages(self, mock_get_client):
         """Test auto-scaling analysis with no stages"""
         mock_get_client.return_value = self.mock_client
@@ -1397,7 +1397,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("error", result)
         self.assertEqual(result["application_id"], "app-123")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_shuffle_skew_success(self, mock_get_client):
         """Test successful shuffle skew analysis"""
         mock_get_client.return_value = self.mock_client
@@ -1435,7 +1435,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertEqual(result["skewed_stages"][0]["stage_id"], 1)
         self.assertEqual(result["skewed_stages"][0]["skew_ratio"], 5.0)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_shuffle_skew_no_skew(self, mock_get_client):
         """Test shuffle skew analysis with no skew detected"""
         mock_get_client.return_value = self.mock_client
@@ -1455,7 +1455,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertEqual(len(result["skewed_stages"]), 0)
         self.assertEqual(len(result["recommendations"]), 0)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_failed_tasks_success(self, mock_get_client):
         """Test successful failed task analysis"""
         mock_get_client.return_value = self.mock_client
@@ -1490,7 +1490,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertEqual(result["problematic_executors"][0]["executor_id"], "1")
         self.assertEqual(result["problematic_executors"][0]["failed_tasks"], 3)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_failed_tasks_no_failures(self, mock_get_client):
         """Test failed task analysis with no failures"""
         mock_get_client.return_value = self.mock_client
@@ -1510,7 +1510,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertEqual(len(result["problematic_executors"]), 0)
         self.assertEqual(len(result["recommendations"]), 0)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_executor_utilization_success(self, mock_get_client):
         """Test successful executor utilization analysis"""
         mock_get_client.return_value = self.mock_client
@@ -1547,7 +1547,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("average_executors", result["summary"])
         self.assertIn("utilization_efficiency_percent", result["summary"])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_executor_utilization_no_attempts(self, mock_get_client):
         """Test executor utilization analysis with no application attempts"""
         mock_get_client.return_value = self.mock_client
@@ -1564,8 +1564,8 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("error", result)
         self.assertEqual(result["application_id"], "app-123")
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
-    @patch("spark_history_mcp.tools.tools.datetime")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.datetime")
     def test_get_application_insights_success(self, mock_datetime, mock_get_client):
         """Test comprehensive application insights analysis"""
         mock_datetime.now.return_value = self.mock_now
@@ -1590,8 +1590,8 @@ class TestSparkInsightTools(unittest.TestCase):
         for analysis in expected_analyses:
             self.assertIn(analysis, result["analyses"])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
-    @patch("spark_history_mcp.tools.tools.datetime")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.datetime")
     def test_get_application_insights_selective(self, mock_datetime, mock_get_client):
         """Test application insights with selective analysis"""
         mock_datetime.now.return_value = self.mock_now
@@ -1615,7 +1615,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("failed_tasks", result["analyses"])
         self.assertNotIn("executor_utilization", result["analyses"])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_shuffle_skew_task_summary_error(self, mock_get_client):
         """Test shuffle skew analysis when task summary fetch fails"""
         mock_get_client.return_value = self.mock_client
@@ -1636,7 +1636,7 @@ class TestSparkInsightTools(unittest.TestCase):
         # Should handle the error gracefully and not include failed stages
         self.assertEqual(len(result["skewed_stages"]), 0)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_failed_tasks_host_concentration(self, mock_get_client):
         """Test failed task analysis detecting host-specific issues"""
         mock_get_client.return_value = self.mock_client
@@ -1664,7 +1664,7 @@ class TestSparkInsightTools(unittest.TestCase):
         )
         self.assertTrue(host_issue_found)
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    @patch("sparkinsight_ai.tools.tools.get_client_or_default")
     def test_analyze_executor_utilization_low_efficiency(self, mock_get_client):
         """Test executor utilization analysis detecting low efficiency"""
         mock_get_client.return_value = self.mock_client

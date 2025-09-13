@@ -1,4 +1,4 @@
-# Testing Guide: Spark History Server MCP
+# Testing Guide: SparkInsight AI
 
 ## 🧪 Quick Test with MCP Inspector (5 minutes)
 
@@ -12,8 +12,8 @@
 
 ### Setup Repository
 ```bash
-git clone https://github.com/DeepDiagnostix-AI/mcp-apache-spark-history-server.git
-cd mcp-apache-spark-history-server
+git clone https://github.com/DeepDiagnostix-AI/sparkinsight-ai.git
+cd sparkinsight-ai
 
 # Install Task (if not already installed)
 brew install go-task  # macOS

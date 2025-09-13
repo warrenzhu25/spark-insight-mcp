@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from spark_history_mcp.api.spark_client import SparkRestClient
-from spark_history_mcp.config.config import ServerConfig
+from sparkinsight_ai.api.spark_client import SparkRestClient
+from sparkinsight_ai.config.config import ServerConfig
 
 
 class TestSparkClient(unittest.TestCase):
@@ -12,7 +12,7 @@ class TestSparkClient(unittest.TestCase):
         self.server_config = ServerConfig(url="http://spark-history-server:18080")
         self.client = SparkRestClient(self.server_config)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
+    @patch("sparkinsight_ai.api.spark_client.requests.get")
     def test_list_applications(self, mock_get):
         # Setup mock response
         mock_response = MagicMock()
@@ -63,7 +63,7 @@ class TestSparkClient(unittest.TestCase):
         self.assertEqual(apps[0].attempts[0].spark_user, "spark")
         self.assertTrue(apps[0].attempts[0].completed)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
+    @patch("sparkinsight_ai.api.spark_client.requests.get")
     def test_list_applications_with_filters(self, mock_get):
         # Setup mock response
         mock_response = MagicMock()
@@ -110,7 +110,7 @@ class TestSparkClient(unittest.TestCase):
 
         self.assertEqual(len(apps), 1)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
+    @patch("sparkinsight_ai.api.spark_client.requests.get")
     def test_list_applications_empty_response(self, mock_get):
         # Setup mock response with empty list
         mock_response = MagicMock()
@@ -125,7 +125,7 @@ class TestSparkClient(unittest.TestCase):
         mock_get.assert_called_once()
         self.assertEqual(len(apps), 0)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
+    @patch("sparkinsight_ai.api.spark_client.requests.get")
     def test_fallback_behavior(self, mock_get):
         # First request fails with 404
         error_response = MagicMock()
@@ -168,7 +168,7 @@ class TestSparkClient(unittest.TestCase):
         # Verify we got the success response
         self.assertEqual(result, {"key": "value"})
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
+    @patch("sparkinsight_ai.api.spark_client.requests.get")
     def test_fallback_fail(self, mock_get):
         # Create 404 response
         error_response = MagicMock()
@@ -187,7 +187,7 @@ class TestSparkClient(unittest.TestCase):
         # Verify both URLs were tried
         self.assertEqual(mock_get.call_count, 2)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
+    @patch("sparkinsight_ai.api.spark_client.requests.get")
     def test_proxy_configuration(self, mock_get):
         # Test with proxy enabled
         client = SparkRestClient(

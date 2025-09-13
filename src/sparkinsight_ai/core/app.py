@@ -8,9 +8,9 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from spark_history_mcp.api.emr_persistent_ui_client import EMRPersistentUIClient
-from spark_history_mcp.api.spark_client import SparkRestClient
-from spark_history_mcp.config.config import Config
+from sparkinsight_ai.api.emr_persistent_ui_client import EMRPersistentUIClient
+from sparkinsight_ai.api.spark_client import SparkRestClient
+from sparkinsight_ai.config.config import Config
 
 
 @dataclass
@@ -73,4 +73,4 @@ def run(config: Config):
 mcp = FastMCP("Spark Events", lifespan=app_lifespan)
 
 # Import tools to register them with MCP
-from spark_history_mcp.tools import tools  # noqa: E402,F401
+from sparkinsight_ai.tools import tools  # noqa: E402,F401

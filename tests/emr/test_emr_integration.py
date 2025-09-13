@@ -7,9 +7,9 @@ import requests
 
 # Add root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from spark_history_mcp.api.emr_persistent_ui_client import EMRPersistentUIClient
-from spark_history_mcp.api.spark_client import SparkRestClient
-from spark_history_mcp.config.config import ServerConfig
+from sparkinsight_ai.api.emr_persistent_ui_client import EMRPersistentUIClient
+from sparkinsight_ai.api.spark_client import SparkRestClient
+from sparkinsight_ai.config.config import ServerConfig
 
 
 class TestEMRIntegration(unittest.TestCase):
@@ -62,8 +62,8 @@ class TestEMRIntegration(unittest.TestCase):
         mock_session.get.assert_called_once()
         self.assertEqual(apps, [])
 
-    @patch("spark_history_mcp.core.app.EMRPersistentUIClient")
-    @patch("spark_history_mcp.core.app.Config.from_file")
+    @patch("sparkinsight_ai.core.app.EMRPersistentUIClient")
+    @patch("sparkinsight_ai.core.app.Config.from_file")
     def test_app_lifespan_with_emr_config(
         self, mock_config_from_file, mock_emr_client_class
     ):
@@ -72,7 +72,7 @@ class TestEMRIntegration(unittest.TestCase):
 
         from mcp.server.fastmcp import FastMCP
 
-        from spark_history_mcp.core.app import app_lifespan
+        from sparkinsight_ai.core.app import app_lifespan
 
         # Skip test if asyncio is not available or running in an environment that doesn't support it
         try:

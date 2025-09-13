@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import yaml
 
-from spark_history_mcp.config.config import AuthConfig, Config, ServerConfig
+from sparkinsight_ai.config.config import AuthConfig, Config, ServerConfig
 
 
 class TestConfig(unittest.TestCase):

@@ -3,12 +3,12 @@ import statistics
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.models.mcp_types import (
+from sparkinsight_ai.core.app import mcp
+from sparkinsight_ai.models.mcp_types import (
     JobSummary,
     SqlQuerySummary,
 )
-from spark_history_mcp.models.spark_types import (
+from sparkinsight_ai.models.spark_types import (
     ApplicationInfo,
     ExecutionData,
     JobData,

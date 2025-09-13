@@ -1,11 +1,11 @@
-"""Main entry point for Spark History Server MCP."""
+"""Main entry point for SparkInsight AI."""
 
 import json
 import logging
 import sys
 
-from spark_history_mcp.config.config import Config
-from spark_history_mcp.core import app
+from sparkinsight_ai.config.config import Config
+from sparkinsight_ai.core import app
 
 # Configure logging
 logging.basicConfig(
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def main():
     """Main entry point."""
     try:
-        logger.info("Starting Spark History Server MCP...")
+        logger.info("Starting SparkInsight AI...")
         config = Config.from_file("config.yaml")
         if config.mcp.debug:
             logger.setLevel(logging.DEBUG)
