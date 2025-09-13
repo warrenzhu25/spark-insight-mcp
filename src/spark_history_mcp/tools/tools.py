@@ -72,6 +72,90 @@ def get_application(app_id: str, server: Optional[str] = None) -> ApplicationInf
 
 
 @mcp.tool()
+def list_applications(
+    server: Optional[str] = None,
+    status: Optional[list[str]] = None,
+    min_date: Optional[str] = None,
+    max_date: Optional[str] = None,
+    min_end_date: Optional[str] = None,
+    max_end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+    app_name: Optional[str] = None,
+    search_type: str = "contains",
+) -> list:
+    """
+    Get a list of all Spark applications with optional filtering.
+
+    Retrieves applications from the Spark History Server with support for
+    filtering by status, date ranges, name patterns, and result limits.
+
+    Args:
+        server: Optional server name to use (uses default if not specified)
+        status: Optional list of application status values to filter by (e.g., ["COMPLETED", "RUNNING"])
+        min_date: Minimum start date (yyyy-MM-dd'T'HH:mm:ss.SSSz or yyyy-MM-dd)
+        max_date: Maximum start date
+        min_end_date: Minimum end date
+        max_end_date: Maximum end date
+        limit: Maximum number of applications to return
+        app_name: Optional application name or pattern to filter by
+        search_type: Type of name search - "exact", "contains", or "regex" (default: "contains")
+
+    Returns:
+        List of ApplicationInfo objects for matching applications
+
+    Raises:
+        ValueError: If search_type is not one of "exact", "contains", or "regex"
+        re.error: If search_type is "regex" and app_name is not a valid regex pattern
+    """
+    import re
+
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    # Get applications from the server with existing filters
+    applications = client.list_applications(
+        status=status,
+        min_date=min_date,
+        max_date=max_date,
+        min_end_date=min_end_date,
+        max_end_date=max_end_date,
+        limit=limit,
+    )
+
+    # If no name filtering is requested, return as-is
+    if not app_name:
+        return applications
+
+    # Validate search_type
+    valid_search_types = ["exact", "contains", "regex"]
+    if search_type not in valid_search_types:
+        raise ValueError(f"search_type must be one of {valid_search_types}, got: {search_type}")
+
+    # Filter applications by name based on search type
+    matching_apps = []
+
+    for app in applications:
+        app_display_name = app.name if app.name else ""
+
+        try:
+            if search_type == "exact":
+                if app_display_name == app_name:
+                    matching_apps.append(app)
+            elif search_type == "contains":
+                if app_name.lower() in app_display_name.lower():
+                    matching_apps.append(app)
+            elif search_type == "regex":
+                if re.search(app_name, app_display_name, re.IGNORECASE):
+                    matching_apps.append(app)
+        except re.error as e:
+            # Re-raise regex errors with more context
+            raise re.error(f"Invalid regex pattern '{app_name}': {str(e)}")
+
+    return matching_apps
+
+
+
+@mcp.tool()
 def list_jobs(
     app_id: str, server: Optional[str] = None, status: Optional[list[str]] = None
 ) -> list:

@@ -85,6 +85,35 @@ Once the MCP Inspector opens in your browser (http://localhost:6274), you can:
 - **Parameters**: (none required)
 - **Expected**: Array of 3 applications
 
+#### List Applications by Name (Contains Search)
+- **Tool**: `list_applications`
+- **Parameters**:
+  - `app_name` = `"Taxi"`
+  - `search_type` = `"contains"` (default)
+- **Expected**: Applications containing "Taxi" in their name
+
+#### List Applications by Name (Exact Match)
+- **Tool**: `list_applications`
+- **Parameters**:
+  - `app_name` = `"NewYorkTaxiData_2025_06_27_00_24_44"`
+  - `search_type` = `"exact"`
+- **Expected**: Only exact name matches
+
+#### List Applications by Name (Regex)
+- **Tool**: `list_applications`
+- **Parameters**:
+  - `app_name` = `".*Taxi.*"`
+  - `search_type` = `"regex"`
+- **Expected**: Applications matching the regex pattern
+
+#### List Applications with Combined Filters
+- **Tool**: `list_applications`
+- **Parameters**:
+  - `status` = `["FINISHED"]`
+  - `app_name` = `"Data"`
+  - `search_type` = `"contains"`
+- **Expected**: Completed applications with "Data" in name
+
 #### Compare Job Performance
 - **Tool**: `compare_job_performance`
 - **Parameters**:

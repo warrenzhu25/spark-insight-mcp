@@ -23,6 +23,7 @@ from spark_history_mcp.tools.tools import (
     get_client_or_default,
     get_stage,
     get_stage_task_summary,
+    list_applications,
     list_jobs,
     list_slowest_jobs,
     list_slowest_sql_queries,
@@ -994,6 +995,281 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0].duration, 10000)
         self.assertEqual(result[1].duration, 9000)
         self.assertEqual(result[2].duration, 8000)
+
+    # Tests for list_applications tool
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_no_filters(self, mock_get_client):
+        """Test list_applications without any filters"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo), MagicMock(spec=ApplicationInfo)]
+        mock_apps[0].name = "Test App 1"
+        mock_apps[1].name = "Test App 2"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call the function
+        result = list_applications()
+
+        # Verify results
+        self.assertEqual(result, mock_apps)
+        mock_client.list_applications.assert_called_once_with(
+            status=None,
+            min_date=None,
+            max_date=None,
+            min_end_date=None,
+            max_end_date=None,
+            limit=None,
+        )
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_with_existing_filters(self, mock_get_client):
+        """Test list_applications with existing filters (backward compatibility)"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo)]
+        mock_apps[0].name = "Completed App"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with existing filters
+        result = list_applications(
+            status=["COMPLETED"],
+            min_date="2023-01-01",
+            limit=10,
+            server="production"
+        )
+
+        # Verify results and that all parameters are passed through
+        self.assertEqual(result, mock_apps)
+        mock_client.list_applications.assert_called_once_with(
+            status=["COMPLETED"],
+            min_date="2023-01-01",
+            max_date=None,
+            min_end_date=None,
+            max_end_date=None,
+            limit=10,
+        )
+        mock_get_client.assert_called_once_with(unittest.mock.ANY, "production")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_name_filter_contains(self, mock_get_client):
+        """Test list_applications with name filtering using 'contains' search"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+        ]
+        mock_apps[0].name = "My ETL Job"
+        mock_apps[1].name = "Data Processing Pipeline"
+        mock_apps[2].name = "ETL Analytics Task"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with name filter (default "contains" search)
+        result = list_applications(app_name="ETL")
+
+        # Should return apps 0 and 2 (containing "ETL")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].name, "My ETL Job")
+        self.assertEqual(result[1].name, "ETL Analytics Task")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_name_filter_exact(self, mock_get_client):
+        """Test list_applications with exact name matching"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+        ]
+        mock_apps[0].name = "My App"
+        mock_apps[1].name = "My App Extended"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with exact name match
+        result = list_applications(app_name="My App", search_type="exact")
+
+        # Should return only exact match
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "My App")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_name_filter_regex(self, mock_get_client):
+        """Test list_applications with regex name matching"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+        ]
+        mock_apps[0].name = "Job_001_prod"
+        mock_apps[1].name = "Job_002_dev"
+        mock_apps[2].name = "Task_001_prod"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with regex pattern (jobs ending with _prod)
+        result = list_applications(app_name=r"Job_\d+_prod$", search_type="regex")
+
+        # Should return only Job_001_prod
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "Job_001_prod")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_name_filter_case_insensitive(self, mock_get_client):
+        """Test that name filtering is case insensitive"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+        ]
+        mock_apps[0].name = "MySQL Backup"
+        mock_apps[1].name = "PostgreSQL Backup"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with lowercase search term
+        result = list_applications(app_name="mysql", search_type="contains")
+
+        # Should match case insensitively
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "MySQL Backup")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_name_filter_empty_name(self, mock_get_client):
+        """Test list_applications with apps that have empty/null names"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+            MagicMock(spec=ApplicationInfo),
+        ]
+        mock_apps[0].name = "Named App"
+        mock_apps[1].name = None
+        mock_apps[2].name = ""
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with name filter
+        result = list_applications(app_name="Named", search_type="contains")
+
+        # Should only match the app with an actual name
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "Named App")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_name_filter_no_matches(self, mock_get_client):
+        """Test list_applications when no apps match the name filter"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo), MagicMock(spec=ApplicationInfo)]
+        mock_apps[0].name = "App One"
+        mock_apps[1].name = "App Two"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with non-matching name
+        result = list_applications(app_name="NonExistent")
+
+        # Should return empty list
+        self.assertEqual(len(result), 0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_combine_name_and_status_filters(self, mock_get_client):
+        """Test combining name filtering with other filters"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo)]
+        mock_apps[0].name = "Production ETL Job"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with both status and name filters
+        result = list_applications(
+            status=["COMPLETED"],
+            app_name="ETL",
+            search_type="contains"
+        )
+
+        # Verify that server-side filtering is applied first
+        mock_client.list_applications.assert_called_once_with(
+            status=["COMPLETED"],
+            min_date=None,
+            max_date=None,
+            min_end_date=None,
+            max_end_date=None,
+            limit=None,
+        )
+
+        # Then client-side name filtering is applied
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "Production ETL Job")
+
+    def test_list_applications_invalid_search_type(self):
+        """Test list_applications with invalid search_type parameter"""
+        # Call with invalid search type should raise ValueError
+        with self.assertRaises(ValueError) as context:
+            list_applications(app_name="test", search_type="invalid")
+
+        self.assertIn("search_type must be one of", str(context.exception))
+        self.assertIn("invalid", str(context.exception))
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_invalid_regex(self, mock_get_client):
+        """Test list_applications with invalid regex pattern"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo)]
+        mock_apps[0].name = "Test App"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with invalid regex pattern
+        with self.assertRaises(Exception) as context:  # re.error gets wrapped
+            list_applications(app_name="[invalid", search_type="regex")
+
+        self.assertIn("Invalid regex pattern", str(context.exception))
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_no_name_parameter_returns_all(self, mock_get_client):
+        """Test that when no app_name is provided, all apps are returned"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo), MagicMock(spec=ApplicationInfo)]
+        mock_apps[0].name = "App 1"
+        mock_apps[1].name = "App 2"
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call without app_name parameter
+        result = list_applications(status=["COMPLETED"])
+
+        # Should return all apps without name filtering
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result, mock_apps)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_list_applications_empty_app_name_returns_all(self, mock_get_client):
+        """Test that empty app_name is treated as no filtering"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_apps = [MagicMock(spec=ApplicationInfo), MagicMock(spec=ApplicationInfo)]
+        mock_client.list_applications.return_value = mock_apps
+        mock_get_client.return_value = mock_client
+
+        # Call with empty app_name
+        result = list_applications(app_name="")
+
+        # Should return all apps (empty string is falsy)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result, mock_apps)
 
 
 class TestSparkInsightTools(unittest.TestCase):

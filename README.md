@@ -141,6 +141,7 @@ The MCP server provides **22 specialized tools** organized by analysis patterns.
 | 🔧 Tool | 📝 Description |
 |---------|----------------|
 | `get_application` | 📊 Get detailed information about a specific Spark application including status, resource usage, duration, and attempt details |
+| `list_applications` | 📋 Get a list of all Spark applications with optional filtering by status, dates, limits, and name patterns (exact, contains, regex) |
 
 ### 🔗 Job Analysis
 *Job-level performance analysis and identification*
