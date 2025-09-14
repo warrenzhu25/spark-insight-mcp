@@ -1,0 +1,1 @@
+"""SparkInsight AI CLI package."""
