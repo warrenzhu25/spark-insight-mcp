@@ -87,7 +87,8 @@ tasks:
   security:
     desc: Run security scan with bandit
     cmds:
-      - uv run bandit -r . -f json -o bandit-report.json
+      - uv run bandit -r . -f json -o bandit-report.json || true
+      - uv run bandit -r . -f txt
       - echo "✅ Security scan completed! Check bandit-report.json"
 
   pre-commit:

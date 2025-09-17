@@ -7,23 +7,15 @@
 
 > **🧠 AI-Powered Spark Analysis with MCP Integration for intelligent performance monitoring and optimization**
 
-Transform your Spark infrastructure monitoring with AI intelligence! SparkInsight AI connects AI agents to Apache Spark History Server, enabling intelligent job performance analysis, bottleneck detection, and optimization recommendations through the Model Context Protocol.
+Connect AI agents to Apache Spark History Server for intelligent job analysis, bottleneck detection, and optimization recommendations through natural language queries.
 
-**✨ Evolved from the original SparkInsight with advanced AI capabilities** including auto-scaling optimization, data skew detection, failure analysis, and comprehensive performance insights!
+**Key Features:**
+- 🔍 Natural language queries for Spark job analysis
+- 📊 AI-powered performance insights and bottleneck detection
+- 🔄 Historical job comparison and regression analysis
+- 🚨 Intelligent failure investigation and root cause analysis
 
-## 🎯 What is This?
-
-**SparkInsight AI** bridges AI agents with your existing Apache Spark infrastructure, enabling:
-
-- 🔍 **Query job details** through natural language
-- 📊 **Analyze performance metrics** across applications
-- 🔄 **Compare multiple jobs** to identify regressions
-- 🚨 **Investigate failures** with detailed error analysis
-- 📈 **Generate insights** from historical execution data
-
-📺 **See it in action:**
-
-[![Watch the demo video](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](https://www.youtube.com/watch?v=e3P_2_RiUHw)
+📺 **[Watch Demo Video](https://www.youtube.com/watch?v=e3P_2_RiUHw)** | 📸 **[View Screenshots](screenshots/)**
 
 
 ## 🏗️ Architecture
@@ -47,422 +39,116 @@ graph TB
     J --> M[📄 Dev Event Logs]
 ```
 
-**🔗 Components:**
-- **🔥 Spark History Server**: Your existing infrastructure serving Spark event data
-- **⚡ MCP Server**: This project - provides MCP tools for querying Spark data
-- **🤖 AI Agents**: LangChain, custom agents, or any MCP-compatible client
+**Components:** AI agents connect through MCP to your existing Spark History Servers for intelligent analysis.
 
 ## ⚡ Quick Start
 
 ### 📋 Prerequisites
-- 🔥 Existing Spark History Server (running and accessible)
-- 🐍 Python 3.12+
-- ⚡ [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
+- Existing Spark History Server (or use our test setup)
 
-### 🚀 Setup & Testing
+### 🚀 Installation & Setup
 
 ```bash
+# Install directly from PyPI
+uvx --from sparkinsight-ai sparkinsight-ai
+
+# Start with configuration
+sparkinsight-ai config init --interactive
+
+# Start the MCP server
+sparkinsight-ai server start
+```
+
+### 🧪 Development & Testing
+
+```bash
+# Clone for development and testing
 git clone https://github.com/DeepDiagnostix-AI/sparkinsight-ai.git
 cd sparkinsight-ai
 
-# Install Task (if not already installed)
-brew install go-task  # macOS, see https://taskfile.dev/installation/ for others
+# Install Task runner
+brew install go-task  # macOS
 
-# Setup and start testing
-task start-spark-bg            # Start Spark History Server with sample data (default Spark 3.5.5)
-# Or specify a different Spark version:
-# task start-spark-bg spark_version=3.5.2
-task start-mcp-bg             # Start MCP Server
+# Start test environment
+task start-spark-bg    # Start Spark History Server with sample data
+task start-mcp-bg      # Start MCP Server
+task start-inspector-bg # Start MCP Inspector (optional)
 
-# Optional: Opens MCP Inspector on http://localhost:6274 for interactive testing
-# Requires Node.js: 22.7.5+ (Check https://github.com/modelcontextprotocol/inspector for latest requirements)
-task start-inspector-bg       # Start MCP Inspector
-
-# When done, run `task stop-all`
-```
-
-If you just want to run the MCP server without cloning the repository:
-
-```bash
-# Run with uv without installing the module
-uvx --from sparkinsight-ai sparkinsight-ai
-
-# OR run with pip and python. Use of venv is highly encouraged.
-python3 -m venv sparkinsight-ai && source sparkinsight-ai/bin/activate
-pip install sparkinsight-ai
-python3 -m sparkinsight_ai.core.main
-# Deactivate venv
-deactivate
+# Stop all services
+task stop-all
 ```
 
 ## 🖥️ Command Line Interface
 
-SparkInsight AI now includes a comprehensive CLI for direct Spark analysis without needing MCP clients! Use the enhanced command line interface for interactive analysis, server management, and configuration.
-
-### 🚀 CLI Quick Start
+SparkInsight AI includes a comprehensive CLI for direct analysis without MCP clients.
 
 ```bash
-# Initialize configuration
+# Basic usage
 sparkinsight-ai config init --interactive
-
-# List Spark applications
 sparkinsight-ai apps list
-
-# Get detailed application info
-sparkinsight-ai apps show app-20231201-123456
-
-# Run comprehensive analysis
-sparkinsight-ai analyze insights app-20231201-123456
-
-# Find performance bottlenecks
-sparkinsight-ai analyze bottlenecks app-20231201-123456
-
-# Start MCP server (same as before)
-sparkinsight-ai server start
+sparkinsight-ai analyze insights <app-id>
+sparkinsight-ai analyze bottlenecks <app-id>
 ```
 
-### 📊 CLI Command Overview
+**Command Categories:**
+- **Apps**: `list`, `show`, `jobs`, `stages`, `executors`
+- **Analysis**: `insights`, `bottlenecks`, `auto-scaling`, `shuffle-skew`
+- **Server**: `start`, `test`, `status`
+- **Config**: `init`, `show`, `validate`
 
-| Command Category | Commands | Description |
-|------------------|----------|-------------|
-| **📱 Applications** | `apps list`, `apps show`, `apps jobs`, `apps stages`, `apps executors` | List and inspect Spark applications, jobs, stages, and executors |
-| **🔍 Analysis** | `analyze insights`, `analyze bottlenecks`, `analyze auto-scaling`, `analyze shuffle-skew`, `analyze slowest` | Intelligent performance analysis and optimization recommendations |
-| **⚙️ Server** | `server start`, `server test`, `server status` | Manage MCP server and test connectivity |
-| **🔧 Config** | `config init`, `config show`, `config validate`, `config edit` | Create and manage configuration files |
+📚 **See [CLI.md](CLI.md) for detailed usage examples and configuration options.**
 
-### 🎯 CLI Usage Examples
+## 🛠️ Available MCP Tools
 
-#### Basic Application Analysis
-```bash
-# List recent applications
-sparkinsight-ai apps list --limit 10
+The server provides **22 specialized tools** for AI agents organized by analysis patterns:
 
-# Filter by status
-sparkinsight-ai apps list --status COMPLETED --status FAILED
+| Category | Tools | Purpose |
+|----------|-------|---------|
+| **📊 Applications** | `get_application`, `list_applications` | Basic application metadata and overview |
+| **🔗 Jobs** | `list_jobs`, `list_slowest_jobs` | Job-level performance analysis |
+| **⚡ Stages** | `list_stages`, `get_stage`, `list_slowest_stages`, `get_stage_task_summary` | Stage-level deep dive and task metrics |
+| **🖥️ Executors** | `list_executors`, `get_executor`, `get_executor_summary`, `get_resource_usage_timeline` | Resource utilization and allocation tracking |
+| **🔎 SQL** | `list_slowest_sql_queries`, `compare_sql_execution_plans` | SQL performance analysis |
+| **🚨 Analysis** | `get_job_bottlenecks`, `compare_job_performance`, `compare_job_environments` | Bottleneck identification and comparison |
+| **🧠 Intelligence** | `analyze_auto_scaling`, `analyze_shuffle_skew`, `analyze_failed_tasks`, `get_application_insights` | AI-powered optimization insights |
 
-# Search by name
-sparkinsight-ai apps list --name "etl" --format table
+**Example AI Queries:**
+- *"Why is my job slow?"* → Analyzes bottlenecks, stages, and executors
+- *"Compare today vs yesterday"* → Compares performance and configurations
+- *"Check for data skew"* → Analyzes shuffle patterns and task distribution
 
-# Get application details with JSON output
-sparkinsight-ai apps show app-20231201-123456 --format json
-```
+🔧 **See [TOOLS.md](TOOLS.md) for complete tool documentation and usage patterns.**
 
-#### Performance Analysis
-```bash
-# Comprehensive SparkInsight analysis
-sparkinsight-ai analyze insights app-20231201-123456
+## 🚀 Deployment & Integration
 
-# Focus on specific analysis types
-sparkinsight-ai analyze auto-scaling app-20231201-123456 --target-duration 5
-sparkinsight-ai analyze shuffle-skew app-20231201-123456 --shuffle-threshold 5
-sparkinsight-ai analyze slowest app-20231201-123456 --type sql --top-n 3
+**Deployment Options:**
+- **Local/Development**: Use the quick start above
+- **AWS**: Supports Glue and EMR - see [AWS guides](examples/aws/)
+- **Kubernetes**: Helm charts available in [`deploy/kubernetes/`](deploy/kubernetes/)
+- **Multi-server**: Configure multiple Spark History Servers
 
-# Identify bottlenecks
-sparkinsight-ai analyze bottlenecks app-20231201-123456 --top-n 10
-```
+**AI Agent Integrations:**
+- [Claude Desktop](examples/integrations/claude-desktop/) (STDIO)
+- [Amazon Q CLI](examples/integrations/amazon-q-cli/) (STDIO)
+- [LangGraph](examples/integrations/langgraph/) (HTTP)
+- [Local Testing](TESTING.md) (HTTP)
 
-#### Configuration Management
-```bash
-# Interactive configuration setup
-sparkinsight-ai config init --interactive
+🔧 **See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup guides and configuration options.**
 
-# Test server connectivity
-sparkinsight-ai server test
+## 🎯 Use Cases
 
-# Show current configuration
-sparkinsight-ai config show --format yaml
+**Performance Investigation**
+- *"Why is my ETL job slow?"* → Analyzes metrics, compares historical performance, identifies bottlenecks
 
-# Validate configuration
-sparkinsight-ai config validate
-```
+**Failure Analysis**
+- *"What caused job failures?"* → Examines failed tasks, reviews executor logs, suggests fixes
 
-#### Multi-Server Usage
-```bash
-# Use specific server
-sparkinsight-ai apps list --server production
+**Optimization**
+- *"How can I optimize resource usage?"* → Analyzes auto-scaling, detects data skew, tracks utilization
 
-# Test specific server
-sparkinsight-ai server test --server staging
-
-# Run analysis on different servers
-sparkinsight-ai analyze insights app-123 --server dev
-```
-
-### 📄 Output Formats
-
-All CLI commands support multiple output formats:
-
-- **`--format human`** (default): Rich, colorized output with tables and panels
-- **`--format json`**: Machine-readable JSON for scripting
-- **`--format table`**: Simple tabular output
-
-### 📊 Sample Data
-The repository includes real Spark event logs for testing:
-- `spark-bcec39f6201b42b9925124595baad260` - ✅ Successful ETL job
-- `spark-110be3a8424d4a2789cb88134418217b` - 🔄 Data processing job
-- `spark-cc4d115f011443d787f03a71a476a745` - 📈 Multi-stage analytics job
-
-See **[TESTING.md](TESTING.md)** for using them.
-
-### ⚙️ Server Configuration
-Edit `config.yaml` for your Spark History Server:
-```yaml
-servers:
-  local:
-    default: true
-    url: "http://your-spark-history-server:18080"
-    auth:  # optional
-      username: "user"
-      password: "pass"
-mcp:
-  transports:
-    - streamable-http # streamable-http or stdio.
-  port: "18888"
-  debug: true
-```
-
-## 📸 Screenshots
-
-### 🔍 Get Spark Application
-![Get Application](screenshots/get-application.png)
-
-### ⚡ Job Performance Comparison
-![Job Comparison](screenshots/job-compare.png)
-
-
-## 🛠️ Available Tools
-
-> **Note**: These tools are subject to change as we scale and improve the performance of the MCP server.
-
-The MCP server provides **22 specialized tools** organized by analysis patterns. LLMs can intelligently select and combine these tools based on user queries:
-
-### 📊 Application Information
-*Basic application metadata and overview*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `get_application` | 📊 Get detailed information about a specific Spark application including status, resource usage, duration, and attempt details |
-| `list_applications` | 📋 Get a list of all Spark applications with optional filtering by status, dates, limits, and name patterns (exact, contains, regex) |
-
-### 🔗 Job Analysis
-*Job-level performance analysis and identification*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `list_jobs` | 🔗 Get a list of all jobs for a Spark application with optional status filtering |
-| `list_slowest_jobs` | ⏱️ Get the N slowest jobs for a Spark application (excludes running jobs by default) |
-
-### ⚡ Stage Analysis
-*Stage-level performance deep dive and task metrics*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `list_stages` | ⚡ Get a list of all stages for a Spark application with optional status filtering and summaries |
-| `list_slowest_stages` | 🐌 Get the N slowest stages for a Spark application (excludes running stages by default) |
-| `get_stage` | 🎯 Get information about a specific stage with optional attempt ID and summary metrics |
-| `get_stage_task_summary` | 📊 Get statistical distributions of task metrics for a specific stage (execution times, memory usage, I/O metrics) |
-
-### 🖥️ Executor & Resource Analysis
-*Resource utilization, executor performance, and allocation tracking*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `list_executors` | 🖥️ Get executor information with optional inactive executor inclusion |
-| `get_executor` | 🔍 Get information about a specific executor including resource allocation, task statistics, and performance metrics |
-| `get_executor_summary` | 📈 Aggregates metrics across all executors (memory usage, disk usage, task counts, performance metrics) |
-| `get_resource_usage_timeline` | 📅 Get chronological view of resource allocation and usage patterns including executor additions/removals |
-
-### ⚙️ Configuration & Environment
-*Spark configuration, environment variables, and runtime settings*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `get_environment` | ⚙️ Get comprehensive Spark runtime configuration including JVM info, Spark properties, system properties, and classpath |
-
-### 🔎 SQL & Query Analysis
-*SQL performance analysis and execution plan comparison*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `list_slowest_sql_queries` | 🐌 Get the top N slowest SQL queries for an application with detailed execution metrics |
-| `compare_sql_execution_plans` | 🔍 Compare SQL execution plans between two Spark jobs, analyzing logical/physical plans and execution metrics |
-
-### 🚨 Performance & Bottleneck Analysis
-*Intelligent bottleneck identification and performance recommendations*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `get_job_bottlenecks` | 🚨 Identify performance bottlenecks by analyzing stages, tasks, and executors with actionable recommendations |
-
-### 🔄 Comparative Analysis
-*Cross-application comparison for regression detection and optimization*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `compare_job_environments` | ⚙️ Compare Spark environment configurations between two jobs to identify differences in properties and settings |
-| `compare_job_performance` | 📈 Compare performance metrics between two Spark jobs including execution times, resource usage, and task distribution |
-
-### 🧠 SparkInsight Intelligence
-*AI-powered analysis tools inspired by SparkInsight for intelligent performance optimization*
-| 🔧 Tool | 📝 Description |
-|---------|----------------|
-| `analyze_auto_scaling` | 🚀 Analyze workload patterns and provide intelligent auto-scaling recommendations for dynamic allocation |
-| `analyze_shuffle_skew` | 📊 Detect and analyze data skew in shuffle operations with actionable optimization suggestions |
-| `analyze_failed_tasks` | 🚨 Investigate task failures to identify patterns, problematic executors, and root causes |
-| `analyze_executor_utilization` | 📈 Track executor utilization over time to identify over/under-provisioning and optimization opportunities |
-| `get_application_insights` | 🧠 **Comprehensive SparkInsight analysis** - Runs all analyzers to provide complete performance overview and recommendations |
-
-### 🤖 How LLMs Use These Tools
-
-**Query Pattern Examples:**
-- *"Why is my job slow?"* → `get_job_bottlenecks` + `list_slowest_stages` + `get_executor_summary`
-- *"Compare today vs yesterday"* → `compare_job_performance` + `compare_job_environments`
-- *"What's wrong with stage 5?"* → `get_stage` + `get_stage_task_summary`
-- *"Show me resource usage over time"* → `get_resource_usage_timeline` + `get_executor_summary`
-- *"Find my slowest SQL queries"* → `list_slowest_sql_queries` + `compare_sql_execution_plans`
-- *"Analyze my app performance with insights"* → `get_application_insights` (comprehensive SparkInsight analysis)
-- *"Help me optimize auto-scaling"* → `analyze_auto_scaling` + `analyze_executor_utilization`
-- *"Why are my tasks failing?"* → `analyze_failed_tasks` + `get_executor_summary`
-- *"Check for data skew issues"* → `analyze_shuffle_skew` + `get_stage_task_summary`
-
-## 🧠 SparkInsight Integration
-
-The MCP server now includes intelligent analysis capabilities inspired by SparkInsight! See the **[SparkInsight Integration Guide](examples/sparkinsight/README.md)** for:
-
-- 🚀 **Auto-scaling optimization** recommendations
-- 📊 **Data skew detection** and mitigation strategies  
-- 🚨 **Failure analysis** with root cause identification
-- 📈 **Executor utilization** optimization insights
-- 🧠 **Comprehensive analysis** combining all insights
-
-## 📔 AWS Integration Guides
-
-If you are an existing AWS user looking to analyze your Spark Applications, we provide detailed setup guides for:
-
-- **[AWS Glue Users](examples/aws/glue/README.md)** - Connect to Glue Spark History Server
-- **[Amazon EMR Users](examples/aws/emr/README.md)** - Use EMR Persistent UI for Spark analysis
-
-These guides provide step-by-step instructions for setting up the Spark History Server MCP with your AWS services.
-
-## 🚀 Kubernetes Deployment
-
-Deploy using Kubernetes with Helm:
-
-> ⚠️ **Work in Progress**: We are still testing and will soon publish the container image and Helm registry to GitHub for easy deployment.
-
-```bash
-# 📦 Deploy with Helm
-helm install spark-history-mcp ./deploy/kubernetes/helm/spark-history-mcp/
-
-# 🎯 Production configuration
-helm install spark-history-mcp ./deploy/kubernetes/helm/spark-history-mcp/ \
-  --set replicaCount=3 \
-  --set autoscaling.enabled=true \
-  --set monitoring.enabled=true
-```
-
-📚 See [`deploy/kubernetes/helm/`](deploy/kubernetes/helm/) for complete deployment manifests and configuration options.
-
-## 🌐 Multi-Spark History Server Setup
-Setup multiple Spark history servers in the config.yaml and choose which server you want the LLM to interact with for each query.
-
-```yaml
-servers:
-  production:
-    default: true
-    url: "http://prod-spark-history:18080"
-    auth:
-      username: "user"
-      password: "pass"
-  staging:
-    url: "http://staging-spark-history:18080"
-```
-
-💁 User Query: "Can you get application <app_id> using production server?"
-
-🤖 AI Tool Request:
-```json
-{
-  "app_id": "<app_id>",
-  "server": "production"
-}
-```
-🤖 AI Tool Response:
-```json
-{
-  "id": "<app_id>>",
-  "name": "app_name",
-  "coresGranted": null,
-  "maxCores": null,
-  "coresPerExecutor": null,
-  "memoryPerExecutorMB": null,
-  "attempts": [
-    {
-      "attemptId": null,
-      "startTime": "2023-09-06T04:44:37.006000Z",
-      "endTime": "2023-09-06T04:45:40.431000Z",
-      "lastUpdated": "2023-09-06T04:45:42Z",
-      "duration": 63425,
-      "sparkUser": "spark",
-      "appSparkVersion": "3.3.0",
-      "completed": true
-    }
-  ]
-}
-```
-
-### 🔐 Environment Variables
-```
-SHS_MCP_PORT - Port for MCP server (default: 18888)
-SHS_MCP_DEBUG - Enable debug mode (default: false)
-SHS_MCP_ADDRESS - Address for MCP server (default: localhost)
-SHS_MCP_TRANSPORT - MCP transport mode (default: streamable-http)
-SHS_SERVERS_*_URL - URL for a specific server
-SHS_SERVERS_*_AUTH_USERNAME - Username for a specific server
-SHS_SERVERS_*_AUTH_PASSWORD - Password for a specific server
-SHS_SERVERS_*_AUTH_TOKEN - Token for a specific server
-SHS_SERVERS_*_VERIFY_SSL - Whether to verify SSL for a specific server (true/false)
-SHS_SERVERS_*_TIMEOUT - HTTP request timeout in seconds for a specific server (default: 30)
-SHS_SERVERS_*_EMR_CLUSTER_ARN - EMR cluster ARN for a specific server
-```
-
-## 🤖 AI Agent Integration
-
-### Quick Start Options
-
-| Integration | Transport | Best For |
-|-------------|-----------|----------|
-| **[Local Testing](TESTING.md)** | HTTP | Development, testing tools |
-| **[Claude Desktop](examples/integrations/claude-desktop/)** | STDIO | Interactive analysis |
-| **[Amazon Q CLI](examples/integrations/amazon-q-cli/)** | STDIO | Command-line automation |
-| **[Kiro](examples/integrations/kiro/)** | HTTP | IDE integration, code-centric analysis |
-| **[LangGraph](examples/integrations/langgraph/)** | HTTP | Multi-agent workflows |
-| **[Strands Agents](examples/integrations/strands-agents/)** | HTTP | Multi-agent workflows |
-
-## 🎯 Example Use Cases
-
-### 🔍 Performance Investigation
-```
-🤖 AI Query: "Why is my ETL job running slower than usual?"
-
-📊 MCP Actions:
-✅ Analyze application metrics
-✅ Compare with historical performance
-✅ Identify bottleneck stages
-✅ Generate optimization recommendations
-```
-
-### 🚨 Failure Analysis
-```
-🤖 AI Query: "What caused job 42 to fail?"
-
-🔍 MCP Actions:
-✅ Examine failed tasks and error messages
-✅ Review executor logs and resource usage
-✅ Identify root cause and suggest fixes
-```
-
-### 📈 Comparative Analysis
-```
-🤖 AI Query: "Compare today's batch job with yesterday's run"
-
-📊 MCP Actions:
-✅ Compare execution times and resource usage
-✅ Identify performance deltas
-✅ Highlight configuration differences
-```
+📚 **See [EXAMPLES.md](EXAMPLES.md) for detailed use case scenarios and query examples.**
 
 ## 🤝 Contributing
 
@@ -479,11 +165,21 @@ Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ---
 
+## 📚 Documentation
+
+- **[CLI.md](CLI.md)** - Complete command-line interface guide
+- **[TOOLS.md](TOOLS.md)** - All 22 MCP tools with examples
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - AWS, Kubernetes, and multi-server setup
+- **[EXAMPLES.md](EXAMPLES.md)** - Detailed use cases and query patterns
+- **[TESTING.md](TESTING.md)** - Testing guide and sample data
+
+---
+
 <div align="center">
 
 **🔥 Connect your Spark infrastructure to AI agents**
 
-[🚀 Get Started](#-quick-start) | [🛠️ View Tools](#%EF%B8%8F-available-tools) | [🧪 Test Now](TESTING.md) | [🤝 Contribute](#-contributing)
+[🚀 Get Started](#-quick-start) | [🖥️ CLI Guide](CLI.md) | [🛠️ View Tools](TOOLS.md) | [🚀 Deploy](DEPLOYMENT.md)
 
 *Built by the community, for the community* 💙
 

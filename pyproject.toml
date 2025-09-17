@@ -89,6 +89,10 @@ addopts = "--cov=. --cov-report=term-missing"
 pythonpath = [".", "src"]
 asyncio_mode = "auto"
 
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "venv", "__pycache__"]
+skips = ["B101"]  # Skip assert_used test
+
 [dependency-groups]
 dev = [
     "pytest~=8.4",
@@ -98,6 +102,8 @@ dev = [
     "mypy~=1.7",
     "pre-commit~=3.0",
     "pytest-asyncio~=1.0",
+    "bandit~=1.7",
+    "safety~=3.0",
 ]
 
 

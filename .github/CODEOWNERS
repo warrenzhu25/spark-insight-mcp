@@ -1,0 +1,24 @@
+# Global ownership - all files require review from maintainers
+* @DeepDiagnostix-AI/maintainers
+
+# Core MCP implementation
+/src/sparkinsight_ai/core/ @DeepDiagnostix-AI/maintainers
+/src/sparkinsight_ai/tools/ @DeepDiagnostix-AI/maintainers
+
+# Build and CI configuration
+/.github/ @DeepDiagnostix-AI/maintainers
+/Taskfile.yml @DeepDiagnostix-AI/maintainers
+/pyproject.toml @DeepDiagnostix-AI/maintainers
+/Dockerfile @DeepDiagnostix-AI/maintainers
+
+# Security-sensitive files
+/.pre-commit-config.yaml @DeepDiagnostix-AI/maintainers
+/bandit.yaml @DeepDiagnostix-AI/maintainers
+
+# Documentation
+/README.md @DeepDiagnostix-AI/maintainers
+/CONTRIBUTING.md @DeepDiagnostix-AI/maintainers
+/TESTING.md @DeepDiagnostix-AI/maintainers
+
+# Release and deployment
+/deploy/ @DeepDiagnostix-AI/maintainers
