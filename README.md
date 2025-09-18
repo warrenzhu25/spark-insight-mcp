@@ -132,6 +132,7 @@ The server provides **22 specialized tools** for AI agents organized by analysis
 **AI Agent Integrations:**
 - [Claude Desktop](examples/integrations/claude-desktop/) (STDIO)
 - [Amazon Q CLI](examples/integrations/amazon-q-cli/) (STDIO)
+- [Gemini CLI](examples/integrations/gemini-cli/) (STDIO)
 - [LangGraph](examples/integrations/langgraph/) (HTTP)
 - [Local Testing](TESTING.md) (HTTP)
 

@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "sparkinsight-ai": {
+      "command": "uvx",
+      "args": ["--from", "sparkinsight-ai", "sparkinsight-ai", "server", "start"],
+      "env": {
+        "SHS_MCP_PORT": "18888",
+        "SHS_MCP_DEBUG": "true",
+        "SHS_MCP_ADDRESS": "localhost",
+        "SHS_MCP_TRANSPORT": "stdio",
+        "SHS_SERVERS_LOCAL_URL": "http://localhost:18080"
+      },
+      "timeout": 120000,
+      "disabled": false
+    },
+    "sparkinsight-ai-dev": {
+      "command": "uv",
+      "args": ["run", "-m", "sparkinsight_ai.core.main"],
+      "env": {
+        "SHS_MCP_PORT": "18888",
+        "SHS_MCP_DEBUG": "true",
+        "SHS_MCP_TRANSPORT": "stdio",
+        "SHS_SERVERS_LOCAL_URL": "http://localhost:18080",
+        "SHS_SERVERS_PRODUCTION_URL": "https://spark-history.company.com:18080",
+        "SHS_SERVERS_PRODUCTION_AUTH_USERNAME": "${SPARK_USERNAME}",
+        "SHS_SERVERS_PRODUCTION_AUTH_PASSWORD": "${SPARK_PASSWORD}"
+      },
+      "cwd": "/path/to/sparkinsight-ai",
+      "timeout": 120000,
+      "disabled": false
+    },
+    "sparkinsight-ai-remote": {
+      "httpUrl": "http://localhost:18888",
+      "env": {},
+      "timeout": 120000,
+      "disabled": false
+    }
+  }
+}
