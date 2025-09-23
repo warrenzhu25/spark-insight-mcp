@@ -60,7 +60,7 @@ task start-spark-bg   # Starts test server with sample data
   "mcpServers": {
     "sparkinsight-ai-dev": {
       "command": "uv",
-      "args": ["run", "-m", "sparkinsight_ai.core.main"],
+      "args": ["run", "-m", "sparkinsight_ai.core.main", "server", "start"],
       "env": {
         "SHS_MCP_PORT": "18888",
         "SHS_MCP_DEBUG": "true",

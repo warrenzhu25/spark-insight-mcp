@@ -33,18 +33,52 @@ curl http://localhost:18080/api/v1/applications
 
 1. **Configure Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
+### Option 1: Using Published Package (Recommended)
+
 ```json
 {
     "mcpServers": {
-        "mcp-apache-spark-history-server": {
-            "command": "uv",
-            "args": ["run", "-m", "spark_history_mcp.core.main"]
+        "sparkinsight-ai": {
+            "command": "sparkinsight-ai",
+            "args": ["server", "start"],
+            "env": {
+                "SHS_MCP_TRANSPORT": "stdio",
+                "SHS_MCP_DEBUG": "true",
+                "SHS_SERVERS_LOCAL_URL": "http://localhost:18080"
+            }
         }
     }
 }
 ```
 
-**⚠️ Important**: Replace `/Users/username/mcp-apache-spark-history-server` with your actual repository path.
+### Option 2: Using Source Code
+
+```json
+{
+    "mcpServers": {
+        "sparkinsight-ai": {
+            "command": "uv",
+            "args": [
+                "run",
+                "--project",
+                "/path/to/sparkinsight-ai",
+                "-m",
+                "sparkinsight_ai.core.main",
+                "server",
+                "start"
+            ],
+            "cwd": "/path/to/sparkinsight-ai",
+            "env": {
+                "SHS_MCP_TRANSPORT": "stdio",
+                "SHS_MCP_DEBUG": "true",
+                "SHS_SERVERS_LOCAL_URL": "http://localhost:18080"
+            }
+        }
+    }
+}
+```
+
+**⚠️ Important**: Replace `/path/to/sparkinsight-ai` with your actual repository path.
 
 2. **Restart Claude Desktop**
 

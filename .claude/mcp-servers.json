@@ -1,14 +1,13 @@
 {
   "mcpServers": {
     "sparkinsight-ai": {
-      "command": "sparkinsight-ai",
-      "args": ["server", "start"],
+      "command": "uv",
+      "args": ["run", "-m", "sparkinsight_ai.core.main", "server", "start"],
       "env": {
         "SHS_MCP_TRANSPORT": "stdio",
         "SHS_MCP_DEBUG": "true",
         "SHS_SERVERS_LOCAL_URL": "http://localhost:18080"
       },
-      "timeout": 120000,
       "disabled": false
     }
   }
