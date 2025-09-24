@@ -1,6 +1,7 @@
 import heapq
 import statistics
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
 
 from spark_history_mcp.core.app import mcp
@@ -149,7 +150,7 @@ def list_applications(
                     matching_apps.append(app)
         except re.error as e:
             # Re-raise regex errors with more context
-            raise re.error(f"Invalid regex pattern '{app_name}': {str(e)}")
+            raise re.error(f"Invalid regex pattern '{app_name}': {str(e)}") from e
 
     return matching_apps
 
@@ -1257,90 +1258,90 @@ def get_resource_usage_timeline(
 
 @mcp.tool()
 def analyze_auto_scaling(
-    app_id: str, 
+    app_id: str,
     server: Optional[str] = None,
     target_stage_duration_minutes: int = 2
 ) -> Dict[str, Any]:
     """
     Analyze application workload and provide auto-scaling recommendations.
-    
-    Provides recommendations for dynamic allocation configuration based on 
-    application workload patterns. Calculates optimal initial and maximum 
+
+    Provides recommendations for dynamic allocation configuration based on
+    application workload patterns. Calculates optimal initial and maximum
     executor counts to achieve target stage completion times.
-    
+
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         target_stage_duration_minutes: Target duration for stage completion (default: 2 minutes)
-        
+
     Returns:
         Dictionary containing auto-scaling analysis and recommendations
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
-    
+
     # Get application data
     app = client.get_application(app_id)
     environment = client.get_environment(app_id)
     stages = client.list_stages(app_id=app_id)
-    
+
     if not stages:
         return {"error": "No stages found for application", "application_id": app_id}
-    
+
     target_duration_ms = target_stage_duration_minutes * 60 * 1000
-    
+
     # Get app start time and analyze initial stages (first 2 minutes)
     app_start = app.attempts[0].start_time if app.attempts else datetime.now()
     initial_window = app_start + timedelta(minutes=2)
-    
+
     # Filter stages that were running in the first 2 minutes
     initial_stages = [
-        s for s in stages 
+        s for s in stages
         if s.submission_time and s.completion_time and
         s.submission_time <= initial_window and s.completion_time >= initial_window
     ]
-    
+
     # Calculate recommended initial executors
     initial_executor_demand = 0
     for stage in initial_stages:
         if stage.executor_run_time and stage.num_tasks:
             # Estimate executors needed to complete stage in target duration
             executors_needed = min(
-                stage.executor_run_time / target_duration_ms, 
+                stage.executor_run_time / target_duration_ms,
                 stage.num_tasks
             ) / 4  # Conservative scaling factor
             initial_executor_demand += executors_needed
-    
+
     recommended_initial = max(2, int(initial_executor_demand))
-    
+
     # Calculate maximum executors needed during peak load
     # Create timeline of executor demand
     stage_events = []
     for stage in stages:
         if stage.submission_time and stage.completion_time and stage.executor_run_time and stage.num_tasks:
             executors_needed = int(min(
-                stage.executor_run_time / target_duration_ms, 
+                stage.executor_run_time / target_duration_ms,
                 stage.num_tasks
             ) / 4)
             stage_events.append((stage.submission_time, executors_needed))
             stage_events.append((stage.completion_time, -executors_needed))
-    
+
     # Sort events and calculate peak demand
     stage_events.sort(key=lambda x: x[0])
     current_demand = 0
     max_demand = 2
-    
-    for timestamp, demand_change in stage_events:
+
+    for _timestamp, demand_change in stage_events:
         current_demand += demand_change
         max_demand = max(max_demand, current_demand)
-    
+
     recommended_max = max(recommended_initial, max_demand)
-    
+
     # Get current configuration
     spark_props = {k: v for k, v in environment.spark_properties} if environment.spark_properties else {}
     current_initial = spark_props.get("spark.dynamicAllocation.initialExecutors", "Not set")
     current_max = spark_props.get("spark.dynamicAllocation.maxExecutors", "Not set")
-    
+
     # Generate recommendations as a list to match other analysis functions
     recommendations = []
 
@@ -1438,7 +1439,7 @@ def analyze_shuffle_skew(
         else:
             raise e
     shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
-    
+
     skewed_stages = []
 
     for stage in stages:
@@ -1480,7 +1481,7 @@ def analyze_shuffle_skew(
                             "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
                             "is_skewed": task_skew_ratio > skew_ratio_threshold
                         }
-        except Exception as e:
+        except Exception:
             # Skip task-level analysis if it fails
             pass
 
@@ -1510,7 +1511,7 @@ def analyze_shuffle_skew(
             exec_ratio = stage_skew_info["executor_skew"]["skew_ratio"] if stage_skew_info["executor_skew"] else 0
             stage_skew_info["max_skew_ratio"] = max(task_ratio, exec_ratio)
             skewed_stages.append(stage_skew_info)
-    
+
     # Sort by max skew ratio (highest first)
     skewed_stages.sort(key=lambda x: x["max_skew_ratio"], reverse=True)
 
@@ -1543,7 +1544,7 @@ def analyze_shuffle_skew(
                 "issue": f"Extreme skew detected (ratio: {max_skew})",
                 "suggestion": "Investigate data distribution and consider custom partitioning strategies"
             })
-    
+
     return {
         "application_id": app_id,
         "analysis_type": "Shuffle Skew Analysis",
@@ -1571,28 +1572,28 @@ def analyze_failed_tasks(
 ) -> Dict[str, Any]:
     """
     Analyze failed tasks to identify patterns and root causes.
-    
+
     Examines stages and executors with task failures to identify common
     failure patterns, problematic executors, and potential root causes.
-    
+
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         failure_threshold: Minimum number of failures to include in analysis (default: 1)
-        
+
     Returns:
         Dictionary containing failed task analysis results
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
-    
+
     stages = client.list_stages(app_id=app_id)
     executors = client.list_all_executors(app_id=app_id)
-    
+
     # Analyze stages with failures
     failed_stages = []
     total_failed_tasks = 0
-    
+
     for stage in stages:
         if stage.num_failed_tasks and stage.num_failed_tasks >= failure_threshold:
             failed_stages.append({
@@ -1605,7 +1606,7 @@ def analyze_failed_tasks(
                 "status": stage.status
             })
             total_failed_tasks += stage.num_failed_tasks
-    
+
     # Analyze executor failures
     problematic_executors = []
     for executor in executors:
@@ -1619,14 +1620,14 @@ def analyze_failed_tasks(
                 "remove_reason": executor.remove_reason,
                 "is_active": executor.is_active
             })
-    
+
     # Sort by failure counts
     failed_stages.sort(key=lambda x: x["failed_tasks"], reverse=True)
     problematic_executors.sort(key=lambda x: x["failed_tasks"], reverse=True)
-    
+
     # Generate recommendations
     recommendations = []
-    
+
     if failed_stages:
         avg_failure_rate = statistics.mean([s["failure_rate"] for s in failed_stages])
         recommendations.append({
@@ -1635,14 +1636,14 @@ def analyze_failed_tasks(
             "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
             "suggestion": "Investigate task failure logs and consider increasing task retry settings"
         })
-    
+
     if problematic_executors:
         # Check for host-specific issues
         host_failures = {}
         for executor in problematic_executors:
             host = executor["host"]
             host_failures[host] = host_failures.get(host, 0) + executor["failed_tasks"]
-        
+
         max_host_failures = max(host_failures.values()) if host_failures else 0
         if max_host_failures > total_failed_tasks * 0.5:
             recommendations.append({
@@ -1651,7 +1652,7 @@ def analyze_failed_tasks(
                 "issue": "High concentration of failures on specific hosts",
                 "suggestion": "Check infrastructure health and consider blacklisting problematic nodes"
             })
-    
+
     return {
         "application_id": app_id,
         "analysis_type": "Failed Task Analysis",
@@ -1678,56 +1679,56 @@ def analyze_executor_utilization(
 ) -> Dict[str, Any]:
     """
     Analyze executor utilization patterns over time.
-    
+
     Tracks executor allocation and usage throughout the application lifecycle
     to identify periods of over/under-provisioning and optimization opportunities.
-    
+
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         interval_minutes: Time interval for analysis in minutes (default: 1)
-        
+
     Returns:
         Dictionary containing executor utilization analysis
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
-    
+
     app = client.get_application(app_id)
     executors = client.list_all_executors(app_id=app_id)
-    
+
     if not app.attempts:
         return {"error": "No application attempts found", "application_id": app_id}
-    
+
     start_time = app.attempts[0].start_time
     end_time = app.attempts[0].end_time
-    
+
     if not start_time or not end_time:
         return {"error": "Application start/end times not available", "application_id": app_id}
-    
+
     # Create time intervals
     duration = end_time - start_time
     total_minutes = int(duration.total_seconds() / 60)
     intervals = []
-    
+
     for minute in range(0, total_minutes + 1, interval_minutes):
         interval_time = start_time + timedelta(minutes=minute)
-        
+
         # Count active executors at this time
         active_executors = 0
         total_cores = 0
         total_memory_mb = 0
-        
+
         for executor in executors:
             add_time = executor.add_time
             remove_time = executor.remove_time or end_time
-            
+
             if add_time <= interval_time < remove_time:
                 active_executors += 1
                 total_cores += executor.total_cores
                 if executor.max_memory:
                     total_memory_mb += executor.max_memory / (1024 * 1024)
-        
+
         intervals.append({
             "minute": minute,
             "timestamp": interval_time.isoformat(),
@@ -1735,7 +1736,7 @@ def analyze_executor_utilization(
             "total_cores": total_cores,
             "total_memory_mb": int(total_memory_mb)
         })
-    
+
     # Merge consecutive intervals with same executor count
     merged_intervals = []
     if intervals:
@@ -1743,7 +1744,7 @@ def analyze_executor_utilization(
         current_count = intervals[0]["active_executors"]
         current_cores = intervals[0]["total_cores"]
         current_memory = intervals[0]["total_memory_mb"]
-        
+
         for i in range(1, len(intervals)):
             if intervals[i]["active_executors"] != current_count:
                 # End current interval
@@ -1754,13 +1755,13 @@ def analyze_executor_utilization(
                     "total_cores": current_cores,
                     "total_memory_mb": current_memory
                 })
-                
+
                 # Start new interval
                 current_start = intervals[i]["minute"]
                 current_count = intervals[i]["active_executors"]
                 current_cores = intervals[i]["total_cores"]
                 current_memory = intervals[i]["total_memory_mb"]
-        
+
         # Add final interval
         time_range = f"{current_start}" if current_start == intervals[-1]["minute"] else f"{current_start}-{intervals[-1]['minute']}"
         merged_intervals.append({
@@ -1769,17 +1770,17 @@ def analyze_executor_utilization(
             "total_cores": current_cores,
             "total_memory_mb": current_memory
         })
-    
+
     # Calculate utilization metrics
     executor_counts = [interval["active_executors"] for interval in intervals]
     peak_executors = max(executor_counts) if executor_counts else 0
     avg_executors = statistics.mean(executor_counts) if executor_counts else 0
     min_executors = min(executor_counts) if executor_counts else 0
-    
+
     # Calculate efficiency metrics
     total_executor_minutes = sum(interval["active_executors"] for interval in intervals)
     utilization_efficiency = (avg_executors / peak_executors * 100) if peak_executors > 0 else 0
-    
+
     recommendations = []
     if utilization_efficiency < 70:
         recommendations.append({
@@ -1788,15 +1789,15 @@ def analyze_executor_utilization(
             "issue": f"Low executor utilization efficiency ({utilization_efficiency:.1f}%)",
             "suggestion": "Consider optimizing dynamic allocation settings or job scheduling"
         })
-    
+
     if peak_executors > avg_executors * 2:
         recommendations.append({
-            "type": "resource_planning", 
+            "type": "resource_planning",
             "priority": "medium",
             "issue": "High variance in executor demand",
             "suggestion": "Review workload patterns and consider more aggressive scaling policies"
         })
-    
+
     return {
         "application_id": app_id,
         "analysis_type": "Executor Utilization Analysis",
@@ -1824,28 +1825,28 @@ def get_application_insights(
 ) -> Dict[str, Any]:
     """
     Get comprehensive SparkInsight-style analysis for an application.
-    
+
     Runs multiple analysis tools to provide a complete performance and
     optimization overview of a Spark application, similar to SparkInsight's
     comprehensive analysis approach.
-    
+
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         include_auto_scaling: Whether to include auto-scaling analysis (default: True)
-        include_shuffle_skew: Whether to include shuffle skew analysis (default: True) 
+        include_shuffle_skew: Whether to include shuffle skew analysis (default: True)
         include_failed_tasks: Whether to include failed task analysis (default: True)
         include_executor_utilization: Whether to include executor utilization analysis (default: True)
-        
+
     Returns:
         Dictionary containing comprehensive application insights
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
-    
+
     # Get basic application info
     app = client.get_application(app_id)
-    
+
     insights = {
         "application_id": app_id,
         "application_name": app.name,
@@ -1853,32 +1854,32 @@ def get_application_insights(
         "analysis_type": "Comprehensive SparkInsight Analysis",
         "analyses": {}
     }
-    
+
     # Run requested analyses
     if include_auto_scaling:
         try:
             insights["analyses"]["auto_scaling"] = analyze_auto_scaling(app_id, server)
         except Exception as e:
             insights["analyses"]["auto_scaling"] = {"error": str(e)}
-    
+
     if include_shuffle_skew:
         try:
             insights["analyses"]["shuffle_skew"] = analyze_shuffle_skew(app_id, server)
         except Exception as e:
             insights["analyses"]["shuffle_skew"] = {"error": str(e)}
-    
+
     if include_failed_tasks:
         try:
             insights["analyses"]["failed_tasks"] = analyze_failed_tasks(app_id, server)
         except Exception as e:
             insights["analyses"]["failed_tasks"] = {"error": str(e)}
-    
+
     if include_executor_utilization:
         try:
             insights["analyses"]["executor_utilization"] = analyze_executor_utilization(app_id, server)
         except Exception as e:
             insights["analyses"]["executor_utilization"] = {"error": str(e)}
-    
+
     # Aggregate recommendations from all analyses
     all_recommendations = []
     critical_issues = []
@@ -1914,12 +1915,13 @@ def get_application_insights(
                             critical_issues.append(rec_copy)
             else:
                 # Handle unexpected formats gracefully
-                print(f"Warning: Unexpected recommendations format from {analysis_name}: {type(recommendations)}")
-    
+# Note: Unexpected recommendations format will be skipped gracefully
+                pass
+
     # Sort recommendations by priority
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     all_recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
-    
+
     insights["summary"] = {
         "total_analyses_run": len([a for a in insights["analyses"].values() if "error" not in a]),
         "total_recommendations": len(all_recommendations),
@@ -1927,7 +1929,334 @@ def get_application_insights(
         "high_priority_recommendations": len([r for r in all_recommendations if r.get("priority") == "high"]),
         "overall_health": "critical" if critical_issues else "good" if len(all_recommendations) < 3 else "needs_attention"
     }
-    
+
     insights["recommendations"] = all_recommendations
-    
+
     return insights
+
+
+def _calculate_stage_similarity(stage1_name: str, stage2_name: str) -> float:
+    """
+    Calculate similarity between two stage names using SequenceMatcher.
+
+    Args:
+        stage1_name: Name of the first stage
+        stage2_name: Name of the second stage
+
+    Returns:
+        Float between 0 and 1 representing similarity
+    """
+    return SequenceMatcher(None, stage1_name.lower(), stage2_name.lower()).ratio()
+
+
+def _find_matching_stages(stages1: List[StageData], stages2: List[StageData], similarity_threshold: float = 0.6) -> List[Tuple[StageData, StageData, float]]:
+    """
+    Find matching stages between two applications based on stage name similarity.
+
+    Args:
+        stages1: Stages from first application
+        stages2: Stages from second application
+        similarity_threshold: Minimum similarity threshold for matching
+
+    Returns:
+        List of tuples containing (stage1, stage2, similarity_score)
+    """
+    matches = []
+    used_stages2 = set()
+
+    for stage1 in stages1:
+        best_match = None
+        best_similarity = 0
+
+        for i, stage2 in enumerate(stages2):
+            if i in used_stages2:
+                continue
+
+            similarity = _calculate_stage_similarity(stage1.name, stage2.name)
+
+            if similarity > best_similarity and similarity >= similarity_threshold:
+                best_similarity = similarity
+                best_match = (stage2, i)
+
+        if best_match:
+            matches.append((stage1, best_match[0], best_similarity))
+            used_stages2.add(best_match[1])
+
+    return matches
+
+
+def _calculate_stage_duration(stage: StageData) -> float:
+    """
+    Calculate stage duration in seconds.
+
+    Args:
+        stage: StageData object
+
+    Returns:
+        Duration in seconds, 0 if times are not available
+    """
+    if stage.completion_time and stage.submission_time:
+        return (stage.completion_time - stage.submission_time).total_seconds()
+    return 0
+
+
+def _get_stage_summary_with_fallback(
+    client, app_id: str, stage: StageData
+) -> Optional[Dict[str, Any]]:
+    """
+    Get stage task summary with graceful fallback.
+
+    Args:
+        client: Spark REST client
+        app_id: Application ID
+        stage: StageData object
+
+    Returns:
+        Stage summary dict or None if unavailable
+    """
+    try:
+        task_summary = client.get_stage_task_summary(
+            app_id=app_id,
+            stage_id=stage.stage_id,
+            attempt_id=stage.attempt_id or 0
+        )
+
+        return {
+            "quantiles": task_summary.quantiles,
+            "duration": task_summary.duration,
+            "executor_run_time": task_summary.executor_run_time,
+            "executor_cpu_time": task_summary.executor_cpu_time,
+            "jvm_gc_time": task_summary.jvm_gc_time,
+            "memory_bytes_spilled": task_summary.memory_bytes_spilled,
+            "disk_bytes_spilled": task_summary.disk_bytes_spilled,
+            "shuffle_read_bytes": task_summary.shuffle_read_metrics.read_bytes if task_summary.shuffle_read_metrics else None,
+            "shuffle_write_bytes": task_summary.shuffle_write_bytes,
+            "input_bytes": task_summary.input_metrics.bytes_read if task_summary.input_metrics else None,
+            "output_bytes": task_summary.output_metrics.bytes_written if task_summary.output_metrics else None
+        }
+    except Exception:
+        return None
+
+
+@mcp.tool()
+def compare_app_performance(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+    top_n: int = 3,
+    similarity_threshold: float = 0.6
+) -> Dict[str, Any]:
+    """
+    Compare performance between two Spark applications by analyzing stage time differences.
+
+    Identifies the top N stages with the most significant time differences between
+    two applications and provides detailed stage summaries and executor-level comparisons.
+    This helps identify performance bottlenecks and differences in execution patterns.
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        top_n: Number of top stage differences to return (default: 3)
+        similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
+
+    Returns:
+        Dictionary containing detailed performance comparison with top stage differences,
+        stage summaries, executor summaries, and performance recommendations
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    # Get application info
+    app1 = client.get_application(app_id1)
+    app2 = client.get_application(app_id2)
+
+    # Get stages from both applications
+    stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
+    stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
+
+    if not stages1 or not stages2:
+        return {
+            "error": "No stages found in one or both applications",
+            "applications": {
+                "app1": {"id": app_id1, "name": app1.name, "stage_count": len(stages1)},
+                "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)}
+            }
+        }
+
+    # Find matching stages between applications
+    stage_matches = _find_matching_stages(stages1, stages2, similarity_threshold)
+
+    if not stage_matches:
+        return {
+            "error": f"No matching stages found between applications (similarity threshold: {similarity_threshold})",
+            "applications": {
+                "app1": {"id": app_id1, "name": app1.name, "stage_count": len(stages1)},
+                "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)}
+            },
+            "suggestion": "Try lowering the similarity_threshold parameter or check that applications are performing similar operations"
+        }
+
+    # Calculate time differences for matching stages
+    stage_differences = []
+
+    for stage1, stage2, similarity in stage_matches:
+        duration1 = _calculate_stage_duration(stage1)
+        duration2 = _calculate_stage_duration(stage2)
+
+        if duration1 > 0 and duration2 > 0:
+            time_diff = abs(duration2 - duration1)
+            time_diff_percent = (time_diff / max(duration1, duration2)) * 100
+
+            stage_differences.append({
+                "stage1": stage1,
+                "stage2": stage2,
+                "similarity": similarity,
+                "duration1": duration1,
+                "duration2": duration2,
+                "time_difference_seconds": time_diff,
+                "time_difference_percent": time_diff_percent,
+                "slower_app": "app1" if duration1 > duration2 else "app2"
+            })
+
+    if not stage_differences:
+        return {
+            "error": "No stages with calculable durations found",
+            "applications": {
+                "app1": {"id": app_id1, "name": app1.name},
+                "app2": {"id": app_id2, "name": app2.name}
+            },
+            "matched_stages": len(stage_matches)
+        }
+
+    # Sort by time difference and get top N
+    top_differences = sorted(
+        stage_differences,
+        key=lambda x: x["time_difference_seconds"],
+        reverse=True
+    )[:top_n]
+
+    # Get detailed summaries for top different stages
+    detailed_comparisons = []
+
+    for diff in top_differences:
+        stage1, stage2 = diff["stage1"], diff["stage2"]
+
+        # Get stage summaries
+        stage1_summary = _get_stage_summary_with_fallback(client, app_id1, stage1)
+        stage2_summary = _get_stage_summary_with_fallback(client, app_id2, stage2)
+
+        # Extract executor summaries
+        executor_summary1 = stage1.executor_summary if hasattr(stage1, 'executor_summary') and stage1.executor_summary else {}
+        executor_summary2 = stage2.executor_summary if hasattr(stage2, 'executor_summary') and stage2.executor_summary else {}
+
+        stage_comparison = {
+            "stage_name": stage1.name,
+            "similarity_score": diff["similarity"],
+            "app1_stage": {
+                "stage_id": stage1.stage_id,
+                "attempt_id": stage1.attempt_id,
+                "status": stage1.status,
+                "duration_seconds": diff["duration1"],
+                "num_tasks": stage1.num_tasks,
+                "num_failed_tasks": stage1.num_failed_tasks,
+                "executor_run_time_ms": stage1.executor_run_time,
+                "memory_spilled_bytes": stage1.memory_bytes_spilled,
+                "disk_spilled_bytes": stage1.disk_bytes_spilled,
+                "shuffle_read_bytes": stage1.shuffle_read_bytes,
+                "shuffle_write_bytes": stage1.shuffle_write_bytes,
+                "input_bytes": stage1.input_bytes,
+                "output_bytes": stage1.output_bytes
+            },
+            "app2_stage": {
+                "stage_id": stage2.stage_id,
+                "attempt_id": stage2.attempt_id,
+                "status": stage2.status,
+                "duration_seconds": diff["duration2"],
+                "num_tasks": stage2.num_tasks,
+                "num_failed_tasks": stage2.num_failed_tasks,
+                "executor_run_time_ms": stage2.executor_run_time,
+                "memory_spilled_bytes": stage2.memory_bytes_spilled,
+                "disk_spilled_bytes": stage2.disk_bytes_spilled,
+                "shuffle_read_bytes": stage2.shuffle_read_bytes,
+                "shuffle_write_bytes": stage2.shuffle_write_bytes,
+                "input_bytes": stage2.input_bytes,
+                "output_bytes": stage2.output_bytes
+            },
+            "time_difference": {
+                "absolute_seconds": diff["time_difference_seconds"],
+                "percentage": diff["time_difference_percent"],
+                "slower_application": diff["slower_app"]
+            },
+            "stage_summary_comparison": {
+                "app1_summary": stage1_summary,
+                "app2_summary": stage2_summary
+            },
+            "executor_summary_comparison": {
+                "app1_executors": len(executor_summary1),
+                "app2_executors": len(executor_summary2),
+                "app1_executor_details": executor_summary1,
+                "app2_executor_details": executor_summary2
+            }
+        }
+
+        detailed_comparisons.append(stage_comparison)
+
+    # Generate summary statistics
+    total_time_diff = sum(d["time_difference_seconds"] for d in top_differences)
+    avg_time_diff = total_time_diff / len(top_differences) if top_differences else 0
+    max_time_diff = max(d["time_difference_seconds"] for d in top_differences) if top_differences else 0
+
+    # Generate recommendations
+    recommendations = []
+
+    # Check for stages with large time differences
+    large_diff_threshold = 60  # seconds
+    large_diff_stages = [d for d in top_differences if d["time_difference_seconds"] > large_diff_threshold]
+
+    if large_diff_stages:
+        recommendations.append({
+            "type": "performance",
+            "priority": "high",
+            "issue": f"Found {len(large_diff_stages)} stages with >60s time difference",
+            "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues"
+        })
+
+    # Check for memory spilling differences
+    spill_diff_stages = []
+    for comp in detailed_comparisons:
+        app1_spill = comp["app1_stage"].get("memory_spilled_bytes", 0) or 0
+        app2_spill = comp["app2_stage"].get("memory_spilled_bytes", 0) or 0
+
+        if abs(app1_spill - app2_spill) > 100 * 1024 * 1024:  # >100MB difference
+            spill_diff_stages.append(comp)
+
+    if spill_diff_stages:
+        recommendations.append({
+            "type": "memory",
+            "priority": "medium",
+            "issue": f"Found {len(spill_diff_stages)} stages with significant memory spill differences",
+            "suggestion": "Check memory allocation and partitioning strategies between applications"
+        })
+
+    return {
+        "applications": {
+            "app1": {"id": app_id1, "name": app1.name},
+            "app2": {"id": app_id2, "name": app2.name}
+        },
+        "analysis_parameters": {
+            "top_n": top_n,
+            "similarity_threshold": similarity_threshold,
+            "total_stages_app1": len(stages1),
+            "total_stages_app2": len(stages2),
+            "matched_stages": len(stage_matches)
+        },
+        "top_stage_differences": detailed_comparisons,
+        "summary": {
+            "total_time_difference_seconds": total_time_diff,
+            "average_time_difference_seconds": avg_time_diff,
+            "maximum_time_difference_seconds": max_time_diff,
+            "stages_analyzed": len(top_differences)
+        },
+        "recommendations": recommendations
+    }
