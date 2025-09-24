@@ -2114,6 +2114,134 @@ def _calculate_job_stats(jobs) -> Dict[str, Any]:
     }
 
 
+def _analyze_executor_performance_patterns(
+    executor_summary1: Dict[str, Any],
+    executor_summary2: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Analyze executor performance patterns and generate comparative insights.
+
+    Args:
+        executor_summary1: Executor summary from first application
+        executor_summary2: Executor summary from second application
+
+    Returns:
+        Dictionary containing executor performance analysis and insights
+    """
+    if not executor_summary1 and not executor_summary2:
+        return {"analysis": "No executor data available for comparison"}
+
+    def analyze_executor_group(executors: Dict[str, Any]) -> Dict[str, Any]:
+        if not executors:
+            return {
+                "total_executors": 0,
+                "avg_task_time": 0,
+                "avg_failed_tasks": 0,
+                "avg_succeeded_tasks": 0,
+                "total_memory_spilled": 0,
+                "total_shuffle_read": 0,
+                "total_shuffle_write": 0,
+                "executors_with_failures": 0,
+                "executors_with_spill": 0
+            }
+
+        task_times = []
+        failed_tasks = []
+        succeeded_tasks = []
+        memory_spilled = []
+        shuffle_reads = []
+        shuffle_writes = []
+
+        executors_with_failures = 0
+        executors_with_spill = 0
+
+        for executor_id, metrics in executors.items():
+            if metrics.task_time:
+                task_times.append(metrics.task_time)
+            if metrics.failed_tasks:
+                failed_tasks.append(metrics.failed_tasks)
+                if metrics.failed_tasks > 0:
+                    executors_with_failures += 1
+            if metrics.succeeded_tasks:
+                succeeded_tasks.append(metrics.succeeded_tasks)
+            if metrics.memory_bytes_spilled:
+                memory_spilled.append(metrics.memory_bytes_spilled)
+                if metrics.memory_bytes_spilled > 0:
+                    executors_with_spill += 1
+            if metrics.shuffle_read:
+                shuffle_reads.append(metrics.shuffle_read)
+            if metrics.shuffle_write:
+                shuffle_writes.append(metrics.shuffle_write)
+
+        return {
+            "total_executors": len(executors),
+            "avg_task_time": statistics.mean(task_times) if task_times else 0,
+            "avg_failed_tasks": statistics.mean(failed_tasks) if failed_tasks else 0,
+            "avg_succeeded_tasks": statistics.mean(succeeded_tasks) if succeeded_tasks else 0,
+            "total_memory_spilled": sum(memory_spilled),
+            "total_shuffle_read": sum(shuffle_reads),
+            "total_shuffle_write": sum(shuffle_writes),
+            "executors_with_failures": executors_with_failures,
+            "executors_with_spill": executors_with_spill,
+            "task_efficiency": statistics.mean([s / (s + f) for s, f in zip(succeeded_tasks, failed_tasks) if (s + f) > 0]) if succeeded_tasks and failed_tasks else 1.0
+        }
+
+    app1_analysis = analyze_executor_group(executor_summary1)
+    app2_analysis = analyze_executor_group(executor_summary2)
+
+    # Calculate comparison metrics
+    comparison_analysis = {}
+
+    if app1_analysis["total_executors"] > 0 and app2_analysis["total_executors"] > 0:
+        comparison_analysis = {
+            "executor_count_ratio": app2_analysis["total_executors"] / app1_analysis["total_executors"],
+            "task_time_ratio": app2_analysis["avg_task_time"] / max(app1_analysis["avg_task_time"], 1),
+            "failure_rate_ratio": app2_analysis["avg_failed_tasks"] / max(app1_analysis["avg_failed_tasks"], 1),
+            "memory_spill_ratio": app2_analysis["total_memory_spilled"] / max(app1_analysis["total_memory_spilled"], 1),
+            "shuffle_efficiency_comparison": {
+                "read_ratio": app2_analysis["total_shuffle_read"] / max(app1_analysis["total_shuffle_read"], 1),
+                "write_ratio": app2_analysis["total_shuffle_write"] / max(app1_analysis["total_shuffle_write"], 1)
+            },
+            "reliability_comparison": {
+                "app1_failure_percentage": (app1_analysis["executors_with_failures"] / max(app1_analysis["total_executors"], 1)) * 100,
+                "app2_failure_percentage": (app2_analysis["executors_with_failures"] / max(app2_analysis["total_executors"], 1)) * 100
+            }
+        }
+
+    # Generate insights and recommendations
+    insights = []
+    recommendations = []
+
+    if comparison_analysis:
+        # Task efficiency insights
+        if comparison_analysis["task_time_ratio"] > 1.5:
+            insights.append("App2 executors are significantly slower in task execution")
+            recommendations.append("Investigate executor resource allocation and task distribution in App2")
+        elif comparison_analysis["task_time_ratio"] < 0.67:
+            insights.append("App2 executors are significantly faster in task execution")
+
+        # Memory efficiency insights
+        if comparison_analysis["memory_spill_ratio"] > 2.0:
+            insights.append(f"App2 has {comparison_analysis['memory_spill_ratio']:.1f}x more memory spill per executor")
+            recommendations.append("Consider increasing executor memory allocation in App2")
+
+        # Reliability insights
+        app1_failure_pct = comparison_analysis["reliability_comparison"]["app1_failure_percentage"]
+        app2_failure_pct = comparison_analysis["reliability_comparison"]["app2_failure_percentage"]
+
+        if app2_failure_pct > app1_failure_pct * 2:
+            insights.append(f"App2 has {app2_failure_pct:.1f}% executors with failures vs {app1_failure_pct:.1f}% in App1")
+            recommendations.append("Investigate infrastructure issues affecting App2 executors")
+
+    return {
+        "app1_executor_metrics": app1_analysis,
+        "app2_executor_metrics": app2_analysis,
+        "comparative_analysis": comparison_analysis,
+        "insights": insights,
+        "recommendations": recommendations
+    }
+
+
 def _get_stage_summary_with_fallback(
     client, app_id: str, stage: StageData
 ) -> Optional[Dict[str, Any]]:
@@ -2390,12 +2518,9 @@ def compare_app_performance(
                 "app1_summary": stage1_summary,
                 "app2_summary": stage2_summary
             },
-            "executor_summary_comparison": {
-                "app1_executors": len(executor_summary1),
-                "app2_executors": len(executor_summary2),
-                "app1_executor_details": executor_summary1,
-                "app2_executor_details": executor_summary2
-            }
+            "executor_analysis": _analyze_executor_performance_patterns(
+                executor_summary1, executor_summary2
+            )
         }
 
         detailed_comparisons.append(stage_comparison)
