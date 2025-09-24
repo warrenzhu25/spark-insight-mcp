@@ -134,7 +134,7 @@ mcp:
 
 > **Note**: These tools are subject to change as we scale and improve the performance of the MCP server.
 
-The MCP server provides **22 specialized tools** organized by analysis patterns. LLMs can intelligently select and combine these tools based on user queries:
+The MCP server provides **22 specialized tools** and **16 intelligent prompts** organized by analysis patterns. LLMs can intelligently select and combine these tools and prompts based on user queries:
 
 ### 📊 Application Information
 *Basic application metadata and overview*
@@ -204,18 +204,87 @@ The MCP server provides **22 specialized tools** organized by analysis patterns.
 | `analyze_executor_utilization` | 📈 Track executor utilization over time to identify over/under-provisioning and optimization opportunities |
 | `get_application_insights` | 🧠 **Comprehensive SparkInsight analysis** - Runs all analyzers to provide complete performance overview and recommendations |
 
-### 🤖 How LLMs Use These Tools
+### 💬 Intelligent Prompts
+*Reusable templates that guide AI agents in structured Spark analysis*
+
+The MCP server provides **16 intelligent prompts** organized by analysis type. These prompts help AI agents ask better questions and generate more structured, comprehensive analyses:
+
+#### 📊 Performance Analysis Prompts
+| 💬 Prompt | 📝 Description |
+|-----------|----------------|
+| `analyze_slow_application` | 🐌 Generate structured analysis framework for slow-running Spark applications with baseline comparison |
+| `investigate_stage_bottlenecks` | ⚡ Create detailed prompt for investigating stage-level performance bottlenecks and task-level issues |
+| `diagnose_resource_issues` | 🔍 Generate systematic resource utilization diagnosis across memory, CPU, disk, and network dimensions |
+| `compare_job_performance` | 📈 Structure comprehensive performance comparison between two Spark applications |
+
+#### 🛠️ Troubleshooting & Debugging Prompts
+| 💬 Prompt | 📝 Description |
+|-----------|----------------|
+| `investigate_failures` | 🚨 Systematic investigation framework for application failures, task errors, and reliability issues |
+| `examine_memory_issues` | 🧠 Detailed memory problem diagnosis including heap, off-heap, GC pressure, and spill analysis |
+| `diagnose_shuffle_problems` | 🔄 Comprehensive shuffle operation diagnosis focusing on skew, performance, and data movement issues |
+| `identify_configuration_issues` | ⚙️ Systematic configuration assessment and optimization opportunity identification |
+
+#### 🚀 Optimization Prompts
+| 💬 Prompt | 📝 Description |
+|-----------|----------------|
+| `suggest_autoscaling_config` | 📊 Generate auto-scaling configuration recommendations with cost-performance optimization |
+| `optimize_resource_allocation` | 💡 Comprehensive resource allocation optimization across executors, memory, and CPU dimensions |
+| `improve_query_performance` | 🏃 SQL query and data processing performance optimization with execution plan analysis |
+| `reduce_data_skew` | ⚖️ Comprehensive data skew reduction strategies including preprocessing and runtime solutions |
+
+#### 📋 Reporting & Summary Prompts
+| 💬 Prompt | 📝 Description |
+|-----------|----------------|
+| `generate_performance_report` | 📄 Create comprehensive performance reports tailored for different audiences (executive/technical) |
+| `create_executive_summary` | 👔 Generate high-level executive summaries focused on business impact and strategic recommendations |
+| `summarize_trends` | 📈 Analyze trends and patterns across multiple Spark applications over time |
+| `benchmark_comparison` | 🎯 Compare application performance against internal benchmarks, industry standards, or historical data |
+
+### 🤖 How LLMs Use These Tools & Prompts
 
 **Query Pattern Examples:**
+
+**Basic Analysis:**
 - *"Why is my job slow?"* → `get_job_bottlenecks` + `list_slowest_stages` + `get_executor_summary`
 - *"Compare today vs yesterday"* → `compare_job_performance` + `compare_job_environments`
 - *"What's wrong with stage 5?"* → `get_stage` + `get_stage_task_summary`
 - *"Show me resource usage over time"* → `get_resource_usage_timeline` + `get_executor_summary`
 - *"Find my slowest SQL queries"* → `list_slowest_sql_queries` + `compare_sql_execution_plans`
+
+**Comprehensive Analysis with Prompts:**
+- *"Thoroughly analyze my slow application"* → `analyze_slow_application` prompt → structured analysis using multiple tools
+- *"Generate a performance report for executives"* → `generate_performance_report` prompt → comprehensive business-focused analysis
+- *"Help me optimize auto-scaling configuration"* → `suggest_autoscaling_config` prompt → detailed optimization strategy
+- *"Investigate memory issues systematically"* → `examine_memory_issues` prompt → structured memory diagnosis
+- *"Create executive summary of app performance"* → `create_executive_summary` prompt → high-level business impact analysis
+
+**Advanced Analysis:**
 - *"Analyze my app performance with insights"* → `get_application_insights` (comprehensive SparkInsight analysis)
-- *"Help me optimize auto-scaling"* → `analyze_auto_scaling` + `analyze_executor_utilization`
-- *"Why are my tasks failing?"* → `analyze_failed_tasks` + `get_executor_summary`
-- *"Check for data skew issues"* → `analyze_shuffle_skew` + `get_stage_task_summary`
+- *"Why are my tasks failing?"* → `investigate_failures` prompt → systematic failure investigation
+- *"Check for data skew issues"* → `reduce_data_skew` prompt → comprehensive skew mitigation strategy
+- *"Compare multiple applications over time"* → `summarize_trends` prompt → trend analysis across apps
+
+### 💡 How Prompts Enhance AI Analysis
+
+**Intelligent Prompts provide:**
+- **Structured Frameworks**: Guide AI agents through systematic analysis approaches
+- **Domain Expertise**: Encode Spark performance knowledge into reusable templates
+- **Tool Recommendations**: Suggest optimal MCP tool sequences for different scenarios
+- **Consistent Analysis**: Ensure comprehensive coverage of key performance areas
+- **Tailored Output**: Generate analysis appropriate for different audiences (technical, executive)
+
+**Example: Using the `analyze_slow_application` prompt:**
+```
+User: "My Spark job app-12345 is running slower than expected"
+AI Agent: Uses analyze_slow_application("app-12345") prompt
+Result: Structured investigation covering:
+  • Application performance baseline comparison
+  • Bottleneck identification using get_job_bottlenecks
+  • Resource utilization analysis via analyze_executor_utilization
+  • Data skew detection with analyze_shuffle_skew
+  • Configuration review and optimization recommendations
+```
 
 ## 🧠 SparkInsight Integration
 

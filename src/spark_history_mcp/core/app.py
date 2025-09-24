@@ -74,3 +74,6 @@ mcp = FastMCP("Spark Events", lifespan=app_lifespan)
 
 # Import tools to register them with MCP
 from spark_history_mcp.tools import tools  # noqa: E402,F401
+
+# Import prompts to register them with MCP
+from spark_history_mcp import prompts  # noqa: E402,F401
