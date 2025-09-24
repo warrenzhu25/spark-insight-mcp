@@ -326,7 +326,16 @@ class SparkRestClient:
             params["taskStatus"] = [s.value for s in task_status]
 
         data = self._get(f"applications/{app_id}/stages", params)
-        return self._parse_model_list(data, StageData)
+        try:
+            return self._parse_model_list(data, StageData)
+        except Exception as e:
+            if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e) and with_summaries:
+                # Fallback: retry without summaries due to known validation issue
+                params["withSummaries"] = "false"
+                data = self._get(f"applications/{app_id}/stages", params)
+                return self._parse_model_list(data, StageData)
+            else:
+                raise e
 
     def list_stage_attempts(
         self,

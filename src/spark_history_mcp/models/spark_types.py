@@ -751,12 +751,12 @@ class ExecutorMetricsDistributions(BaseModel):
 
 
 class ExecutorPeakMetricsDistributions(BaseModel):
-    quantiles: Sequence[float]
+    quantiles: Optional[Sequence[float]] = Field(default=None)
     executor_metrics: Optional[Sequence[ExecutorMetrics]] = Field(
         None, alias="executorMetrics"
     )
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 
 class ShuffleReadMetricDistributions(BaseModel):

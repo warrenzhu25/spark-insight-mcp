@@ -1391,8 +1391,16 @@ def analyze_shuffle_skew(
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
-    
-    stages = client.list_stages(app_id=app_id, with_summaries=True)
+
+    # Try to get stages with summaries, fallback to basic stages if validation fails
+    try:
+        stages = client.list_stages(app_id=app_id, with_summaries=True)
+    except Exception as e:
+        if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
+            # Known issue with executor metrics distributions - use stages without summaries
+            stages = client.list_stages(app_id=app_id, with_summaries=False)
+        else:
+            raise e
     shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
     
     skewed_stages = []
