@@ -596,6 +596,10 @@ def compare_job_performance(
     """
     Compare performance metrics between two Spark jobs.
 
+    **DEPRECATED**: This function is deprecated in favor of `compare_app_performance` which provides
+    both high-level aggregated analysis and detailed stage-by-stage comparison in a single comprehensive tool.
+    Please use `compare_app_performance` for new implementations.
+
     Analyzes execution times, resource usage, task distribution, and other
     performance indicators to identify differences between jobs.
 
@@ -2000,6 +2004,116 @@ def _calculate_stage_duration(stage: StageData) -> float:
     return 0
 
 
+def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, Any]:
+    """
+    Calculate aggregated metrics across all stages.
+
+    Args:
+        stages: List of StageData objects
+
+    Returns:
+        Dictionary containing aggregated stage metrics
+    """
+    if not stages:
+        return {
+            "total_stages": 0,
+            "completed_stages": 0,
+            "failed_stages": 0,
+            "total_stage_duration": 0,
+            "total_executor_run_time": 0,
+            "total_memory_spilled": 0,
+            "total_disk_spilled": 0,
+            "total_shuffle_read_bytes": 0,
+            "total_shuffle_write_bytes": 0,
+            "total_input_bytes": 0,
+            "total_output_bytes": 0,
+            "total_tasks": 0,
+            "total_failed_tasks": 0
+        }
+
+    total_stage_duration = 0
+    completed_stages = 0
+    failed_stages = 0
+
+    # Aggregate metrics
+    metrics = {
+        "total_stages": len(stages),
+        "total_executor_run_time": 0,
+        "total_memory_spilled": 0,
+        "total_disk_spilled": 0,
+        "total_shuffle_read_bytes": 0,
+        "total_shuffle_write_bytes": 0,
+        "total_input_bytes": 0,
+        "total_output_bytes": 0,
+        "total_tasks": 0,
+        "total_failed_tasks": 0
+    }
+
+    for stage in stages:
+        # Calculate stage duration
+        if stage.completion_time and stage.submission_time:
+            stage_duration = (stage.completion_time - stage.submission_time).total_seconds()
+            total_stage_duration += stage_duration
+            completed_stages += 1
+
+        # Check if stage failed
+        if stage.status and stage.status.upper() == "FAILED":
+            failed_stages += 1
+
+        # Aggregate numeric metrics (handle None values)
+        metrics["total_executor_run_time"] += stage.executor_run_time or 0
+        metrics["total_memory_spilled"] += stage.memory_bytes_spilled or 0
+        metrics["total_disk_spilled"] += stage.disk_bytes_spilled or 0
+        metrics["total_shuffle_read_bytes"] += stage.shuffle_read_bytes or 0
+        metrics["total_shuffle_write_bytes"] += stage.shuffle_write_bytes or 0
+        metrics["total_input_bytes"] += stage.input_bytes or 0
+        metrics["total_output_bytes"] += stage.output_bytes or 0
+        metrics["total_tasks"] += stage.num_tasks or 0
+        metrics["total_failed_tasks"] += stage.num_failed_tasks or 0
+
+    metrics.update({
+        "total_stage_duration": total_stage_duration,
+        "completed_stages": completed_stages,
+        "failed_stages": failed_stages,
+        "avg_stage_duration": total_stage_duration / max(completed_stages, 1)
+    })
+
+    return metrics
+
+
+def _calculate_job_stats(jobs) -> Dict[str, Any]:
+    """
+    Calculate job duration statistics.
+    Extracted from compare_job_performance for reuse.
+
+    Args:
+        jobs: List of job data
+
+    Returns:
+        Dictionary containing job statistics
+    """
+    if not jobs:
+        return {"count": 0, "total_duration": 0, "avg_duration": 0}
+
+    completed_jobs = [j for j in jobs if j.completion_time and j.submission_time]
+    if not completed_jobs:
+        return {"count": len(jobs), "total_duration": 0, "avg_duration": 0}
+
+    durations = [
+        (j.completion_time - j.submission_time).total_seconds()
+        for j in completed_jobs
+    ]
+
+    return {
+        "count": len(jobs),
+        "completed_count": len(completed_jobs),
+        "total_duration": sum(durations),
+        "avg_duration": sum(durations) / len(durations),
+        "min_duration": min(durations),
+        "max_duration": max(durations),
+    }
+
+
 def _get_stage_summary_with_fallback(
     client, app_id: str, stage: StageData
 ) -> Optional[Dict[str, Any]]:
@@ -2047,22 +2161,27 @@ def compare_app_performance(
     similarity_threshold: float = 0.6
 ) -> Dict[str, Any]:
     """
-    Compare performance between two Spark applications by analyzing stage time differences.
+    Comprehensive performance comparison between two Spark applications.
 
-    Identifies the top N stages with the most significant time differences between
-    two applications and provides detailed stage summaries and executor-level comparisons.
-    This helps identify performance bottlenecks and differences in execution patterns.
+    Provides both high-level aggregated analysis and detailed stage-by-stage comparison.
+    First analyzes overall application metrics (resources, jobs, executors, aggregated stages),
+    then identifies the top N stages with the most significant time differences for deep-dive analysis.
+
+    This merged analysis combines the capabilities of compare_job_performance and stage-level
+    comparison to provide comprehensive performance insights and optimization recommendations.
 
     Args:
         app_id1: First Spark application ID
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
-        top_n: Number of top stage differences to return (default: 3)
+        top_n: Number of top stage differences to return for detailed analysis (default: 3)
         similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
 
     Returns:
-        Dictionary containing detailed performance comparison with top stage differences,
-        stage summaries, executor summaries, and performance recommendations
+        Dictionary containing:
+        - aggregated_overview: Application-level resource, job, executor, and stage metrics
+        - stage_deep_dive: Top N stages with most time difference and detailed comparisons
+        - recommendations: Enhanced recommendations covering both application and stage levels
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -2083,6 +2202,85 @@ def compare_app_performance(
                 "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)}
             }
         }
+
+    # PHASE 1: AGGREGATED APPLICATION OVERVIEW
+    # Get executor summaries (from compare_job_performance logic)
+    exec_summary1 = get_executor_summary(app_id1, server)
+    exec_summary2 = get_executor_summary(app_id2, server)
+
+    # Get job data (from compare_job_performance logic)
+    jobs1 = client.list_jobs(app_id=app_id1)
+    jobs2 = client.list_jobs(app_id=app_id2)
+
+    # Calculate job statistics
+    job_stats1 = _calculate_job_stats(jobs1)
+    job_stats2 = _calculate_job_stats(jobs2)
+
+    # Calculate aggregated stage metrics
+    stage_metrics1 = _calculate_aggregated_stage_metrics(stages1)
+    stage_metrics2 = _calculate_aggregated_stage_metrics(stages2)
+
+    # Create aggregated overview section
+    aggregated_overview = {
+        "resource_allocation": {
+            "app1": {
+                "cores_granted": app1.cores_granted,
+                "max_cores": app1.max_cores,
+                "cores_per_executor": app1.cores_per_executor,
+                "memory_per_executor_mb": app1.memory_per_executor_mb,
+            },
+            "app2": {
+                "cores_granted": app2.cores_granted,
+                "max_cores": app2.max_cores,
+                "cores_per_executor": app2.cores_per_executor,
+                "memory_per_executor_mb": app2.memory_per_executor_mb,
+            },
+        },
+        "executor_metrics": {
+            "app1": exec_summary1,
+            "app2": exec_summary2,
+            "comparison": {
+                "executor_count_ratio": exec_summary2["total_executors"]
+                / max(exec_summary1["total_executors"], 1),
+                "memory_usage_ratio": exec_summary2["memory_used"]
+                / max(exec_summary1["memory_used"], 1),
+                "task_completion_ratio": exec_summary2["completed_tasks"]
+                / max(exec_summary1["completed_tasks"], 1),
+                "gc_time_ratio": exec_summary2["total_gc_time"]
+                / max(exec_summary1["total_gc_time"], 1),
+            },
+        },
+        "job_performance": {
+            "app1": job_stats1,
+            "app2": job_stats2,
+            "comparison": {
+                "job_count_ratio": job_stats2["count"] / max(job_stats1["count"], 1),
+                "avg_duration_ratio": job_stats2["avg_duration"]
+                / max(job_stats1["avg_duration"], 1)
+                if job_stats1["avg_duration"] > 0
+                else 0,
+                "total_duration_ratio": job_stats2["total_duration"]
+                / max(job_stats1["total_duration"], 1)
+                if job_stats1["total_duration"] > 0
+                else 0,
+            },
+        },
+        "stage_metrics": {
+            "app1": stage_metrics1,
+            "app2": stage_metrics2,
+            "comparison": {
+                "stage_count_ratio": stage_metrics2["total_stages"] / max(stage_metrics1["total_stages"], 1),
+                "duration_ratio": stage_metrics2["total_stage_duration"] / max(stage_metrics1["total_stage_duration"], 1),
+                "executor_runtime_ratio": stage_metrics2["total_executor_run_time"] / max(stage_metrics1["total_executor_run_time"], 1),
+                "memory_spill_ratio": stage_metrics2["total_memory_spilled"] / max(stage_metrics1["total_memory_spilled"], 1),
+                "shuffle_read_ratio": stage_metrics2["total_shuffle_read_bytes"] / max(stage_metrics1["total_shuffle_read_bytes"], 1),
+                "shuffle_write_ratio": stage_metrics2["total_shuffle_write_bytes"] / max(stage_metrics1["total_shuffle_write_bytes"], 1),
+                "input_ratio": stage_metrics2["total_input_bytes"] / max(stage_metrics1["total_input_bytes"], 1),
+                "output_ratio": stage_metrics2["total_output_bytes"] / max(stage_metrics1["total_output_bytes"], 1),
+                "task_failure_ratio": stage_metrics2["total_failed_tasks"] / max(stage_metrics1["total_failed_tasks"], 1) if stage_metrics1["total_failed_tasks"] > 0 else 0,
+            }
+        }
+    }
 
     # Find matching stages between applications
     stage_matches = _find_matching_stages(stages1, stages2, similarity_threshold)
@@ -2207,22 +2405,86 @@ def compare_app_performance(
     avg_time_diff = total_time_diff / len(top_differences) if top_differences else 0
     max_time_diff = max(d["time_difference_seconds"] for d in top_differences) if top_differences else 0
 
-    # Generate recommendations
+    # Enhanced recommendations combining both application and stage-level insights
     recommendations = []
 
+    # APPLICATION-LEVEL RECOMMENDATIONS
+    # Resource allocation differences
+    if app1.cores_granted and app2.cores_granted:
+        core_ratio = app2.cores_granted / app1.cores_granted
+        if core_ratio > 1.5 or core_ratio < 0.67:  # >50% difference
+            slower_app = "app1" if core_ratio > 1.5 else "app2"
+            faster_app = "app2" if core_ratio > 1.5 else "app1"
+            recommendations.append({
+                "type": "resource_allocation",
+                "priority": "medium",
+                "issue": f"Significant core allocation difference (ratio: {core_ratio:.2f})",
+                "suggestion": f"Consider equalizing core allocation - {slower_app} has fewer cores than {faster_app}"
+            })
+
+    # Memory allocation differences
+    if app1.memory_per_executor_mb and app2.memory_per_executor_mb:
+        memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
+        if memory_ratio > 1.5 or memory_ratio < 0.67:  # >50% difference
+            recommendations.append({
+                "type": "resource_allocation",
+                "priority": "medium",
+                "issue": f"Significant memory per executor difference (ratio: {memory_ratio:.2f})",
+                "suggestion": "Review memory allocation settings between applications"
+            })
+
+    # Executor efficiency comparison
+    exec_comparison = aggregated_overview["executor_metrics"]["comparison"]
+    if exec_comparison["gc_time_ratio"] > 2.0:
+        recommendations.append({
+            "type": "gc_performance",
+            "priority": "high",
+            "issue": f"App2 has {exec_comparison['gc_time_ratio']:.1f}x more GC time than App1",
+            "suggestion": "Investigate memory pressure and GC settings in App2"
+        })
+
+    # Job performance differences
+    job_comparison = aggregated_overview["job_performance"]["comparison"]
+    if job_comparison["avg_duration_ratio"] > 2.0:
+        recommendations.append({
+            "type": "job_performance",
+            "priority": "high",
+            "issue": f"App2 jobs are {job_comparison['avg_duration_ratio']:.1f}x slower on average",
+            "suggestion": "Review job execution patterns and resource utilization in App2"
+        })
+
+    # Stage-level aggregated insights
+    stage_comparison = aggregated_overview["stage_metrics"]["comparison"]
+    if stage_comparison["memory_spill_ratio"] > 2.0:
+        recommendations.append({
+            "type": "memory_efficiency",
+            "priority": "high",
+            "issue": f"App2 has {stage_comparison['memory_spill_ratio']:.1f}x more memory spill than App1",
+            "suggestion": "Consider increasing executor memory or optimizing data structures in App2"
+        })
+
+    if stage_comparison["task_failure_ratio"] > 1.5:
+        recommendations.append({
+            "type": "reliability",
+            "priority": "high",
+            "issue": f"App2 has {stage_comparison['task_failure_ratio']:.1f}x more task failures",
+            "suggestion": "Investigate task failure causes - check logs for OOM errors, network issues, or data corruption"
+        })
+
+    # STAGE-LEVEL RECOMMENDATIONS (existing logic)
     # Check for stages with large time differences
     large_diff_threshold = 60  # seconds
     large_diff_stages = [d for d in top_differences if d["time_difference_seconds"] > large_diff_threshold]
 
     if large_diff_stages:
         recommendations.append({
-            "type": "performance",
+            "type": "stage_performance",
             "priority": "high",
             "issue": f"Found {len(large_diff_stages)} stages with >60s time difference",
-            "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues"
+            "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues in specific stages"
         })
 
-    # Check for memory spilling differences
+    # Check for memory spilling differences at stage level
     spill_diff_stages = []
     for comp in detailed_comparisons:
         app1_spill = comp["app1_stage"].get("memory_spilled_bytes", 0) or 0
@@ -2233,30 +2495,37 @@ def compare_app_performance(
 
     if spill_diff_stages:
         recommendations.append({
-            "type": "memory",
+            "type": "stage_memory",
             "priority": "medium",
             "issue": f"Found {len(spill_diff_stages)} stages with significant memory spill differences",
-            "suggestion": "Check memory allocation and partitioning strategies between applications"
+            "suggestion": "Check memory allocation and partitioning strategies for specific stages"
         })
+
+    # Sort recommendations by priority
+    priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
 
     return {
         "applications": {
             "app1": {"id": app_id1, "name": app1.name},
             "app2": {"id": app_id2, "name": app2.name}
         },
-        "analysis_parameters": {
-            "top_n": top_n,
-            "similarity_threshold": similarity_threshold,
-            "total_stages_app1": len(stages1),
-            "total_stages_app2": len(stages2),
-            "matched_stages": len(stage_matches)
-        },
-        "top_stage_differences": detailed_comparisons,
-        "summary": {
-            "total_time_difference_seconds": total_time_diff,
-            "average_time_difference_seconds": avg_time_diff,
-            "maximum_time_difference_seconds": max_time_diff,
-            "stages_analyzed": len(top_differences)
+        "aggregated_overview": aggregated_overview,
+        "stage_deep_dive": {
+            "analysis_parameters": {
+                "top_n": top_n,
+                "similarity_threshold": similarity_threshold,
+                "total_stages_app1": len(stages1),
+                "total_stages_app2": len(stages2),
+                "matched_stages": len(stage_matches)
+            },
+            "top_stage_differences": detailed_comparisons,
+            "stage_summary": {
+                "total_time_difference_seconds": total_time_diff,
+                "average_time_difference_seconds": avg_time_diff,
+                "maximum_time_difference_seconds": max_time_diff,
+                "stages_analyzed": len(top_differences)
+            }
         },
         "recommendations": recommendations
     }

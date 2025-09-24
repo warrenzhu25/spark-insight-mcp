@@ -9,7 +9,7 @@ from typing import Optional
 from spark_history_mcp.core.app import mcp
 
 
-@mcp.prompt
+@mcp.prompt()
 def suggest_autoscaling_config(
     app_id: str,
     target_duration_minutes: int = 120,
@@ -134,7 +134,7 @@ spark.dynamicAllocation.executorAllocationRatio=[calculated value]
 {'- Budget constraint integration with scaling policies' if cost_optimization else ''}"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def optimize_resource_allocation(
     app_id: str,
     optimization_goal: str = "performance",
@@ -288,7 +288,7 @@ spark.dynamicAllocation.*=[optimized parameters]
 - Application dependency and compatibility issues"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def improve_query_performance(
     app_id: str,
     focus_area: str = "comprehensive",
@@ -451,7 +451,7 @@ spark.sql.adaptive.advisoryPartitionSizeInBytes=[optimized value]
 - Alert thresholds for performance regression detection"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def reduce_data_skew(
     app_id: str,
     skew_type: str = "comprehensive",

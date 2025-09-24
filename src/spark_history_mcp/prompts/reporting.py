@@ -9,7 +9,7 @@ from typing import Optional
 from spark_history_mcp.core.app import mcp
 
 
-@mcp.prompt
+@mcp.prompt()
 def generate_performance_report(
     app_id: str,
     report_type: str = "comprehensive",
@@ -159,7 +159,7 @@ list_slowest_sql_queries("{app_id}"{server_param}, top_n=3)
 - Include contact information for follow-up technical discussions"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def create_executive_summary(
     app_id: str,
     focus_metric: str = "cost_efficiency",
@@ -310,7 +310,7 @@ Optimization Potential: [XX%] improvement possible ([$ savings])
 - Risk tolerance assessment for optimization strategies"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def summarize_trends(
     app_ids: list[str],
     trend_period: str = "weekly",
@@ -467,7 +467,7 @@ Key Pattern: [Most significant pattern identified]
 - Optimization opportunity timeline and impact projections"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def benchmark_comparison(
     app_id: str,
     benchmark_type: str = "internal",

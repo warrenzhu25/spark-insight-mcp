@@ -9,7 +9,7 @@ from typing import Optional
 from spark_history_mcp.core.app import mcp
 
 
-@mcp.prompt
+@mcp.prompt()
 def analyze_slow_application(
     app_id: str,
     baseline_duration_minutes: int = 60,
@@ -78,7 +78,7 @@ get_environment("{app_id}"{server_param})
 Focus on providing **concrete, measurable recommendations** that can directly improve application performance."""
 
 
-@mcp.prompt
+@mcp.prompt()
 def investigate_stage_bottlenecks(
     app_id: str,
     stage_id: Optional[int] = None,
@@ -152,7 +152,7 @@ get_executor_summary("{app_id}"{server_param})
 - Data partitioning and skew mitigation strategies"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def diagnose_resource_issues(
     app_id: str,
     focus_area: str = "all",
@@ -251,7 +251,7 @@ analyze_auto_scaling("{app_id}"{server_param})
 - Cost optimization opportunities based on resource analysis"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def compare_job_performance(
     app_id1: str,
     app_id2: str,

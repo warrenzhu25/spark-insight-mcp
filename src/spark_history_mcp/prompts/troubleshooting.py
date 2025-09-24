@@ -9,7 +9,7 @@ from typing import Optional
 from spark_history_mcp.core.app import mcp
 
 
-@mcp.prompt
+@mcp.prompt()
 def investigate_failures(
     app_id: str,
     failure_type: str = "all",
@@ -123,7 +123,7 @@ Focus on providing specific fixes such as:
 - Monitoring setup for early failure detection"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def examine_memory_issues(
     app_id: str,
     memory_focus: str = "comprehensive",
@@ -236,7 +236,7 @@ get_application_insights("{app_id}"{server_param})
 - Partition size recommendations to reduce memory pressure"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def diagnose_shuffle_problems(
     app_id: str,
     shuffle_aspect: str = "comprehensive",
@@ -351,7 +351,7 @@ get_application_insights("{app_id}"{server_param})
 - Alternative algorithm recommendations to avoid problematic shuffles"""
 
 
-@mcp.prompt
+@mcp.prompt()
 def identify_configuration_issues(
     app_id: str,
     config_category: str = "all",
