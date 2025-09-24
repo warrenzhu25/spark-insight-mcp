@@ -1341,27 +1341,59 @@ def analyze_auto_scaling(
     current_initial = spark_props.get("spark.dynamicAllocation.initialExecutors", "Not set")
     current_max = spark_props.get("spark.dynamicAllocation.maxExecutors", "Not set")
     
+    # Generate recommendations as a list to match other analysis functions
+    recommendations = []
+
+    if not current_initial.isdigit() or recommended_initial != int(current_initial):
+        recommendations.append({
+            "type": "auto_scaling",
+            "priority": "medium",
+            "issue": f"Initial executors could be optimized (current: {current_initial})",
+            "suggestion": f"Set spark.dynamicAllocation.initialExecutors to {recommended_initial}",
+            "configuration": {
+                "parameter": "spark.dynamicAllocation.initialExecutors",
+                "current_value": current_initial,
+                "recommended_value": str(recommended_initial),
+                "description": "Based on stages running in first 2 minutes"
+            }
+        })
+
+    if not current_max.isdigit() or recommended_max != int(current_max):
+        recommendations.append({
+            "type": "auto_scaling",
+            "priority": "medium",
+            "issue": f"Max executors could be optimized (current: {current_max})",
+            "suggestion": f"Set spark.dynamicAllocation.maxExecutors to {recommended_max}",
+            "configuration": {
+                "parameter": "spark.dynamicAllocation.maxExecutors",
+                "current_value": current_max,
+                "recommended_value": str(recommended_max),
+                "description": "Based on peak concurrent stage demand"
+            }
+        })
+
     return {
         "application_id": app_id,
         "analysis_type": "Auto-scaling Configuration",
         "target_stage_duration_minutes": target_stage_duration_minutes,
-        "recommendations": {
-            "initial_executors": {
-                "current": current_initial,
-                "recommended": str(recommended_initial),
-                "description": "Based on stages running in first 2 minutes"
-            },
-            "max_executors": {
-                "current": current_max,
-                "recommended": str(recommended_max),
-                "description": "Based on peak concurrent stage demand"
-            }
-        },
+        "recommendations": recommendations,
         "analysis_details": {
             "total_stages": len(stages),
             "initial_stages_analyzed": len(initial_stages),
             "peak_concurrent_demand": max_demand,
-            "calculation_method": f"Aims to complete stages in {target_stage_duration_minutes} minutes"
+            "calculation_method": f"Aims to complete stages in {target_stage_duration_minutes} minutes",
+            "configuration_analysis": {
+                "initial_executors": {
+                    "current": current_initial,
+                    "recommended": str(recommended_initial),
+                    "description": "Based on stages running in first 2 minutes"
+                },
+                "max_executors": {
+                    "current": current_max,
+                    "recommended": str(recommended_max),
+                    "description": "Based on peak concurrent stage demand"
+                }
+            }
         }
     }
 
@@ -1800,14 +1832,39 @@ def get_application_insights(
     # Aggregate recommendations from all analyses
     all_recommendations = []
     critical_issues = []
-    
+
     for analysis_name, analysis_result in insights["analyses"].items():
-        if "recommendations" in analysis_result:
-            for rec in analysis_result["recommendations"]:
-                rec["source_analysis"] = analysis_name
-                all_recommendations.append(rec)
-                if rec.get("priority") == "critical":
-                    critical_issues.append(rec)
+        if "recommendations" in analysis_result and analysis_result["recommendations"]:
+            recommendations = analysis_result["recommendations"]
+
+            # Handle both list and dict recommendation formats defensively
+            if isinstance(recommendations, list):
+                # Standard format: list of recommendation dictionaries
+                for rec in recommendations:
+                    if isinstance(rec, dict):
+                        # Create a copy to avoid modifying the original
+                        rec_copy = rec.copy()
+                        rec_copy["source_analysis"] = analysis_name
+                        all_recommendations.append(rec_copy)
+                        if rec_copy.get("priority") == "critical":
+                            critical_issues.append(rec_copy)
+            elif isinstance(recommendations, dict):
+                # Legacy format: nested dictionary (convert to list format)
+                for key, value in recommendations.items():
+                    if isinstance(value, dict):
+                        rec_copy = value.copy()
+                        rec_copy["source_analysis"] = analysis_name
+                        rec_copy["recommendation_type"] = key
+                        rec_copy.setdefault("type", "configuration")
+                        rec_copy.setdefault("priority", "medium")
+                        rec_copy.setdefault("issue", f"Configuration optimization for {key}")
+                        rec_copy.setdefault("suggestion", f"Update {key} configuration based on analysis")
+                        all_recommendations.append(rec_copy)
+                        if rec_copy.get("priority") == "critical":
+                            critical_issues.append(rec_copy)
+            else:
+                # Handle unexpected formats gracefully
+                print(f"Warning: Unexpected recommendations format from {analysis_name}: {type(recommendations)}")
     
     # Sort recommendations by priority
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
