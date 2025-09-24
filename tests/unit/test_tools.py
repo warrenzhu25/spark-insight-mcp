@@ -1314,9 +1314,10 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_env.spark_properties = [(k, v) for k, v in spark_props.items()]
         return mock_env
 
-    def _create_mock_stage(self, stage_id, name="Test Stage", status="COMPLETE", 
+    def _create_mock_stage(self, stage_id, name="Test Stage", status="COMPLETE",
                           executor_run_time=None, num_tasks=10, num_failed_tasks=0,
-                          shuffle_write_bytes=0, submission_time=None, completion_time=None):
+                          shuffle_write_bytes=0, submission_time=None, completion_time=None,
+                          executor_metrics_distributions=None):
         """Helper to create mock stage"""
         mock_stage = MagicMock(spec=StageData)
         mock_stage.stage_id = stage_id
@@ -1329,6 +1330,7 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_stage.shuffle_write_bytes = shuffle_write_bytes
         mock_stage.submission_time = submission_time or self.mock_now
         mock_stage.completion_time = completion_time or (self.mock_now + timedelta(minutes=5))
+        mock_stage.executor_metrics_distributions = executor_metrics_distributions
         return mock_stage
 
     def _create_mock_executor(self, exec_id="1", host="worker1", failed_tasks=0, 
@@ -1433,7 +1435,8 @@ class TestSparkInsightTools(unittest.TestCase):
         # Should detect skew (5 GB / 1 GB = 5.0 ratio > 2.0 threshold)
         self.assertEqual(len(result["skewed_stages"]), 1)
         self.assertEqual(result["skewed_stages"][0]["stage_id"], 1)
-        self.assertEqual(result["skewed_stages"][0]["skew_ratio"], 5.0)
+        self.assertEqual(result["skewed_stages"][0]["task_skew"]["skew_ratio"], 5.0)
+        self.assertTrue(result["skewed_stages"][0]["task_skew"]["is_skewed"])
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_analyze_shuffle_skew_no_skew(self, mock_get_client):
@@ -1635,6 +1638,67 @@ class TestSparkInsightTools(unittest.TestCase):
 
         # Should handle the error gracefully and not include failed stages
         self.assertEqual(len(result["skewed_stages"]), 0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_analyze_shuffle_skew_executor_level(self, mock_get_client):
+        """Test shuffle skew analysis with executor-level skew"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create mock executor metrics distributions with skew
+        mock_exec_metrics = MagicMock()
+        mock_exec_metrics.shuffle_write = [
+            500 * 1024 * 1024,      # min: 500 MB
+            800 * 1024 * 1024,      # 25th: 800 MB
+            1024 * 1024 * 1024,     # median: 1 GB
+            1536 * 1024 * 1024,     # 75th: 1.5 GB
+            4096 * 1024 * 1024      # max: 4 GB (4x median = high skew)
+        ]
+
+        # Create stage with significant shuffle write and executor skew
+        mock_stage = self._create_mock_stage(
+            1, "Executor Skew Stage",
+            shuffle_write_bytes=15 * 1024 * 1024 * 1024,  # 15 GB
+            executor_metrics_distributions=mock_exec_metrics
+        )
+
+        # Create mock task summary with no skew (to test executor-only skew)
+        mock_task_summary = MagicMock(spec=TaskMetricDistributions)
+        mock_task_summary.shuffle_write_bytes = [
+            1000 * 1024 * 1024,     # min: 1000 MB
+            1100 * 1024 * 1024,     # 25th: 1100 MB
+            1200 * 1024 * 1024,     # median: 1200 MB
+            1300 * 1024 * 1024,     # 75th: 1300 MB
+            1400 * 1024 * 1024      # max: 1400 MB (1.17 ratio < 2.0 threshold)
+        ]
+
+        self.mock_client.list_stages.return_value = [mock_stage]
+        self.mock_client.get_stage_task_summary.return_value = mock_task_summary
+
+        # Call the function
+        result = analyze_shuffle_skew("app-123")
+
+        # Verify the result
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(len(result["skewed_stages"]), 1)
+
+        skewed_stage = result["skewed_stages"][0]
+        self.assertEqual(skewed_stage["stage_id"], 1)
+
+        # Should have no task skew but executor skew
+        self.assertIsNotNone(skewed_stage["task_skew"])
+        self.assertFalse(skewed_stage["task_skew"]["is_skewed"])
+
+        self.assertIsNotNone(skewed_stage["executor_skew"])
+        self.assertTrue(skewed_stage["executor_skew"]["is_skewed"])
+        self.assertEqual(skewed_stage["executor_skew"]["skew_ratio"], 4.0)
+
+        # Should have resource allocation recommendation
+        recommendations = result["recommendations"]
+        resource_rec_found = any(
+            rec.get("type") == "resource_allocation"
+            for rec in recommendations
+        )
+        self.assertTrue(resource_rec_found)
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_analyze_failed_tasks_host_concentration(self, mock_get_client):

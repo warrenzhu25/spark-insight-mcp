@@ -1407,19 +1407,23 @@ def analyze_shuffle_skew(
 ) -> Dict[str, Any]:
     """
     Analyze shuffle operations to identify data skew issues.
-    
-    Identifies stages with significant shuffle data skew by comparing
-    maximum vs median shuffle write bytes across tasks. Helps identify
-    performance bottlenecks caused by uneven data distribution.
-    
+
+    Identifies stages with significant shuffle data skew by analyzing both:
+    1. Task-level skew: comparing max vs median shuffle write bytes across tasks
+    2. Executor-level skew: comparing max vs median shuffle write bytes across executors
+
+    This dual analysis helps identify both data distribution issues and
+    executor resource/performance bottlenecks during shuffle operations.
+
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         shuffle_threshold_gb: Minimum total shuffle write in GB to analyze (default: 10)
         skew_ratio_threshold: Minimum ratio of max/median to flag as skewed (default: 2.0)
-        
+
     Returns:
-        Dictionary containing shuffle skew analysis results
+        Dictionary containing shuffle skew analysis results with both task-level
+        and executor-level skew detection
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -1436,62 +1440,106 @@ def analyze_shuffle_skew(
     shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
     
     skewed_stages = []
-    
+
     for stage in stages:
         # Check if stage has significant shuffle write
         if not stage.shuffle_write_bytes or stage.shuffle_write_bytes < shuffle_threshold_bytes:
             continue
-            
-        # Get task metric distributions for this stage
+
+        stage_skew_info = {
+            "stage_id": stage.stage_id,
+            "attempt_id": stage.attempt_id,
+            "name": stage.name,
+            "total_shuffle_write_gb": round(stage.shuffle_write_bytes / (1024 * 1024 * 1024), 2),
+            "task_count": stage.num_tasks,
+            "failed_tasks": stage.num_failed_tasks,
+            "task_skew": None,
+            "executor_skew": None
+        }
+
+        # Check task-level skew
         try:
             task_summary = client.get_stage_task_summary(
                 app_id=app_id,
                 stage_id=stage.stage_id,
                 attempt_id=stage.attempt_id
             )
-            
+
             if task_summary.shuffle_write_bytes:
                 # Extract quantiles (typically [min, 25th, 50th, 75th, max])
                 quantiles = task_summary.shuffle_write_bytes
                 if len(quantiles) >= 5:
                     median = quantiles[2]  # 50th percentile
                     max_val = quantiles[4]  # 100th percentile (max)
-                    
+
                     if median > 0:
-                        skew_ratio = max_val / median
-                        if skew_ratio > skew_ratio_threshold:
-                            skewed_stages.append({
-                                "stage_id": stage.stage_id,
-                                "attempt_id": stage.attempt_id,
-                                "name": stage.name,
-                                "skew_ratio": round(skew_ratio, 2),
-                                "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
-                                "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
-                                "total_shuffle_write_gb": round(stage.shuffle_write_bytes / (1024 * 1024 * 1024), 2),
-                                "task_count": stage.num_tasks,
-                                "failed_tasks": stage.num_failed_tasks
-                            })
+                        task_skew_ratio = max_val / median
+                        stage_skew_info["task_skew"] = {
+                            "skew_ratio": round(task_skew_ratio, 2),
+                            "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
+                            "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
+                            "is_skewed": task_skew_ratio > skew_ratio_threshold
+                        }
         except Exception as e:
-            # Skip stages where we can't get task summaries
-            continue
+            # Skip task-level analysis if it fails
+            pass
+
+        # Check executor-level skew using stage.executor_metrics_distributions
+        if stage.executor_metrics_distributions and stage.executor_metrics_distributions.shuffle_write:
+            executor_quantiles = stage.executor_metrics_distributions.shuffle_write
+            if len(executor_quantiles) >= 5:
+                exec_median = executor_quantiles[2]  # 50th percentile
+                exec_max = executor_quantiles[4]  # 100th percentile (max)
+
+                if exec_median > 0:
+                    exec_skew_ratio = exec_max / exec_median
+                    stage_skew_info["executor_skew"] = {
+                        "skew_ratio": round(exec_skew_ratio, 2),
+                        "max_executor_shuffle_write_mb": round(exec_max / (1024 * 1024), 2),
+                        "median_executor_shuffle_write_mb": round(exec_median / (1024 * 1024), 2),
+                        "is_skewed": exec_skew_ratio > skew_ratio_threshold
+                    }
+
+        # Add stage to skewed list if either task or executor skew is detected
+        is_task_skewed = stage_skew_info["task_skew"] and stage_skew_info["task_skew"]["is_skewed"]
+        is_executor_skewed = stage_skew_info["executor_skew"] and stage_skew_info["executor_skew"]["is_skewed"]
+
+        if is_task_skewed or is_executor_skewed:
+            # Calculate overall skew ratio for sorting (use higher of the two)
+            task_ratio = stage_skew_info["task_skew"]["skew_ratio"] if stage_skew_info["task_skew"] else 0
+            exec_ratio = stage_skew_info["executor_skew"]["skew_ratio"] if stage_skew_info["executor_skew"] else 0
+            stage_skew_info["max_skew_ratio"] = max(task_ratio, exec_ratio)
+            skewed_stages.append(stage_skew_info)
     
-    # Sort by skew ratio (highest first)
-    skewed_stages.sort(key=lambda x: x["skew_ratio"], reverse=True)
-    
+    # Sort by max skew ratio (highest first)
+    skewed_stages.sort(key=lambda x: x["max_skew_ratio"], reverse=True)
+
     recommendations = []
     if skewed_stages:
-        recommendations.append({
-            "type": "data_partitioning",
-            "priority": "high",
-            "issue": f"Found {len(skewed_stages)} stages with shuffle skew",
-            "suggestion": "Consider repartitioning data by key distribution or using salting techniques"
-        })
-        
-        max_skew = max(s["skew_ratio"] for s in skewed_stages)
+        task_skewed_count = sum(1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"])
+        executor_skewed_count = sum(1 for s in skewed_stages if s["executor_skew"] and s["executor_skew"]["is_skewed"])
+
+        if task_skewed_count > 0:
+            recommendations.append({
+                "type": "data_partitioning",
+                "priority": "high",
+                "issue": f"Found {task_skewed_count} stages with task-level shuffle skew",
+                "suggestion": "Consider repartitioning data by key distribution or using salting techniques"
+            })
+
+        if executor_skewed_count > 0:
+            recommendations.append({
+                "type": "resource_allocation",
+                "priority": "high",
+                "issue": f"Found {executor_skewed_count} stages with executor-level shuffle skew",
+                "suggestion": "Check executor resource allocation, network issues, or host-specific problems"
+            })
+
+        max_skew = max(s["max_skew_ratio"] for s in skewed_stages)
         if max_skew > 10:
             recommendations.append({
                 "type": "performance",
-                "priority": "critical", 
+                "priority": "critical",
                 "issue": f"Extreme skew detected (ratio: {max_skew})",
                 "suggestion": "Investigate data distribution and consider custom partitioning strategies"
             })
@@ -1507,7 +1555,9 @@ def analyze_shuffle_skew(
         "summary": {
             "total_stages_analyzed": len([s for s in stages if s.shuffle_write_bytes and s.shuffle_write_bytes >= shuffle_threshold_bytes]),
             "skewed_stages_count": len(skewed_stages),
-            "max_skew_ratio": max([s["skew_ratio"] for s in skewed_stages]) if skewed_stages else 0
+            "task_skewed_count": sum(1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]),
+            "executor_skewed_count": sum(1 for s in skewed_stages if s["executor_skew"] and s["executor_skew"]["is_skewed"]),
+            "max_skew_ratio": max([s["max_skew_ratio"] for s in skewed_stages]) if skewed_stages else 0
         },
         "recommendations": recommendations
     }
