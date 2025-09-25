@@ -296,7 +296,6 @@ class SparkRestClient:
         status: Optional[List[StageStatus]] = None,
         details: bool = False,
         with_summaries: bool = False,
-        quantiles: str = "0.05, 0.25, 0.5, 0.75, 0.95",
         task_status: Optional[List[TaskStatus]] = None,
     ) -> List[StageData]:
         """
@@ -307,7 +306,6 @@ class SparkRestClient:
             status: Filter by stage status
             details: Whether to include task details (WARNING: Setting this to True can significantly slow down the API call due to the large amount of task data returned)
             with_summaries: Whether to include summary metrics
-            quantiles: Comma-separated list of quantiles to use for summary metrics
             task_status: Filter by task status (only takes effect when details=true)
 
         Returns:
@@ -316,7 +314,6 @@ class SparkRestClient:
         params = {
             "details": str(details).lower(),
             "withSummaries": str(with_summaries).lower(),
-            "quantiles": quantiles,
         }
 
         if status:
@@ -344,7 +341,6 @@ class SparkRestClient:
         details: bool = False,  # Setting this to true is NOT recommended due to the amount of data returned.
         task_status: Optional[List[TaskStatus]] = None,
         with_summaries: bool = True,
-        quantiles: str = "0.05, 0.25, 0.5, 0.75, 0.95",
     ) -> List[StageData]:
         """
         Get information about a specific stage.
@@ -355,7 +351,6 @@ class SparkRestClient:
             details: Whether to include task details
             task_status: Filter by task status
             with_summaries: Whether to include summary metrics
-            quantiles: Comma-separated list of quantiles to use for summary metrics
 
         Returns:
             List of StageData objects (one per attempt)
@@ -363,7 +358,6 @@ class SparkRestClient:
         params = {
             "details": str(details).lower(),
             "withSummaries": str(with_summaries).lower(),
-            "quantiles": quantiles,
         }
 
         if task_status:
@@ -380,7 +374,6 @@ class SparkRestClient:
         details: bool = True,
         task_status: Optional[List[TaskStatus]] = None,
         with_summaries: bool = False,
-        quantiles: str = "0.05, 0.25, 0.5, 0.75, 0.95",
     ) -> StageData:
         """
         Get information about a specific stage attempt.
@@ -392,7 +385,6 @@ class SparkRestClient:
             details: Whether to include task details
             task_status: Filter by task status
             with_summaries: Whether to include summary metrics
-            quantiles: Comma-separated list of quantiles to use for summary metrics
 
         Returns:
             StageData object
@@ -400,7 +392,6 @@ class SparkRestClient:
         params = {
             "details": str(details).lower(),
             "withSummaries": str(with_summaries).lower(),
-            "quantiles": quantiles,
         }
 
         if task_status:
@@ -416,7 +407,6 @@ class SparkRestClient:
         app_id: str,
         stage_id: int,
         attempt_id: int,
-        quantiles: str = "0.05, 0.25, 0.5, 0.75, 0.95",
     ) -> TaskMetricDistributions:
         """
         Get task summary metrics for a specific stage attempt.
@@ -425,12 +415,11 @@ class SparkRestClient:
             app_id: The application ID
             stage_id: The stage ID
             attempt_id: The attempt ID
-            quantiles: Comma-separated list of quantiles to use for summary metrics
 
         Returns:
             TaskMetricDistributions object
         """
-        params = {"quantiles": quantiles}
+        params = {}
         data = self._get(
             f"applications/{app_id}/stages/{stage_id}/{attempt_id}/taskSummary", params
         )

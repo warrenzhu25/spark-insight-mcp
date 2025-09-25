@@ -831,7 +831,6 @@ def get_stage_task_summary(
     stage_id: int,
     attempt_id: int = 0,
     server: Optional[str] = None,
-    quantiles: str = "0.05,0.25,0.5,0.75,0.95",
 ) -> TaskMetricDistributions:
     """
     Get a summary of task metrics for a specific stage.
@@ -844,7 +843,6 @@ def get_stage_task_summary(
         stage_id: The stage ID
         attempt_id: The stage attempt ID (default: 0)
         server: Optional server name to use (uses default if not specified)
-        quantiles: Comma-separated list of quantiles to use for summary metrics
 
     Returns:
         TaskMetricDistributions object containing metric distributions
@@ -853,7 +851,7 @@ def get_stage_task_summary(
     client = get_client_or_default(ctx, server)
 
     return client.get_stage_task_summary(
-        app_id=app_id, stage_id=stage_id, attempt_id=attempt_id, quantiles=quantiles
+        app_id=app_id, stage_id=stage_id, attempt_id=attempt_id
     )
 
 
