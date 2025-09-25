@@ -3701,7 +3701,7 @@ def compare_app_performance(
 
     Returns:
         Dictionary containing:
-        - aggregated_overview: Application-level resource, job, executor, and stage metrics
+        - aggregated_overview: Application-level executor and stage metrics
         - stage_deep_dive: Top N stages with most time difference and detailed comparisons
         - recommendations: Enhanced recommendations covering both application and stage levels
 
@@ -3730,19 +3730,9 @@ def compare_app_performance(
     # PHASE 1: AGGREGATED APPLICATION OVERVIEW
     # Use specialized comparison tools for aggregated overview
     try:
-        resource_comparison = compare_app_resources(app_id1, app_id2, server)
-    except Exception as e:
-        resource_comparison = {"error": f"Failed to get resource comparison: {str(e)}"}
-
-    try:
         executor_comparison = compare_app_executors(app_id1, app_id2, server)
     except Exception as e:
         executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
-
-    try:
-        job_comparison = compare_app_jobs(app_id1, app_id2, server)
-    except Exception as e:
-        job_comparison = {"error": f"Failed to get job comparison: {str(e)}"}
 
     try:
         stage_comparison = compare_app_stages_aggregated(app_id1, app_id2, server)
@@ -3751,9 +3741,7 @@ def compare_app_performance(
 
     # Create streamlined aggregated overview using specialized tools
     aggregated_overview = {
-        "resource_comparison": resource_comparison,
         "executor_comparison": executor_comparison,
-        "job_comparison": job_comparison,
         "stage_comparison": stage_comparison
     }
 
@@ -3949,23 +3937,11 @@ def compare_app_performance(
         "recommendations" in aggregated_overview["executor_comparison"]):
         recommendations.extend(aggregated_overview["executor_comparison"]["recommendations"])
 
-    # Job performance recommendations
-    if (aggregated_overview["job_comparison"] and
-        isinstance(aggregated_overview["job_comparison"], dict) and
-        "recommendations" in aggregated_overview["job_comparison"]):
-        recommendations.extend(aggregated_overview["job_comparison"]["recommendations"])
-
     # Stage-level aggregated recommendations
     if (aggregated_overview["stage_comparison"] and
         isinstance(aggregated_overview["stage_comparison"], dict) and
         "recommendations" in aggregated_overview["stage_comparison"]):
         recommendations.extend(aggregated_overview["stage_comparison"]["recommendations"])
-
-    # Resource allocation recommendations
-    if (aggregated_overview["resource_comparison"] and
-        isinstance(aggregated_overview["resource_comparison"], dict) and
-        "recommendations" in aggregated_overview["resource_comparison"]):
-        recommendations.extend(aggregated_overview["resource_comparison"]["recommendations"])
 
     # STAGE-LEVEL RECOMMENDATIONS (existing logic)
     # Check for stages with large time differences
