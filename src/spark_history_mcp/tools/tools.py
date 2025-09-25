@@ -4432,10 +4432,6 @@ def compare_stage_executor_timeline(
                 "intervals_with_executor_differences": intervals_with_executor_diff,
                 "max_executor_count_difference": max_executor_diff,
                 "stages_overlap": timeline1["stage_info"]["completion_time"] is not None and timeline2["stage_info"]["completion_time"] is not None
-            },
-            "detailed_timelines": {
-                "app1_timeline": timeline1["timeline"],
-                "app2_timeline": timeline2["timeline"]
             }
         }
 

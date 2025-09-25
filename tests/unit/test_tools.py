@@ -2489,7 +2489,7 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         result = compare_stage_executor_timeline("app-123", "app-456", 1, 2)
 
         # Should handle the error gracefully
-        self.assertIn("detailed_timelines", result)
+        self.assertIn("summary", result)
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_compare_stage_executor_timeline_executor_timing_variations(self, mock_get_client):
