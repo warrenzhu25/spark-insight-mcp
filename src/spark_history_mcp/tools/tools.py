@@ -3816,12 +3816,12 @@ def compare_app_performance(
     """
     Comprehensive performance comparison between two Spark applications.
 
-    Provides both high-level aggregated analysis and detailed stage-by-stage comparison.
+    Provides both high-level aggregated analysis and stage-level metric comparison.
     First analyzes overall application metrics (resources, jobs, executors, aggregated stages),
-    then identifies the top N stages with the most significant time differences for deep-dive analysis.
+    then identifies the top N stages with the most significant time differences for stage-level analysis.
 
-    This merged analysis combines the capabilities of compare_job_performance and stage-level
-    comparison to provide comprehensive performance insights and optimization recommendations.
+    This analysis focuses on stage-level metrics (duration, task counts, I/O, shuffle, memory)
+    without detailed task-level distributions or executor-level analysis for cleaner, faster results.
 
     Args:
         app_id1: First Spark application ID
@@ -3835,11 +3835,11 @@ def compare_app_performance(
     Returns:
         Dictionary containing:
         - aggregated_overview: Application-level executor and stage metrics
-        - stage_deep_dive: Top N stages with most time difference and detailed comparisons
+        - stage_deep_dive: Top N stages with most time difference and stage-level metric comparisons
         - recommendations: Enhanced recommendations covering both application and stage levels
 
-        When include_raw_data=False (default): Streamlined output with processed comparisons only
-        When include_raw_data=True: Includes additional raw metrics for detailed investigation
+        When include_raw_data=False (default): Streamlined output with stage-level metrics only
+        When include_raw_data=True: Includes additional raw stage metrics for investigation
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -3936,45 +3936,49 @@ def compare_app_performance(
     for diff in top_differences:
         stage1, stage2 = diff["stage1"], diff["stage2"]
 
-        # Use compare_stages tool for detailed stage comparison
-        try:
-            detailed_stage_comparison = compare_stages(
-                app_id1=app_id1,
-                app_id2=app_id2,
-                stage_id1=stage1.stage_id,
-                stage_id2=stage2.stage_id,
-                server=server,
-                significance_threshold=0.2
-            )
-        except Exception as e:
-            # Fallback to basic comparison if compare_stages fails
-            detailed_stage_comparison = {
-                "error": f"Failed to get detailed comparison: {str(e)}",
-                "basic_info": {
-                    "stage1": {"id": stage1.stage_id, "name": stage1.name},
-                    "stage2": {"id": stage2.stage_id, "name": stage2.name}
-                }
-            }
-
-        # Extract executor summaries with improved fallback logic
-        def get_executor_summary_for_stage(stage, app_id):
-            """Get executor summary for a stage with fallback options"""
-            # First try: stage already has executor_summary (when with_summaries=True worked)
-            if hasattr(stage, 'executor_summary') and stage.executor_summary:
-                return stage.executor_summary
-
-            # Second try: use get_executor_summary tool for the application
-            # Note: This gives application-level executor summary, not stage-specific
+        # Simple stage-level metric comparison
+        def safe_get_metric(stage, attr, default=0):
+            """Safely get stage metric with fallback"""
             try:
-                app_executor_summary = get_executor_summary(app_id, server)
-                return app_executor_summary if app_executor_summary else {}
-            except Exception:
-                return {}
+                value = getattr(stage, attr, default)
+                return value if value is not None else default
+            except:
+                return default
 
-        executor_summary1 = get_executor_summary_for_stage(stage1, app_id1)
-        executor_summary2 = get_executor_summary_for_stage(stage2, app_id2)
+        stage_metric_comparison = {
+            "duration": {
+                "app1_ms": safe_get_metric(stage1, 'execution_time', 0),
+                "app2_ms": safe_get_metric(stage2, 'execution_time', 0),
+                "difference_ms": safe_get_metric(stage2, 'execution_time', 0) - safe_get_metric(stage1, 'execution_time', 0)
+            },
+            "tasks": {
+                "app1_total": safe_get_metric(stage1, 'num_tasks', 0),
+                "app2_total": safe_get_metric(stage2, 'num_tasks', 0),
+                "app1_failed": safe_get_metric(stage1, 'num_failed_tasks', 0),
+                "app2_failed": safe_get_metric(stage2, 'num_failed_tasks', 0)
+            },
+            "io_metrics": {
+                "app1_input_bytes": safe_get_metric(stage1, 'input_bytes', 0),
+                "app2_input_bytes": safe_get_metric(stage2, 'input_bytes', 0),
+                "app1_output_bytes": safe_get_metric(stage1, 'output_bytes', 0),
+                "app2_output_bytes": safe_get_metric(stage2, 'output_bytes', 0)
+            },
+            "shuffle_metrics": {
+                "app1_read_bytes": safe_get_metric(stage1, 'shuffle_read_bytes', 0),
+                "app2_read_bytes": safe_get_metric(stage2, 'shuffle_read_bytes', 0),
+                "app1_write_bytes": safe_get_metric(stage1, 'shuffle_write_bytes', 0),
+                "app2_write_bytes": safe_get_metric(stage2, 'shuffle_write_bytes', 0)
+            },
+            "memory_metrics": {
+                "app1_spill_bytes": safe_get_metric(stage1, 'memory_bytes_spilled', 0),
+                "app2_spill_bytes": safe_get_metric(stage2, 'memory_bytes_spilled', 0),
+                "app1_disk_spill_bytes": safe_get_metric(stage1, 'disk_bytes_spilled', 0),
+                "app2_disk_spill_bytes": safe_get_metric(stage2, 'disk_bytes_spilled', 0)
+            }
+        }
 
-        # Build stage comparison with optional raw data
+
+        # Build stage comparison with stage-level metrics only
         stage_comparison = {
             "stage_name": stage1.name,
             "similarity_score": diff["similarity"],
@@ -3995,10 +3999,7 @@ def compare_app_performance(
                 "percentage": diff["time_difference_percent"],
                 "slower_application": diff["slower_app"]
             },
-            "detailed_stage_comparison": detailed_stage_comparison,
-            "executor_analysis": _analyze_executor_performance_patterns(
-                executor_summary1, executor_summary2
-            )
+            "stage_metrics_comparison": stage_metric_comparison
         }
 
         # Conditionally add raw data for debugging/investigation
@@ -4089,14 +4090,16 @@ def compare_app_performance(
             "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues in specific stages"
         })
 
-    # Check for memory spilling differences at stage level
+    # Check for memory spilling differences at stage level using simplified comparisons
     spill_diff_stages = []
     for comp in detailed_comparisons:
-        app1_spill = comp["app1_stage"].get("memory_spilled_bytes", 0) or 0
-        app2_spill = comp["app2_stage"].get("memory_spilled_bytes", 0) or 0
+        if "stage_metrics_comparison" in comp:
+            memory_metrics = comp["stage_metrics_comparison"]["memory_metrics"]
+            app1_spill = memory_metrics.get("app1_spill_bytes", 0) or 0
+            app2_spill = memory_metrics.get("app2_spill_bytes", 0) or 0
 
-        if abs(app1_spill - app2_spill) > 100 * 1024 * 1024:  # >100MB difference
-            spill_diff_stages.append(comp)
+            if abs(app1_spill - app2_spill) > 100 * 1024 * 1024:  # >100MB difference
+                spill_diff_stages.append(comp)
 
     if spill_diff_stages:
         recommendations.append({
