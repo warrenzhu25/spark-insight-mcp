@@ -2081,6 +2081,19 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
     return metrics
 
 
+def _get_basic_app_info(app) -> Dict[str, Any]:
+    """Extract basic application information for comparison"""
+    return {
+        "id": app.id,
+        "name": app.name,
+        "cores_granted": getattr(app, 'cores_granted', None),
+        "max_cores": getattr(app, 'max_cores', None),
+        "cores_per_executor": getattr(app, 'cores_per_executor', None),
+        "memory_per_executor_mb": getattr(app, 'memory_per_executor_mb', None),
+        "max_executors": getattr(app, 'max_executors', None),
+    }
+
+
 def _calculate_job_stats(jobs) -> Dict[str, Any]:
     """
     Calculate job duration statistics.
@@ -2297,6 +2310,529 @@ def _get_stage_summary_with_fallback(
             }
         except Exception:
             return None
+
+
+@mcp.tool()
+def compare_app_resources(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Compare resource allocation and configuration between two Spark applications.
+
+    Focuses specifically on resource allocation patterns, executor configuration,
+    and resource utilization efficiency without getting into detailed performance metrics.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional Spark History Server name
+
+    Returns:
+        Dict containing resource allocation comparison, efficiency ratios, and recommendations
+    """
+    ctx = mcp.request_context.lifespan_context
+    client = get_client_or_default(ctx, server)
+
+    try:
+        # Get application info
+        app1 = client.get_application(app_id1)
+        app2 = client.get_application(app_id2)
+
+        app1_info = _get_basic_app_info(app1)
+        app2_info = _get_basic_app_info(app2)
+
+        # Calculate resource ratios and comparisons
+        resource_comparison = {}
+
+        if app1_info["cores_granted"] and app2_info["cores_granted"]:
+            resource_comparison["cores_granted_ratio"] = app2_info["cores_granted"] / app1_info["cores_granted"]
+
+        if app1_info["max_cores"] and app2_info["max_cores"]:
+            resource_comparison["max_cores_ratio"] = app2_info["max_cores"] / app1_info["max_cores"]
+
+        if app1_info["memory_per_executor_mb"] and app2_info["memory_per_executor_mb"]:
+            resource_comparison["memory_per_executor_ratio"] = app2_info["memory_per_executor_mb"] / app1_info["memory_per_executor_mb"]
+
+        if app1_info["max_executors"] and app2_info["max_executors"]:
+            resource_comparison["max_executors_ratio"] = app2_info["max_executors"] / app1_info["max_executors"]
+
+        # Generate resource-specific recommendations
+        recommendations = []
+
+        # Cores analysis
+        if resource_comparison.get("cores_granted_ratio", 1) > 2:
+            recommendations.append({
+                "type": "resource_scaling",
+                "priority": "medium",
+                "issue": f"App2 uses {resource_comparison['cores_granted_ratio']:.1f}x more cores than App1",
+                "suggestion": "Consider if App2 needs this level of CPU resources or if App1 is under-provisioned"
+            })
+        elif resource_comparison.get("cores_granted_ratio", 1) < 0.5:
+            recommendations.append({
+                "type": "resource_scaling",
+                "priority": "high",
+                "issue": f"App2 uses {resource_comparison['cores_granted_ratio']:.1f}x fewer cores than App1",
+                "suggestion": "App2 may be CPU-constrained - consider increasing core allocation"
+            })
+
+        # Memory analysis
+        if resource_comparison.get("memory_per_executor_ratio", 1) > 2:
+            recommendations.append({
+                "type": "memory_allocation",
+                "priority": "medium",
+                "issue": f"App2 allocates {resource_comparison['memory_per_executor_ratio']:.1f}x more memory per executor",
+                "suggestion": "Verify if App2's workload requires this memory or if it's over-provisioned"
+            })
+        elif resource_comparison.get("memory_per_executor_ratio", 1) < 0.5:
+            recommendations.append({
+                "type": "memory_allocation",
+                "priority": "high",
+                "issue": f"App2 has {resource_comparison['memory_per_executor_ratio']:.1f}x less memory per executor",
+                "suggestion": "App2 may experience memory pressure - consider increasing executor memory"
+            })
+
+        return {
+            "applications": {
+                "app1": app1_info,
+                "app2": app2_info
+            },
+            "resource_comparison": resource_comparison,
+            "recommendations": recommendations
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to compare app resources: {str(e)}",
+            "applications": {
+                "app1": {"id": app_id1},
+                "app2": {"id": app_id2}
+            }
+        }
+
+
+@mcp.tool()
+def compare_app_executors(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Compare executor-level performance metrics between two Spark applications.
+
+    Focuses specifically on executor utilization, memory usage, GC performance,
+    and task completion patterns without detailed stage-by-stage analysis.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional Spark History Server name
+
+    Returns:
+        Dict containing executor performance comparison, efficiency ratios, and recommendations
+    """
+    ctx = mcp.request_context.lifespan_context
+
+    try:
+        # Get executor summaries for both applications
+        exec_summary1 = get_executor_summary(app_id1, server)
+        exec_summary2 = get_executor_summary(app_id2, server)
+
+        if not exec_summary1 or not exec_summary2:
+            return {
+                "error": "Could not retrieve executor summaries for one or both applications",
+                "applications": {
+                    "app1": {"id": app_id1, "executor_summary": exec_summary1 is not None},
+                    "app2": {"id": app_id2, "executor_summary": exec_summary2 is not None}
+                }
+            }
+
+        # Calculate executor performance ratios
+        executor_comparison = {
+            "executor_count_ratio": exec_summary2.get("total_executors", 0) / max(exec_summary1.get("total_executors", 1), 1),
+            "memory_usage_ratio": exec_summary2.get("memory_used", 0) / max(exec_summary1.get("memory_used", 1), 1),
+            "task_completion_ratio": exec_summary2.get("completed_tasks", 0) / max(exec_summary1.get("completed_tasks", 1), 1),
+            "gc_time_ratio": exec_summary2.get("total_gc_time", 0) / max(exec_summary1.get("total_gc_time", 1), 1),
+            "active_tasks_ratio": exec_summary2.get("active_tasks", 0) / max(exec_summary1.get("active_tasks", 1), 1),
+        }
+
+        # Calculate efficiency metrics
+        efficiency_metrics = {}
+
+        # Task completion efficiency (tasks per executor)
+        if exec_summary1.get("total_executors", 0) > 0:
+            efficiency_metrics["app1_tasks_per_executor"] = exec_summary1.get("completed_tasks", 0) / exec_summary1["total_executors"]
+        if exec_summary2.get("total_executors", 0) > 0:
+            efficiency_metrics["app2_tasks_per_executor"] = exec_summary2.get("completed_tasks", 0) / exec_summary2["total_executors"]
+
+        # Memory utilization efficiency
+        if exec_summary1.get("memory_used", 0) > 0 and exec_summary1.get("completed_tasks", 0) > 0:
+            efficiency_metrics["app1_tasks_per_mb"] = exec_summary1["completed_tasks"] / (exec_summary1["memory_used"] / (1024 * 1024))
+        if exec_summary2.get("memory_used", 0) > 0 and exec_summary2.get("completed_tasks", 0) > 0:
+            efficiency_metrics["app2_tasks_per_mb"] = exec_summary2["completed_tasks"] / (exec_summary2["memory_used"] / (1024 * 1024))
+
+        # Generate executor-specific recommendations
+        recommendations = []
+
+        # Executor scaling analysis
+        if executor_comparison["executor_count_ratio"] > 1.5:
+            recommendations.append({
+                "type": "executor_scaling",
+                "priority": "medium",
+                "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x more executors than App1",
+                "suggestion": "Evaluate if App2 needs this level of parallelism or if resources can be optimized"
+            })
+        elif executor_comparison["executor_count_ratio"] < 0.7:
+            recommendations.append({
+                "type": "executor_scaling",
+                "priority": "high",
+                "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x fewer executors than App1",
+                "suggestion": "App2 may benefit from increased parallelism - consider scaling up executors"
+            })
+
+        # Memory efficiency analysis
+        if executor_comparison["memory_usage_ratio"] > 2.0:
+            recommendations.append({
+                "type": "memory_efficiency",
+                "priority": "medium",
+                "issue": f"App2 uses {executor_comparison['memory_usage_ratio']:.1f}x more memory than App1",
+                "suggestion": "Review App2's memory usage patterns - may indicate inefficient data structures or caching"
+            })
+
+        # GC performance analysis
+        if executor_comparison["gc_time_ratio"] > 2.0:
+            recommendations.append({
+                "type": "gc_performance",
+                "priority": "high",
+                "issue": f"App2 has {executor_comparison['gc_time_ratio']:.1f}x more GC time than App1",
+                "suggestion": "App2 experiencing memory pressure - consider increasing executor memory or optimizing data structures"
+            })
+
+        # Task efficiency analysis
+        if efficiency_metrics.get("app1_tasks_per_executor", 0) > 0 and efficiency_metrics.get("app2_tasks_per_executor", 0) > 0:
+            task_efficiency_ratio = efficiency_metrics["app2_tasks_per_executor"] / efficiency_metrics["app1_tasks_per_executor"]
+            if task_efficiency_ratio < 0.5:
+                recommendations.append({
+                    "type": "task_efficiency",
+                    "priority": "medium",
+                    "issue": f"App2 processes {task_efficiency_ratio:.1f}x fewer tasks per executor than App1",
+                    "suggestion": "App2's executors may be underutilized - check for data skew or resource bottlenecks"
+                })
+
+        return {
+            "applications": {
+                "app1": {
+                    "id": app_id1,
+                    "executor_metrics": exec_summary1
+                },
+                "app2": {
+                    "id": app_id2,
+                    "executor_metrics": exec_summary2
+                }
+            },
+            "executor_comparison": executor_comparison,
+            "efficiency_metrics": efficiency_metrics,
+            "recommendations": recommendations
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to compare executor performance: {str(e)}",
+            "applications": {
+                "app1": {"id": app_id1},
+                "app2": {"id": app_id2}
+            }
+        }
+
+
+@mcp.tool()
+def compare_app_jobs(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Compare job-level performance metrics between two Spark applications.
+
+    Focuses specifically on job counts, durations, success rates, and job-level
+    parallelism patterns without detailed stage or executor analysis.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional Spark History Server name
+
+    Returns:
+        Dict containing job performance comparison, timing analysis, and recommendations
+    """
+    ctx = mcp.request_context.lifespan_context
+    client = get_client_or_default(ctx, server)
+
+    try:
+        # Get job data for both applications
+        jobs1 = client.list_jobs(app_id=app_id1)
+        jobs2 = client.list_jobs(app_id=app_id2)
+
+        # Calculate job statistics
+        job_stats1 = _calculate_job_stats(jobs1)
+        job_stats2 = _calculate_job_stats(jobs2)
+
+        # Calculate job performance ratios
+        job_comparison = {
+            "job_count_ratio": job_stats2["count"] / max(job_stats1["count"], 1),
+            "avg_duration_ratio": job_stats2["avg_duration"] / max(job_stats1["avg_duration"], 1) if job_stats1["avg_duration"] > 0 else 0,
+            "total_duration_ratio": job_stats2["total_duration"] / max(job_stats1["total_duration"], 1) if job_stats1["total_duration"] > 0 else 0,
+            "completion_rate_ratio": (job_stats2["completed_count"] / max(job_stats2["count"], 1)) / max((job_stats1["completed_count"] / max(job_stats1["count"], 1)), 0.01),
+        }
+
+        # Job success rate analysis
+        job1_success_rate = job_stats1["completed_count"] / max(job_stats1["count"], 1)
+        job2_success_rate = job_stats2["completed_count"] / max(job_stats2["count"], 1)
+
+        # Job timing analysis
+        timing_analysis = {}
+        if job_stats1["avg_duration"] > 0 and job_stats2["avg_duration"] > 0:
+            timing_analysis["avg_duration_difference_seconds"] = job_stats2["avg_duration"] - job_stats1["avg_duration"]
+            timing_analysis["avg_duration_improvement_percent"] = ((job_stats1["avg_duration"] - job_stats2["avg_duration"]) / job_stats1["avg_duration"]) * 100
+
+        # Generate job-specific recommendations
+        recommendations = []
+
+        # Job count analysis
+        if job_comparison["job_count_ratio"] > 2.0:
+            recommendations.append({
+                "type": "job_complexity",
+                "priority": "medium",
+                "issue": f"App2 has {job_comparison['job_count_ratio']:.1f}x more jobs than App1",
+                "suggestion": "App2 may have more complex workflow or different job decomposition strategy"
+            })
+
+        # Duration performance analysis
+        if job_comparison["avg_duration_ratio"] > 1.5:
+            recommendations.append({
+                "type": "job_performance",
+                "priority": "high",
+                "issue": f"App2 jobs are {job_comparison['avg_duration_ratio']:.1f}x slower on average than App1",
+                "suggestion": "Investigate job-level performance bottlenecks in App2 - may need optimization or resource scaling"
+            })
+        elif job_comparison["avg_duration_ratio"] < 0.7:
+            recommendations.append({
+                "type": "job_performance",
+                "priority": "low",
+                "issue": f"App2 jobs are {1/job_comparison['avg_duration_ratio']:.1f}x faster than App1",
+                "suggestion": "App2 shows better job-level performance - consider applying similar optimizations to App1"
+            })
+
+        # Success rate analysis
+        if job2_success_rate < job1_success_rate - 0.1:  # More than 10% difference
+            recommendations.append({
+                "type": "job_reliability",
+                "priority": "high",
+                "issue": f"App2 has {(job1_success_rate - job2_success_rate)*100:.1f}% lower job success rate",
+                "suggestion": "App2 experiencing more job failures - investigate error patterns and resource issues"
+            })
+
+        # Total execution time analysis
+        if job_comparison["total_duration_ratio"] > 2.0:
+            recommendations.append({
+                "type": "overall_efficiency",
+                "priority": "medium",
+                "issue": f"App2 takes {job_comparison['total_duration_ratio']:.1f}x longer total execution time",
+                "suggestion": "App2 may benefit from better parallelization or resource optimization"
+            })
+
+        return {
+            "applications": {
+                "app1": {
+                    "id": app_id1,
+                    "job_stats": job_stats1,
+                    "success_rate": job1_success_rate
+                },
+                "app2": {
+                    "id": app_id2,
+                    "job_stats": job_stats2,
+                    "success_rate": job2_success_rate
+                }
+            },
+            "job_comparison": job_comparison,
+            "timing_analysis": timing_analysis,
+            "recommendations": recommendations
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to compare job performance: {str(e)}",
+            "applications": {
+                "app1": {"id": app_id1},
+                "app2": {"id": app_id2}
+            }
+        }
+
+
+@mcp.tool()
+def compare_app_stages_aggregated(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Compare aggregated stage-level metrics between two Spark applications.
+
+    Focuses on overall stage performance patterns, I/O volumes, shuffle operations,
+    and data processing efficiency without individual stage-by-stage analysis.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional Spark History Server name
+
+    Returns:
+        Dict containing aggregated stage comparison, I/O analysis, and recommendations
+    """
+    ctx = mcp.request_context.lifespan_context
+    client = get_client_or_default(ctx, server)
+
+    try:
+        # Get stages from both applications - try with summaries first, fallback if needed
+        try:
+            stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
+            stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
+        except Exception as e:
+            if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
+                stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
+                stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
+            else:
+                raise e
+
+        if not stages1 or not stages2:
+            return {
+                "error": "No stages found in one or both applications",
+                "applications": {
+                    "app1": {"id": app_id1, "stage_count": len(stages1) if stages1 else 0},
+                    "app2": {"id": app_id2, "stage_count": len(stages2) if stages2 else 0}
+                }
+            }
+
+        # Calculate aggregated stage metrics
+        stage_metrics1 = _calculate_aggregated_stage_metrics(stages1)
+        stage_metrics2 = _calculate_aggregated_stage_metrics(stages2)
+
+        # Calculate stage performance ratios
+        stage_comparison = {
+            "stage_count_ratio": stage_metrics2["total_stages"] / max(stage_metrics1["total_stages"], 1),
+            "duration_ratio": stage_metrics2["total_stage_duration"] / max(stage_metrics1["total_stage_duration"], 1),
+            "executor_runtime_ratio": stage_metrics2["total_executor_run_time"] / max(stage_metrics1["total_executor_run_time"], 1),
+            "memory_spill_ratio": stage_metrics2["total_memory_spilled"] / max(stage_metrics1["total_memory_spilled"], 1) if stage_metrics1["total_memory_spilled"] > 0 else 0,
+            "shuffle_read_ratio": stage_metrics2["total_shuffle_read_bytes"] / max(stage_metrics1["total_shuffle_read_bytes"], 1) if stage_metrics1["total_shuffle_read_bytes"] > 0 else 0,
+            "shuffle_write_ratio": stage_metrics2["total_shuffle_write_bytes"] / max(stage_metrics1["total_shuffle_write_bytes"], 1) if stage_metrics1["total_shuffle_write_bytes"] > 0 else 0,
+            "input_ratio": stage_metrics2["total_input_bytes"] / max(stage_metrics1["total_input_bytes"], 1) if stage_metrics1["total_input_bytes"] > 0 else 0,
+            "output_ratio": stage_metrics2["total_output_bytes"] / max(stage_metrics1["total_output_bytes"], 1) if stage_metrics1["total_output_bytes"] > 0 else 0,
+            "task_failure_ratio": stage_metrics2["total_failed_tasks"] / max(stage_metrics1["total_failed_tasks"], 1) if stage_metrics1["total_failed_tasks"] > 0 else 0,
+        }
+
+        # Data processing efficiency analysis
+        efficiency_analysis = {}
+
+        # Tasks per stage efficiency
+        if stage_metrics1["total_stages"] > 0:
+            efficiency_analysis["app1_avg_tasks_per_stage"] = stage_metrics1["total_tasks"] / stage_metrics1["total_stages"]
+        if stage_metrics2["total_stages"] > 0:
+            efficiency_analysis["app2_avg_tasks_per_stage"] = stage_metrics2["total_tasks"] / stage_metrics2["total_stages"]
+
+        # Data throughput analysis (bytes processed per second)
+        if stage_metrics1["total_stage_duration"] > 0:
+            efficiency_analysis["app1_input_throughput_bps"] = stage_metrics1["total_input_bytes"] / stage_metrics1["total_stage_duration"]
+            efficiency_analysis["app1_output_throughput_bps"] = stage_metrics1["total_output_bytes"] / stage_metrics1["total_stage_duration"]
+
+        if stage_metrics2["total_stage_duration"] > 0:
+            efficiency_analysis["app2_input_throughput_bps"] = stage_metrics2["total_input_bytes"] / stage_metrics2["total_stage_duration"]
+            efficiency_analysis["app2_output_throughput_bps"] = stage_metrics2["total_output_bytes"] / stage_metrics2["total_stage_duration"]
+
+        # Generate stage-specific recommendations
+        recommendations = []
+
+        # Stage complexity analysis
+        if stage_comparison["stage_count_ratio"] > 1.5:
+            recommendations.append({
+                "type": "stage_complexity",
+                "priority": "medium",
+                "issue": f"App2 has {stage_comparison['stage_count_ratio']:.1f}x more stages than App1",
+                "suggestion": "App2 has more complex execution plan - may indicate different algorithm or less optimized query planning"
+            })
+
+        # Performance analysis
+        if stage_comparison["duration_ratio"] > 1.5:
+            recommendations.append({
+                "type": "stage_performance",
+                "priority": "high",
+                "issue": f"App2 stages take {stage_comparison['duration_ratio']:.1f}x longer total time than App1",
+                "suggestion": "App2 experiencing stage-level performance issues - investigate resource allocation or data skew"
+            })
+
+        # Memory spill analysis
+        if stage_comparison["memory_spill_ratio"] > 2.0:
+            recommendations.append({
+                "type": "memory_pressure",
+                "priority": "high",
+                "issue": f"App2 has {stage_comparison['memory_spill_ratio']:.1f}x more memory spill than App1",
+                "suggestion": "App2 experiencing memory pressure - increase executor memory or optimize data structures"
+            })
+
+        # Shuffle efficiency analysis
+        if stage_comparison["shuffle_read_ratio"] > 2.0 or stage_comparison["shuffle_write_ratio"] > 2.0:
+            recommendations.append({
+                "type": "shuffle_efficiency",
+                "priority": "medium",
+                "issue": f"App2 has significantly more shuffle operations (read: {stage_comparison['shuffle_read_ratio']:.1f}x, write: {stage_comparison['shuffle_write_ratio']:.1f}x)",
+                "suggestion": "App2 may have data skew or inefficient partitioning - consider repartitioning strategies"
+            })
+
+        # Task failure analysis
+        if stage_comparison["task_failure_ratio"] > 2.0:
+            recommendations.append({
+                "type": "reliability",
+                "priority": "high",
+                "issue": f"App2 has {stage_comparison['task_failure_ratio']:.1f}x more task failures than App1",
+                "suggestion": "App2 experiencing reliability issues - investigate infrastructure or data quality problems"
+            })
+
+        # Throughput efficiency analysis
+        if (efficiency_analysis.get("app1_input_throughput_bps", 0) > 0 and
+            efficiency_analysis.get("app2_input_throughput_bps", 0) > 0):
+            throughput_ratio = efficiency_analysis["app2_input_throughput_bps"] / efficiency_analysis["app1_input_throughput_bps"]
+            if throughput_ratio < 0.5:
+                recommendations.append({
+                    "type": "throughput_efficiency",
+                    "priority": "medium",
+                    "issue": f"App2 has {throughput_ratio:.1f}x lower input processing throughput than App1",
+                    "suggestion": "App2's data processing efficiency is lower - check for I/O bottlenecks or resource constraints"
+                })
+
+        return {
+            "applications": {
+                "app1": {
+                    "id": app_id1,
+                    "stage_metrics": stage_metrics1
+                },
+                "app2": {
+                    "id": app_id2,
+                    "stage_metrics": stage_metrics2
+                }
+            },
+            "stage_comparison": stage_comparison,
+            "efficiency_analysis": efficiency_analysis,
+            "recommendations": recommendations
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to compare aggregated stage performance: {str(e)}",
+            "applications": {
+                "app1": {"id": app_id1},
+                "app2": {"id": app_id2}
+            }
+        }
 
 
 @mcp.tool()
