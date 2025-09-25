@@ -504,7 +504,7 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
 
 @mcp.tool()
 def compare_job_environments(
-    app_id1: str, app_id2: str, server: Optional[str] = None
+    app_id1: str, app_id2: str, server: Optional[str] = None, filter_auto_generated: bool = True
 ) -> Dict[str, Any]:
     """
     Compare Spark environment configurations between two jobs.
@@ -516,6 +516,7 @@ def compare_job_environments(
         app_id1: First Spark application ID
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
+        filter_auto_generated: Whether to filter out auto-generated configurations (default: True)
 
     Returns:
         Dictionary containing configuration differences and similarities
@@ -535,6 +536,46 @@ def compare_job_environments(
     system_props1 = props_to_dict(env1.system_properties)
     system_props2 = props_to_dict(env2.system_properties)
 
+    # Apply filtering to spark properties if requested
+    if filter_auto_generated:
+        common_props = {
+            k: {"app1": v, "app2": spark_props2.get(k)}
+            for k, v in spark_props1.items()
+            if (k in spark_props2 and v == spark_props2[k] and
+                not _is_auto_generated_config(k, str(v)))
+        }
+        different_props = {
+            k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
+            for k, v in spark_props1.items()
+            if (k in spark_props2 and v != spark_props2[k] and
+                not _is_auto_generated_config(k, str(v)))
+        }
+        app1_only_props = {
+            k: v for k, v in spark_props1.items()
+            if k not in spark_props2 and not _is_auto_generated_config(k, str(v))
+        }
+        app2_only_props = {
+            k: v for k, v in spark_props2.items()
+            if k not in spark_props1 and not _is_auto_generated_config(k, str(v))
+        }
+    else:
+        common_props = {
+            k: {"app1": v, "app2": spark_props2.get(k)}
+            for k, v in spark_props1.items()
+            if k in spark_props2 and v == spark_props2[k]
+        }
+        different_props = {
+            k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
+            for k, v in spark_props1.items()
+            if k in spark_props2 and v != spark_props2[k]
+        }
+        app1_only_props = {
+            k: v for k, v in spark_props1.items() if k not in spark_props2
+        }
+        app2_only_props = {
+            k: v for k, v in spark_props2.items() if k not in spark_props1
+        }
+
     comparison = {
         "applications": {"app1": app_id1, "app2": app_id2},
         "runtime_comparison": {
@@ -550,22 +591,11 @@ def compare_job_environments(
             },
         },
         "spark_properties": {
-            "common": {
-                k: {"app1": v, "app2": spark_props2.get(k)}
-                for k, v in spark_props1.items()
-                if k in spark_props2 and v == spark_props2[k]
-            },
-            "different": {
-                k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
-                for k, v in spark_props1.items()
-                if k in spark_props2 and v != spark_props2[k]
-            },
-            "only_in_app1": {
-                k: v for k, v in spark_props1.items() if k not in spark_props2
-            },
-            "only_in_app2": {
-                k: v for k, v in spark_props2.items() if k not in spark_props1
-            },
+            "common": common_props,
+            "different": different_props,
+            "only_in_app1": app1_only_props,
+            "only_in_app2": app2_only_props,
+            "filtered_auto_generated": filter_auto_generated
         },
         "system_properties": {
             "key_differences": {
@@ -2324,7 +2354,84 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
     return metrics
 
 
-def _compare_environments(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
+def _is_auto_generated_config(key: str, value: str) -> bool:
+    """
+    Determine if a Spark configuration key-value pair is auto-generated.
+
+    Args:
+        key: Configuration key (e.g., 'spark.app.id')
+        value: Configuration value
+
+    Returns:
+        True if the configuration appears to be auto-generated
+    """
+    import re
+
+    # App identifiers (except user-set app names without timestamps/UUIDs)
+    if key.startswith('spark.app.'):
+        if key == 'spark.app.name':
+            # Filter app names with timestamps, UUIDs, or other auto-generated patterns
+            timestamp_pattern = r'\d{4}-\d{2}-\d{2}|\d{13,}|\d{10}'
+            uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+            random_suffix = r'[_-]\d+$|[_-][0-9a-f]+$'
+
+            if (re.search(timestamp_pattern, value, re.IGNORECASE) or
+                re.search(uuid_pattern, value, re.IGNORECASE) or
+                re.search(random_suffix, value, re.IGNORECASE)):
+                return True
+        else:
+            # All other spark.app.* configs are typically auto-generated
+            return True
+
+    # Driver network configurations
+    network_configs = [
+        'spark.driver.host', 'spark.driver.bindAddress',
+        'spark.driver.blockManager.port', 'spark.ui.port',
+        'spark.blockManager.port'
+    ]
+    if key in network_configs:
+        return True
+
+    # Port configurations (any config ending with .port)
+    if key.endswith('.port'):
+        return True
+
+    # Session and execution identifiers
+    session_configs = [
+        'spark.sql.session.uuid', 'spark.sql.execution.id',
+        'spark.sql.streaming.queryId'
+    ]
+    if key in session_configs:
+        return True
+
+    # System-specific paths with machine identifiers
+    if any(key.endswith(pattern) for pattern in ['dir', 'path', 'home']) and value:
+        # Check for machine-specific patterns in paths
+        machine_patterns = [
+            r'/tmp/.*/\d+', r'/var/folders/.*', r'C:\\Users\\.*\\AppData',
+            r'/home/[^/]+/', r'/Users/[^/]+/'
+        ]
+        if any(re.search(pattern, value) for pattern in machine_patterns):
+            return True
+
+    # Values containing timestamps, UUIDs, or long numeric identifiers
+    if value:
+        # Timestamp patterns (epoch, ISO dates, etc.)
+        if re.search(r'\d{13,}|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}', value):
+            return True
+
+        # UUID patterns
+        if re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value, re.IGNORECASE):
+            return True
+
+        # Long random identifiers (more than 8 consecutive alphanumeric chars)
+        if re.search(r'[0-9a-f]{12,}', value, re.IGNORECASE):
+            return True
+
+    return False
+
+
+def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_generated: bool = True) -> Dict[str, Any]:
     """
     Compare Spark environment configurations between two applications.
     Extracted from compare_job_environments with performance impact analysis added.
@@ -2379,20 +2486,42 @@ def _compare_environments(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
                     "severity": impact["severity"]
                 })
 
+    # Apply filtering to spark properties if requested
+    if filter_auto_generated:
+        different_props = {
+            k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
+            for k, v in spark_props1.items()
+            if (k in spark_props2 and v != spark_props2[k] and
+                not _is_auto_generated_config(k, str(v)))
+        }
+        app1_only_props = {
+            k: v for k, v in spark_props1.items()
+            if k not in spark_props2 and not _is_auto_generated_config(k, str(v))
+        }
+        app2_only_props = {
+            k: v for k, v in spark_props2.items()
+            if k not in spark_props1 and not _is_auto_generated_config(k, str(v))
+        }
+    else:
+        different_props = {
+            k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
+            for k, v in spark_props1.items()
+            if k in spark_props2 and v != spark_props2[k]
+        }
+        app1_only_props = {
+            k: v for k, v in spark_props1.items() if k not in spark_props2
+        }
+        app2_only_props = {
+            k: v for k, v in spark_props2.items() if k not in spark_props1
+        }
+
     return {
         "spark_properties": {
-            "different": {
-                k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
-                for k, v in spark_props1.items()
-                if k in spark_props2 and v != spark_props2[k]
-            },
-            "app1_only": {
-                k: v for k, v in spark_props1.items() if k not in spark_props2
-            },
-            "app2_only": {
-                k: v for k, v in spark_props2.items() if k not in spark_props1
-            },
-            "performance_impact_analysis": performance_impact_analysis
+            "different": different_props,
+            "app1_only": app1_only_props,
+            "app2_only": app2_only_props,
+            "performance_impact_analysis": performance_impact_analysis,
+            "filtered_auto_generated": filter_auto_generated
         },
         "runtime_environment": {
             "app1": {
@@ -3681,7 +3810,8 @@ def compare_app_performance(
     server: Optional[str] = None,
     top_n: int = 3,
     similarity_threshold: float = 0.6,
-    include_raw_data: bool = False
+    include_raw_data: bool = False,
+    filter_auto_generated: bool = True
 ) -> Dict[str, Any]:
     """
     Comprehensive performance comparison between two Spark applications.
@@ -3700,6 +3830,7 @@ def compare_app_performance(
         top_n: Number of top stage differences to return for detailed analysis (default: 3)
         similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
         include_raw_data: Include full raw metrics in output for debugging (default: False)
+        filter_auto_generated: Whether to filter out auto-generated configurations (default: True)
 
     Returns:
         Dictionary containing:
@@ -3976,7 +4107,7 @@ def compare_app_performance(
         })
 
     # Environment and configuration comparison
-    environment_comparison = _compare_environments(client, app_id1, app_id2)
+    environment_comparison = _compare_environments(client, app_id1, app_id2, filter_auto_generated)
 
     # SQL execution plans comparison
     sql_plans_comparison = _compare_sql_execution_plans(client, app_id1, app_id2)
