@@ -3653,7 +3653,8 @@ def compare_app_performance(
     app_id2: str,
     server: Optional[str] = None,
     top_n: int = 3,
-    similarity_threshold: float = 0.6
+    similarity_threshold: float = 0.6,
+    include_raw_data: bool = False
 ) -> Dict[str, Any]:
     """
     Comprehensive performance comparison between two Spark applications.
@@ -3671,12 +3672,16 @@ def compare_app_performance(
         server: Optional server name to use (uses default if not specified)
         top_n: Number of top stage differences to return for detailed analysis (default: 3)
         similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
+        include_raw_data: Include full raw metrics in output for debugging (default: False)
 
     Returns:
         Dictionary containing:
         - aggregated_overview: Application-level resource, job, executor, and stage metrics
         - stage_deep_dive: Top N stages with most time difference and detailed comparisons
         - recommendations: Enhanced recommendations covering both application and stage levels
+
+        When include_raw_data=False (default): Streamlined output with processed comparisons only
+        When include_raw_data=True: Includes additional raw metrics for detailed investigation
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -3698,82 +3703,33 @@ def compare_app_performance(
         }
 
     # PHASE 1: AGGREGATED APPLICATION OVERVIEW
-    # Get executor summaries (from compare_job_performance logic)
-    exec_summary1 = get_executor_summary(app_id1, server)
-    exec_summary2 = get_executor_summary(app_id2, server)
+    # Use specialized comparison tools for aggregated overview
+    try:
+        resource_comparison = compare_app_resources(app_id1, app_id2, server)
+    except Exception as e:
+        resource_comparison = {"error": f"Failed to get resource comparison: {str(e)}"}
 
-    # Get job data (from compare_job_performance logic)
-    jobs1 = client.list_jobs(app_id=app_id1)
-    jobs2 = client.list_jobs(app_id=app_id2)
+    try:
+        executor_comparison = compare_app_executors(app_id1, app_id2, server)
+    except Exception as e:
+        executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
 
-    # Calculate job statistics
-    job_stats1 = _calculate_job_stats(jobs1)
-    job_stats2 = _calculate_job_stats(jobs2)
+    try:
+        job_comparison = compare_app_jobs(app_id1, app_id2, server)
+    except Exception as e:
+        job_comparison = {"error": f"Failed to get job comparison: {str(e)}"}
 
-    # Calculate aggregated stage metrics
-    stage_metrics1 = _calculate_aggregated_stage_metrics(stages1)
-    stage_metrics2 = _calculate_aggregated_stage_metrics(stages2)
+    try:
+        stage_comparison = compare_app_stages_aggregated(app_id1, app_id2, server)
+    except Exception as e:
+        stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
 
-    # Create aggregated overview section
+    # Create streamlined aggregated overview using specialized tools
     aggregated_overview = {
-        "resource_allocation": {
-            "app1": {
-                "cores_granted": app1.cores_granted,
-                "max_cores": app1.max_cores,
-                "cores_per_executor": app1.cores_per_executor,
-                "memory_per_executor_mb": app1.memory_per_executor_mb,
-            },
-            "app2": {
-                "cores_granted": app2.cores_granted,
-                "max_cores": app2.max_cores,
-                "cores_per_executor": app2.cores_per_executor,
-                "memory_per_executor_mb": app2.memory_per_executor_mb,
-            },
-        },
-        "executor_metrics": {
-            "app1": exec_summary1,
-            "app2": exec_summary2,
-            "comparison": {
-                "executor_count_ratio": exec_summary2["total_executors"]
-                / max(exec_summary1["total_executors"], 1),
-                "memory_usage_ratio": exec_summary2["memory_used"]
-                / max(exec_summary1["memory_used"], 1),
-                "task_completion_ratio": exec_summary2["completed_tasks"]
-                / max(exec_summary1["completed_tasks"], 1),
-                "gc_time_ratio": exec_summary2["total_gc_time"]
-                / max(exec_summary1["total_gc_time"], 1),
-            },
-        },
-        "job_performance": {
-            "app1": job_stats1,
-            "app2": job_stats2,
-            "comparison": {
-                "job_count_ratio": job_stats2["count"] / max(job_stats1["count"], 1),
-                "avg_duration_ratio": job_stats2["avg_duration"]
-                / max(job_stats1["avg_duration"], 1)
-                if job_stats1["avg_duration"] > 0
-                else 0,
-                "total_duration_ratio": job_stats2["total_duration"]
-                / max(job_stats1["total_duration"], 1)
-                if job_stats1["total_duration"] > 0
-                else 0,
-            },
-        },
-        "stage_metrics": {
-            "app1": stage_metrics1,
-            "app2": stage_metrics2,
-            "comparison": {
-                "stage_count_ratio": stage_metrics2["total_stages"] / max(stage_metrics1["total_stages"], 1),
-                "duration_ratio": stage_metrics2["total_stage_duration"] / max(stage_metrics1["total_stage_duration"], 1),
-                "executor_runtime_ratio": stage_metrics2["total_executor_run_time"] / max(stage_metrics1["total_executor_run_time"], 1),
-                "memory_spill_ratio": stage_metrics2["total_memory_spilled"] / max(stage_metrics1["total_memory_spilled"], 1),
-                "shuffle_read_ratio": stage_metrics2["total_shuffle_read_bytes"] / max(stage_metrics1["total_shuffle_read_bytes"], 1),
-                "shuffle_write_ratio": stage_metrics2["total_shuffle_write_bytes"] / max(stage_metrics1["total_shuffle_write_bytes"], 1),
-                "input_ratio": stage_metrics2["total_input_bytes"] / max(stage_metrics1["total_input_bytes"], 1),
-                "output_ratio": stage_metrics2["total_output_bytes"] / max(stage_metrics1["total_output_bytes"], 1),
-                "task_failure_ratio": stage_metrics2["total_failed_tasks"] / max(stage_metrics1["total_failed_tasks"], 1) if stage_metrics1["total_failed_tasks"] > 0 else 0,
-            }
-        }
+        "resource_comparison": resource_comparison,
+        "executor_comparison": executor_comparison,
+        "job_comparison": job_comparison,
+        "stage_comparison": stage_comparison
     }
 
     # Find matching stages between applications
@@ -3872,38 +3828,21 @@ def compare_app_performance(
         executor_summary1 = get_executor_summary_for_stage(stage1, app_id1)
         executor_summary2 = get_executor_summary_for_stage(stage2, app_id2)
 
+        # Build stage comparison with optional raw data
         stage_comparison = {
             "stage_name": stage1.name,
             "similarity_score": diff["similarity"],
             "app1_stage": {
                 "stage_id": stage1.stage_id,
-                "attempt_id": stage1.attempt_id,
+                "name": stage1.name,
                 "status": stage1.status,
-                "duration_seconds": diff["duration1"],
-                "num_tasks": stage1.num_tasks,
-                "num_failed_tasks": stage1.num_failed_tasks,
-                "executor_run_time_ms": stage1.executor_run_time,
-                "memory_spilled_bytes": stage1.memory_bytes_spilled,
-                "disk_spilled_bytes": stage1.disk_bytes_spilled,
-                "shuffle_read_bytes": stage1.shuffle_read_bytes,
-                "shuffle_write_bytes": stage1.shuffle_write_bytes,
-                "input_bytes": stage1.input_bytes,
-                "output_bytes": stage1.output_bytes
+                "duration_seconds": diff["duration1"]
             },
             "app2_stage": {
                 "stage_id": stage2.stage_id,
-                "attempt_id": stage2.attempt_id,
+                "name": stage2.name,
                 "status": stage2.status,
-                "duration_seconds": diff["duration2"],
-                "num_tasks": stage2.num_tasks,
-                "num_failed_tasks": stage2.num_failed_tasks,
-                "executor_run_time_ms": stage2.executor_run_time,
-                "memory_spilled_bytes": stage2.memory_bytes_spilled,
-                "disk_spilled_bytes": stage2.disk_bytes_spilled,
-                "shuffle_read_bytes": stage2.shuffle_read_bytes,
-                "shuffle_write_bytes": stage2.shuffle_write_bytes,
-                "input_bytes": stage2.input_bytes,
-                "output_bytes": stage2.output_bytes
+                "duration_seconds": diff["duration2"]
             },
             "time_difference": {
                 "absolute_seconds": diff["time_difference_seconds"],
@@ -3915,6 +3854,33 @@ def compare_app_performance(
                 executor_summary1, executor_summary2
             )
         }
+
+        # Conditionally add raw data for debugging/investigation
+        if include_raw_data:
+            stage_comparison["raw_data"] = {
+                "app1_stage_metrics": {
+                    "num_tasks": stage1.num_tasks,
+                    "num_failed_tasks": stage1.num_failed_tasks,
+                    "executor_run_time_ms": stage1.executor_run_time,
+                    "memory_spilled_bytes": stage1.memory_bytes_spilled,
+                    "disk_spilled_bytes": stage1.disk_bytes_spilled,
+                    "shuffle_read_bytes": stage1.shuffle_read_bytes,
+                    "shuffle_write_bytes": stage1.shuffle_write_bytes,
+                    "input_bytes": stage1.input_bytes,
+                    "output_bytes": stage1.output_bytes
+                },
+                "app2_stage_metrics": {
+                    "num_tasks": stage2.num_tasks,
+                    "num_failed_tasks": stage2.num_failed_tasks,
+                    "executor_run_time_ms": stage2.executor_run_time,
+                    "memory_spilled_bytes": stage2.memory_bytes_spilled,
+                    "disk_spilled_bytes": stage2.disk_bytes_spilled,
+                    "shuffle_read_bytes": stage2.shuffle_read_bytes,
+                    "shuffle_write_bytes": stage2.shuffle_write_bytes,
+                    "input_bytes": stage2.input_bytes,
+                    "output_bytes": stage2.output_bytes
+                }
+            }
 
         detailed_comparisons.append(stage_comparison)
 
@@ -3951,43 +3917,30 @@ def compare_app_performance(
                 "suggestion": "Review memory allocation settings between applications"
             })
 
-    # Executor efficiency comparison
-    exec_comparison = aggregated_overview["executor_metrics"]["comparison"]
-    if exec_comparison["gc_time_ratio"] > 2.0:
-        recommendations.append({
-            "type": "gc_performance",
-            "priority": "high",
-            "issue": f"App2 has {exec_comparison['gc_time_ratio']:.1f}x more GC time than App1",
-            "suggestion": "Investigate memory pressure and GC settings in App2"
-        })
+    # Extract recommendations from specialized comparison tools
+    # Executor efficiency recommendations
+    if (aggregated_overview["executor_comparison"] and
+        isinstance(aggregated_overview["executor_comparison"], dict) and
+        "recommendations" in aggregated_overview["executor_comparison"]):
+        recommendations.extend(aggregated_overview["executor_comparison"]["recommendations"])
 
-    # Job performance differences
-    job_comparison = aggregated_overview["job_performance"]["comparison"]
-    if job_comparison["avg_duration_ratio"] > 2.0:
-        recommendations.append({
-            "type": "job_performance",
-            "priority": "high",
-            "issue": f"App2 jobs are {job_comparison['avg_duration_ratio']:.1f}x slower on average",
-            "suggestion": "Review job execution patterns and resource utilization in App2"
-        })
+    # Job performance recommendations
+    if (aggregated_overview["job_comparison"] and
+        isinstance(aggregated_overview["job_comparison"], dict) and
+        "recommendations" in aggregated_overview["job_comparison"]):
+        recommendations.extend(aggregated_overview["job_comparison"]["recommendations"])
 
-    # Stage-level aggregated insights
-    stage_comparison = aggregated_overview["stage_metrics"]["comparison"]
-    if stage_comparison["memory_spill_ratio"] > 2.0:
-        recommendations.append({
-            "type": "memory_efficiency",
-            "priority": "high",
-            "issue": f"App2 has {stage_comparison['memory_spill_ratio']:.1f}x more memory spill than App1",
-            "suggestion": "Consider increasing executor memory or optimizing data structures in App2"
-        })
+    # Stage-level aggregated recommendations
+    if (aggregated_overview["stage_comparison"] and
+        isinstance(aggregated_overview["stage_comparison"], dict) and
+        "recommendations" in aggregated_overview["stage_comparison"]):
+        recommendations.extend(aggregated_overview["stage_comparison"]["recommendations"])
 
-    if stage_comparison["task_failure_ratio"] > 1.5:
-        recommendations.append({
-            "type": "reliability",
-            "priority": "high",
-            "issue": f"App2 has {stage_comparison['task_failure_ratio']:.1f}x more task failures",
-            "suggestion": "Investigate task failure causes - check logs for OOM errors, network issues, or data corruption"
-        })
+    # Resource allocation recommendations
+    if (aggregated_overview["resource_comparison"] and
+        isinstance(aggregated_overview["resource_comparison"], dict) and
+        "recommendations" in aggregated_overview["resource_comparison"]):
+        recommendations.extend(aggregated_overview["resource_comparison"]["recommendations"])
 
     # STAGE-LEVEL RECOMMENDATIONS (existing logic)
     # Check for stages with large time differences
