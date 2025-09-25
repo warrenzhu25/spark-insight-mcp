@@ -15,6 +15,7 @@ from spark_history_mcp.models.spark_types import (
 )
 from spark_history_mcp.tools.tools import (
     _analyze_executor_performance_patterns,
+    _build_dependencies_from_dag_data,
     analyze_auto_scaling,
     analyze_executor_utilization,
     analyze_failed_tasks,
@@ -3050,3 +3051,257 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertIn("error", result)
         self.assertIn("Failed to analyze stage dependencies", result["error"])
         self.assertEqual(result["execution_id"], 1)
+
+    def test_build_dependencies_from_dag_data_empty_input(self):
+        """Test DAG dependency building with empty input"""
+        # Empty dict
+        result = _build_dependencies_from_dag_data({})
+        self.assertEqual(result, {})
+
+        # None input
+        result = _build_dependencies_from_dag_data(None)
+        self.assertEqual(result, {})
+
+        # Invalid input type
+        result = _build_dependencies_from_dag_data("invalid")
+        self.assertEqual(result, {})
+
+    def test_build_dependencies_from_dag_data_with_stage_references(self):
+        """Test DAG dependency building with stage task references"""
+        dag_data = {
+            'stage_task_references': [
+                {'stage_id': 1, 'attempt_id': 0, 'task_id': 1},
+                {'stage_id': 2, 'attempt_id': 0, 'task_id': 2}
+            ],
+            'dagVizData': {
+                'nodes': [
+                    {'id': 0, 'name': 'scan'},
+                    {'id': 1, 'name': 'filter'}
+                ],
+                'edges': [
+                    {'fromId': 0, 'toId': 1}
+                ]
+            }
+        }
+
+        result = _build_dependencies_from_dag_data(dag_data)
+
+        # Should have dependencies based on the edges
+        self.assertIn(2, result)  # Stage 2 should have dependencies
+        self.assertEqual(len(result[2]['parents']), 1)
+        self.assertEqual(result[2]['parents'][0]['stage_id'], 1)
+        self.assertEqual(result[2]['parents'][0]['relationship_type'], 'dag_based')
+
+    def test_build_dependencies_from_dag_data_malformed_data(self):
+        """Test DAG dependency building with malformed data"""
+        # Missing edges
+        dag_data = {
+            'dagVizData': {
+                'nodes': [{'id': 0, 'name': 'scan'}]
+                # No edges
+            }
+        }
+        result = _build_dependencies_from_dag_data(dag_data)
+        self.assertEqual(result, {})
+
+        # Non-list nodes/edges
+        dag_data = {
+            'dagVizData': {
+                'nodes': "invalid",
+                'edges': "invalid"
+            }
+        }
+        result = _build_dependencies_from_dag_data(dag_data)
+        self.assertEqual(result, {})
+
+    def test_build_dependencies_from_dag_data_node_name_extraction(self):
+        """Test stage ID extraction from node names"""
+        dag_data = {
+            'dagVizData': {
+                'nodes': [
+                    {'id': 0, 'name': 'Stage 1 - Scan'},
+                    {'id': 1, 'name': 'Stage 2 - Filter'}
+                ],
+                'edges': [
+                    {'fromId': 0, 'toId': 1}
+                ]
+            }
+        }
+
+        result = _build_dependencies_from_dag_data(dag_data)
+
+        # Should extract stage IDs from node names and build dependencies
+        self.assertIn(2, result)
+        self.assertEqual(len(result[2]['parents']), 1)
+        self.assertEqual(result[2]['parents'][0]['stage_id'], 1)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_html_parsing_success(self, mock_get_client):
+        """Test stage dependency analysis with successful HTML parsing"""
+        mock_get_client.return_value = self.mock_client
+
+        # Mock execution data
+        mock_execution = MagicMock()
+        mock_execution.id = 1
+        mock_execution.description = "Test SQL Query"
+        mock_execution.status = "COMPLETED"
+        mock_execution.success_job_ids = [1]
+        mock_execution.running_job_ids = []
+        mock_execution.failed_job_ids = []
+
+        self.mock_client.get_sql_execution.return_value = mock_execution
+
+        # Mock HTML parsing methods
+        self.mock_client.get_sql_execution_html = MagicMock()
+        self.mock_client.extract_dag_data_from_html = MagicMock()
+
+        # Mock HTML content and parsed DAG data
+        html_content = "<html>mock content</html>"
+        dag_data = {
+            'stage_task_references': [
+                {'stage_id': 1, 'attempt_id': 0, 'task_id': 1},
+                {'stage_id': 2, 'attempt_id': 0, 'task_id': 2}
+            ],
+            'dagVizData': {
+                'nodes': [{'id': 0}, {'id': 1}],
+                'edges': [{'fromId': 0, 'toId': 1}]
+            }
+        }
+
+        self.mock_client.get_sql_execution_html.return_value = html_content
+        self.mock_client.extract_dag_data_from_html.return_value = dag_data
+
+        # Mock other required data
+        job1 = MagicMock(spec=JobData)
+        job1.job_id = 1
+        job1.stage_ids = [1, 2]
+        job1.name = "Test Job"
+        job1.status = "SUCCEEDED"
+        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        job1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        stage1 = MagicMock(spec=StageData)
+        stage1.stage_id = 1
+        stage1.name = "Stage 1"
+        stage1.status = "COMPLETE"
+        stage1.attempt_id = 0
+        stage1.num_tasks = 10
+        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        stage1.completion_time = datetime(2024, 1, 1, 10, 0, 30)
+
+        stage2 = MagicMock(spec=StageData)
+        stage2.stage_id = 2
+        stage2.name = "Stage 2"
+        stage2.status = "COMPLETE"
+        stage2.attempt_id = 0
+        stage2.num_tasks = 8
+        stage2.submission_time = datetime(2024, 1, 1, 10, 0, 30)
+        stage2.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        self.mock_client.list_jobs.return_value = [job1]
+        self.mock_client.list_stages.return_value = [stage1, stage2]
+
+        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
+
+        # Should use DAG-based analysis
+        self.assertEqual(result["analysis_metadata"]["dependency_inference"], "dag_based")
+        self.assertTrue(result["analysis_metadata"]["html_dag_available"])
+        self.assertTrue(result["analysis_metadata"]["dag_parsing_successful"])
+
+        # Verify HTML methods were called
+        self.mock_client.get_sql_execution_html.assert_called_once_with("app-123", 1)
+        self.mock_client.extract_dag_data_from_html.assert_called_once_with(html_content)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_html_parsing_failure(self, mock_get_client):
+        """Test stage dependency analysis with HTML parsing failure"""
+        mock_get_client.return_value = self.mock_client
+
+        # Mock execution data
+        mock_execution = MagicMock()
+        mock_execution.id = 1
+        mock_execution.description = "Test SQL Query"
+        mock_execution.status = "COMPLETED"
+        mock_execution.success_job_ids = [1]
+        mock_execution.running_job_ids = []
+        mock_execution.failed_job_ids = []
+
+        self.mock_client.get_sql_execution.return_value = mock_execution
+
+        # Mock HTML parsing methods with failure
+        self.mock_client.get_sql_execution_html = MagicMock()
+        self.mock_client.get_sql_execution_html.side_effect = Exception("HTML fetch failed")
+
+        # Mock fallback data
+        job1 = MagicMock(spec=JobData)
+        job1.job_id = 1
+        job1.stage_ids = [1]
+        job1.name = "Test Job"
+        job1.status = "SUCCEEDED"
+        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        job1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        stage1 = MagicMock(spec=StageData)
+        stage1.stage_id = 1
+        stage1.name = "Stage 1"
+        stage1.status = "COMPLETE"
+        stage1.attempt_id = 0
+        stage1.num_tasks = 10
+        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        stage1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        self.mock_client.list_jobs.return_value = [job1]
+        self.mock_client.list_stages.return_value = [stage1]
+
+        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
+
+        # Should fall back to timing-based analysis
+        self.assertEqual(result["analysis_metadata"]["dependency_inference"], "timing_based_html_failed")
+        self.assertFalse(result["analysis_metadata"]["dag_parsing_successful"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_no_html_support(self, mock_get_client):
+        """Test stage dependency analysis when client doesn't support HTML methods"""
+        mock_get_client.return_value = self.mock_client
+
+        # Mock execution data
+        mock_execution = MagicMock()
+        mock_execution.id = 1
+        mock_execution.description = "Test SQL Query"
+        mock_execution.status = "COMPLETED"
+        mock_execution.success_job_ids = [1]
+        mock_execution.running_job_ids = []
+        mock_execution.failed_job_ids = []
+
+        self.mock_client.get_sql_execution.return_value = mock_execution
+
+        # Don't add HTML methods to client (simulating older client)
+        # self.mock_client doesn't have get_sql_execution_html by default
+
+        # Mock fallback data
+        job1 = MagicMock(spec=JobData)
+        job1.job_id = 1
+        job1.stage_ids = [1]
+        job1.name = "Test Job"
+        job1.status = "SUCCEEDED"
+        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        job1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        stage1 = MagicMock(spec=StageData)
+        stage1.stage_id = 1
+        stage1.name = "Stage 1"
+        stage1.status = "COMPLETE"
+        stage1.attempt_id = 0
+        stage1.num_tasks = 10
+        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        stage1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        self.mock_client.list_jobs.return_value = [job1]
+        self.mock_client.list_stages.return_value = [stage1]
+
+        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
+
+        # Should use timing-based analysis without HTML support
+        self.assertEqual(result["analysis_metadata"]["dependency_inference"], "timing_based_no_html_support")
+        self.assertFalse(result["analysis_metadata"]["html_dag_available"])
+        self.assertFalse(result["analysis_metadata"]["dag_parsing_successful"])

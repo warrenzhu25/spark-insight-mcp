@@ -804,7 +804,7 @@ def compare_sql_execution_plans(
     nodes1 = analyze_nodes(exec1)
     nodes2 = analyze_nodes(exec2)
 
-    all_node_types = set(nodes1.keys()) | set(nodes2.keys())
+    all_node_types = set(nodes1.keys()).union(set(nodes2.keys()))
 
     comparison = {
         "applications": {"app1": app_id1, "app2": app_id2},
@@ -1006,6 +1006,124 @@ def list_slowest_sql_queries(
     return simplified_results
 
 
+def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build stage dependencies from DAG visualization data extracted from HTML.
+
+    Args:
+        dag_data: Dictionary containing parsed DAG data from HTML
+
+    Returns:
+        Dictionary containing stage dependencies or empty dict if parsing fails
+    """
+    if not dag_data or not isinstance(dag_data, dict):
+        return {}
+
+    try:
+        dependencies = {}
+
+        # Extract stage references from various data sources
+        stage_references = dag_data.get('stage_task_references', [])
+        if not isinstance(stage_references, list):
+            stage_references = []
+
+        # Process DAG visualization data if available
+        if 'dagVizData' in dag_data:
+            dag_viz = dag_data['dagVizData']
+
+            # Look for stage information in DAG nodes
+            if isinstance(dag_viz, dict) and 'nodes' in dag_viz and 'edges' in dag_viz:
+                nodes = dag_viz.get('nodes', [])
+                edges = dag_viz.get('edges', [])
+
+                if not isinstance(nodes, list) or not isinstance(edges, list):
+                    return {}
+
+                # Build node-to-stage mapping from stage references
+                node_to_stage = {}
+                for i, ref in enumerate(stage_references):
+                    if isinstance(ref, dict) and 'stage_id' in ref:
+                        stage_id = ref.get('stage_id')
+                        if isinstance(stage_id, int):
+                            node_to_stage[i] = stage_id
+
+                # If no stage references found, try to extract from nodes directly
+                if not node_to_stage and nodes:
+                    # Look for stage information in node names or metadata
+                    for i, node in enumerate(nodes):
+                        if isinstance(node, dict):
+                            node_name = node.get('name', node.get('nodeName', ''))
+                            if isinstance(node_name, str) and 'stage' in node_name.lower():
+                                # Try to extract stage ID from node name
+                                import re
+                                stage_match = re.search(r'stage\s*(\d+)', node_name, re.IGNORECASE)
+                                if stage_match:
+                                    stage_id = int(stage_match.group(1))
+                                    node_to_stage[i] = stage_id
+
+                # Build dependencies from edges and stage mappings
+                stage_to_parents = {}
+                stage_to_children = {}
+
+                for edge in edges:
+                    if not isinstance(edge, dict):
+                        continue
+
+                    # Handle different edge formats
+                    from_node = edge.get('from', edge.get('fromId', edge.get('source')))
+                    to_node = edge.get('to', edge.get('toId', edge.get('target')))
+
+                    if from_node is None or to_node is None:
+                        continue
+
+                    from_stage = node_to_stage.get(from_node)
+                    to_stage = node_to_stage.get(to_node)
+
+                    if (from_stage is not None and to_stage is not None and
+                        isinstance(from_stage, int) and isinstance(to_stage, int) and
+                        from_stage != to_stage):
+
+                        # Add parent relationship
+                        if to_stage not in stage_to_parents:
+                            stage_to_parents[to_stage] = []
+                        if from_stage not in stage_to_parents[to_stage]:
+                            stage_to_parents[to_stage].append(from_stage)
+
+                        # Add child relationship
+                        if from_stage not in stage_to_children:
+                            stage_to_children[from_stage] = []
+                        if to_stage not in stage_to_children[from_stage]:
+                            stage_to_children[from_stage].append(to_stage)
+
+                # Build final dependency structure
+                all_stages = set(stage_to_parents.keys()).union(set(stage_to_children.keys()))
+                for stage_id in all_stages:
+                    dependencies[stage_id] = {
+                        "parents": [{"stage_id": p, "relationship_type": "dag_based"}
+                                  for p in sorted(stage_to_parents.get(stage_id, []))],
+                        "children": [{"stage_id": c, "relationship_type": "dag_based"}
+                                   for c in sorted(stage_to_children.get(stage_id, []))],
+                        "stage_info": {"stage_id": stage_id}
+                    }
+
+        # Also try to extract from timeline data if available (future enhancement)
+        if 'timelineData' in dag_data and not dependencies:
+            timeline_data = dag_data['timelineData']
+            if isinstance(timeline_data, list):
+                # Process timeline data for stage relationships
+                # This would need specific implementation based on timeline structure
+                pass
+
+        return dependencies
+
+    except (TypeError, ValueError, KeyError, AttributeError) as e:
+        # Return empty dependencies on parsing error
+        return {}
+    except Exception as e:
+        # Catch any other unexpected errors
+        return {}
+
+
 @mcp.tool()
 def get_stage_dependency_from_sql_plan(
     app_id: str,
@@ -1053,6 +1171,35 @@ def get_stage_dependency_from_sql_plan(
             execution_id = execution.id
         else:
             execution = client.get_sql_execution(app_id, execution_id, details=True, plan_description=True)
+
+        # Try to get enhanced stage dependency data from HTML DAG visualization
+        html_dag_data = None
+        dag_based_dependencies = {}
+        analysis_method = "timing_based"
+
+        try:
+            # Attempt to fetch HTML page with DAG data
+            if hasattr(client, 'get_sql_execution_html') and hasattr(client, 'extract_dag_data_from_html'):
+                html_content = client.get_sql_execution_html(app_id, execution_id)
+                html_dag_data = client.extract_dag_data_from_html(html_content)
+
+                if html_dag_data and not html_dag_data.get('parsing_error'):
+                    # Try to build dependencies from DAG data
+                    dag_based_dependencies = _build_dependencies_from_dag_data(html_dag_data)
+                    if dag_based_dependencies:
+                        analysis_method = "dag_based"
+                else:
+                    # HTML data exists but has parsing errors
+                    if html_dag_data and html_dag_data.get('parsing_error'):
+                        analysis_method = "timing_based_with_html_error"
+            else:
+                # Client doesn't have HTML methods, use timing-based only
+                analysis_method = "timing_based_no_html_support"
+
+        except Exception as dag_error:
+            # HTML parsing failed, continue with timing-based approach
+            html_dag_data = {"parsing_error": str(dag_error)}
+            analysis_method = "timing_based_html_failed"
 
         # Get all job IDs from the execution
         all_job_ids: set[int] = set()
@@ -1135,46 +1282,78 @@ def get_stage_dependency_from_sql_plan(
             for stage in timeline_stages
         ]
 
-        # Infer dependencies based on timing and job relationships
-        for i, stage in enumerate(timeline_stages):
-            stage_id = stage.stage_id
-            stage_dependencies[stage_id] = {
-                "parents": [],
-                "children": [],
-                "stage_info": stage_info.get(stage_id, {})
-            }
+        # Use DAG-based dependencies if available, otherwise fall back to timing-based inference
+        if dag_based_dependencies:
+            # Merge DAG-based dependencies with stage info
+            stage_dependencies = {}
+            for stage_id, dag_dep in dag_based_dependencies.items():
+                stage_dependencies[stage_id] = {
+                    "parents": dag_dep.get("parents", []),
+                    "children": dag_dep.get("children", []),
+                    "stage_info": stage_info.get(stage_id, dag_dep.get("stage_info", {}))
+                }
 
-            # Find potential parent stages (completed before this stage started)
-            for j in range(i):
-                prev_stage = timeline_stages[j]
-                if (prev_stage.completion_time and
-                    prev_stage.completion_time <= stage.submission_time):
+                # Enhance parent/child info with stage names if available
+                for parent in stage_dependencies[stage_id]["parents"]:
+                    parent_id = parent["stage_id"]
+                    if parent_id in stage_info:
+                        parent["stage_name"] = stage_info[parent_id].get("stage_name", f"Stage {parent_id}")
 
-                    # Check if they're in related jobs (more likely to be dependencies)
-                    prev_jobs = set(job["job_id"] for job in stage_job_mapping.get(prev_stage.stage_id, []))
-                    curr_jobs = set(job["job_id"] for job in stage_job_mapping.get(stage_id, []))
+                for child in stage_dependencies[stage_id]["children"]:
+                    child_id = child["stage_id"]
+                    if child_id in stage_info:
+                        child["stage_name"] = stage_info[child_id].get("stage_name", f"Stage {child_id}")
 
-                    # If they share jobs or are sequential, likely dependency
-                    if prev_jobs.intersection(curr_jobs) or abs(j - i) <= 2:
-                        stage_dependencies[stage_id]["parents"].append({
-                            "stage_id": prev_stage.stage_id,
-                            "stage_name": prev_stage.name,
-                            "relationship_type": "timing_based"
-                        })
+            # Ensure all relevant stages are included
+            for stage in relevant_stages:
+                if stage.stage_id not in stage_dependencies:
+                    stage_dependencies[stage.stage_id] = {
+                        "parents": [],
+                        "children": [],
+                        "stage_info": stage_info.get(stage.stage_id, {})
+                    }
 
-                        # Add child relationship to parent
-                        if prev_stage.stage_id not in stage_dependencies:
-                            stage_dependencies[prev_stage.stage_id] = {
-                                "parents": [],
-                                "children": [],
-                                "stage_info": stage_info.get(prev_stage.stage_id, {})
-                            }
+        else:
+            # Infer dependencies based on timing and job relationships (fallback)
+            for i, stage in enumerate(timeline_stages):
+                stage_id = stage.stage_id
+                stage_dependencies[stage_id] = {
+                    "parents": [],
+                    "children": [],
+                    "stage_info": stage_info.get(stage_id, {})
+                }
 
-                        stage_dependencies[prev_stage.stage_id]["children"].append({
-                            "stage_id": stage_id,
-                            "stage_name": stage.name,
-                            "relationship_type": "timing_based"
-                        })
+                # Find potential parent stages (completed before this stage started)
+                for j in range(i):
+                    prev_stage = timeline_stages[j]
+                    if (prev_stage.completion_time and
+                        prev_stage.completion_time <= stage.submission_time):
+
+                        # Check if they're in related jobs (more likely to be dependencies)
+                        prev_jobs = set(job["job_id"] for job in stage_job_mapping.get(prev_stage.stage_id, []))
+                        curr_jobs = set(job["job_id"] for job in stage_job_mapping.get(stage_id, []))
+
+                        # If they share jobs or are sequential, likely dependency
+                        if prev_jobs.intersection(curr_jobs) or abs(j - i) <= 2:
+                            stage_dependencies[stage_id]["parents"].append({
+                                "stage_id": prev_stage.stage_id,
+                                "stage_name": prev_stage.name,
+                                "relationship_type": "timing_based"
+                            })
+
+                            # Add child relationship to parent
+                            if prev_stage.stage_id not in stage_dependencies:
+                                stage_dependencies[prev_stage.stage_id] = {
+                                    "parents": [],
+                                    "children": [],
+                                    "stage_info": stage_info.get(prev_stage.stage_id, {})
+                                }
+
+                            stage_dependencies[prev_stage.stage_id]["children"].append({
+                                "stage_id": stage_id,
+                                "stage_name": stage.name,
+                                "relationship_type": "timing_based"
+                            })
 
         # Identify critical path (longest duration sequence)
         critical_path = []
@@ -1201,6 +1380,21 @@ def get_stage_dependency_from_sql_plan(
                 if critical_duration / total_duration >= 0.8:
                     break
 
+        # Prepare analysis metadata
+        analysis_metadata = {
+            "dependency_inference": analysis_method,
+            "stages_analyzed": len(relevant_stages),
+            "jobs_analyzed": len(relevant_jobs),
+            "html_dag_available": html_dag_data is not None,
+            "dag_parsing_successful": bool(dag_based_dependencies)
+        }
+
+        if html_dag_data and html_dag_data.get('parsing_error'):
+            analysis_metadata["dag_parsing_error"] = html_dag_data['parsing_error']
+
+        if html_dag_data:
+            analysis_metadata["html_data_keys"] = list(html_dag_data.keys())
+
         return {
             "app_id": app_id,
             "execution_id": execution_id,
@@ -1212,11 +1406,7 @@ def get_stage_dependency_from_sql_plan(
             "execution_timeline": execution_timeline,
             "critical_path": critical_path,
             "stage_job_mapping": stage_job_mapping,
-            "analysis_metadata": {
-                "dependency_inference": "timing_based",
-                "stages_analyzed": len(relevant_stages),
-                "jobs_analyzed": len(relevant_jobs)
-            }
+            "analysis_metadata": analysis_metadata
         }
 
     except Exception as e:

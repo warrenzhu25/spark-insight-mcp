@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 import yaml
 from pydantic import Field
@@ -37,7 +37,7 @@ class McpConfig(BaseSettings):
         default_factory=list
     )
     address: Optional[str] = "localhost"
-    port: Optional[int | str] = "18888"
+    port: Optional[Union[int, str]] = "18888"
     debug: Optional[bool] = False
     model_config = SettingsConfigDict(extra="ignore")
 

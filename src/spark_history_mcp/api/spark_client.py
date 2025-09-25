@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Any, Dict, List, Optional, Type, TypeVar
 from urllib.parse import urljoin
@@ -666,3 +667,142 @@ class SparkRestClient:
 
         data = self._get(endpoint, params)
         return ExecutionData.from_dict(data)
+
+    def get_sql_execution_html(
+        self,
+        app_id: str,
+        execution_id: int,
+        attempt_id: Optional[str] = None,
+    ) -> str:
+        """
+        Get SQL execution HTML page containing DAG visualization data.
+
+        Args:
+            app_id: The application ID
+            execution_id: The execution ID
+            attempt_id: Optional attempt ID
+
+        Returns:
+            HTML content as string
+        """
+        # Build HTML URL (different from REST API)
+        base_html_url = self.config.url.rstrip("/")
+        if attempt_id:
+            url = f"{base_html_url}/history/{app_id}/{attempt_id}/SQL/execution/"
+        else:
+            url = f"{base_html_url}/history/{app_id}/SQL/execution/"
+
+        params = {"id": execution_id}
+
+        # Make HTML request (not JSON)
+        headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+
+        # Add token to headers if provided
+        if self.config.auth and self.config.auth.token:
+            headers["Authorization"] = f"Bearer {self.config.auth.token}"
+
+        verify = self.verify_ssl
+
+        if self.session:
+            # Add headers to the session
+            for key, value in headers.items():
+                self.session.headers[key] = value
+
+            response = self.session.get(
+                url,
+                params=params,
+                timeout=self.timeout,
+                verify=verify,
+                proxies=self.proxies,
+            )
+        else:
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                auth=self.auth,
+                timeout=self.timeout,
+                verify=verify,
+                proxies=self.proxies,
+            )
+
+        response.raise_for_status()
+        return response.text
+
+    def extract_dag_data_from_html(self, html_content: str) -> Dict[str, Any]:
+        """
+        Extract DAG visualization data from SQL execution HTML page.
+
+        Args:
+            html_content: HTML content from get_sql_execution_html()
+
+        Returns:
+            Dictionary containing DAG data and stage mappings
+        """
+        dag_data = {}
+
+        try:
+            # Look for JavaScript variables containing DAG data
+            # Common patterns in Spark UI:
+            # var dagVizData = {...};
+            # var executionPlanData = {...};
+            # var stageData = {...};
+
+            # Extract dagVizData
+            dag_viz_match = re.search(
+                r'var\s+dagVizData\s*=\s*({.*?});',
+                html_content,
+                re.DOTALL | re.MULTILINE
+            )
+            if dag_viz_match:
+                dag_data['dagVizData'] = json.loads(dag_viz_match.group(1))
+
+            # Extract executionPlanData
+            plan_match = re.search(
+                r'var\s+executionPlanData\s*=\s*({.*?});',
+                html_content,
+                re.DOTALL | re.MULTILINE
+            )
+            if plan_match:
+                dag_data['executionPlanData'] = json.loads(plan_match.group(1))
+
+            # Extract stage information from timeline data
+            timeline_match = re.search(
+                r'var\s+timelineData\s*=\s*(\[.*?\]);',
+                html_content,
+                re.DOTALL | re.MULTILINE
+            )
+            if timeline_match:
+                dag_data['timelineData'] = json.loads(timeline_match.group(1))
+
+            # Extract any stage-related data
+            stage_matches = re.findall(
+                r'var\s+(\w*[Ss]tage\w*)\s*=\s*({.*?});',
+                html_content,
+                re.DOTALL | re.MULTILINE
+            )
+            for var_name, var_data in stage_matches:
+                try:
+                    dag_data[var_name] = json.loads(var_data)
+                except json.JSONDecodeError:
+                    # Skip malformed JSON
+                    continue
+
+            # Extract node-to-stage mappings from any embedded data
+            # Look for patterns like: stage 5.0: task 61
+            stage_references = re.findall(
+                r'stage\s+(\d+)\.(\d+):\s*task\s+(\d+)',
+                html_content,
+                re.IGNORECASE
+            )
+            if stage_references:
+                dag_data['stage_task_references'] = [
+                    {'stage_id': int(stage), 'attempt_id': int(attempt), 'task_id': int(task)}
+                    for stage, attempt, task in stage_references
+                ]
+
+        except (json.JSONDecodeError, AttributeError) as e:
+            # Return partial data with error information
+            dag_data['parsing_error'] = str(e)
+
+        return dag_data
