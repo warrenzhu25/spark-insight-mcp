@@ -977,6 +977,230 @@ def list_slowest_sql_queries(
 
 
 @mcp.tool()
+def get_stage_dependency_from_sql_plan(
+    app_id: str,
+    execution_id: Optional[int] = None,
+    server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get stage dependency information from SQL execution plan.
+
+    Analyzes SQL execution data to extract stage dependencies and relationships
+    by examining job-to-stage mappings and stage execution patterns.
+
+    Args:
+        app_id: The Spark application ID
+        execution_id: Optional specific execution ID (uses longest if not specified)
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary containing stage dependency analysis including:
+        - stage_dependencies: Graph of stage parent/child relationships
+        - execution_timeline: Chronological stage execution order
+        - critical_path: Stages on the critical execution path
+        - stage_job_mapping: Mapping between stages and jobs
+    """
+    client = get_client_or_default(server)
+
+    try:
+        # Get SQL execution data
+        if execution_id is None:
+            # Get the longest running SQL query if no execution_id specified
+            sql_executions = client.get_sql_list(app_id, details=True, plan_description=True)
+            if not sql_executions:
+                return {
+                    "error": "No SQL executions found for application",
+                    "app_id": app_id,
+                    "stage_dependencies": {},
+                    "execution_timeline": [],
+                    "critical_path": [],
+                    "stage_job_mapping": {}
+                }
+
+            # Find the longest duration execution
+            execution = max(sql_executions, key=lambda x: x.duration or 0)
+            execution_id = execution.id
+        else:
+            execution = client.get_sql_execution(app_id, execution_id, details=True, plan_description=True)
+
+        # Get all job IDs from the execution
+        all_job_ids: set[int] = set()
+        all_job_ids.update(execution.running_job_ids or [])
+        all_job_ids.update(execution.success_job_ids or [])
+        all_job_ids.update(execution.failed_job_ids or [])
+
+        if not all_job_ids:
+            return {
+                "error": "No jobs found for SQL execution",
+                "app_id": app_id,
+                "execution_id": execution_id,
+                "stage_dependencies": {},
+                "execution_timeline": [],
+                "critical_path": [],
+                "stage_job_mapping": {}
+            }
+
+        # Get job details and collect stage IDs
+        jobs = client.list_jobs(app_id)
+        relevant_jobs = [job for job in jobs if job.job_id in all_job_ids]
+
+        stage_job_mapping: dict[int, list[dict[str, Any]]] = {}
+        all_stage_ids: set[int] = set()
+
+        for job in relevant_jobs:
+            if job.stage_ids:
+                for stage_id in job.stage_ids:
+                    all_stage_ids.add(stage_id)
+                    if stage_id not in stage_job_mapping:
+                        stage_job_mapping[stage_id] = []
+                    stage_job_mapping[stage_id].append({
+                        "job_id": job.job_id,
+                        "job_name": job.name,
+                        "job_status": job.status,
+                        "submission_time": job.submission_time.isoformat() if job.submission_time else None,
+                        "completion_time": job.completion_time.isoformat() if job.completion_time else None
+                    })
+
+        # Get stage details
+        stages = client.list_stages(app_id, with_summaries=False)
+        relevant_stages = [stage for stage in stages if stage.stage_id in all_stage_ids]
+
+        # Build stage dependency graph based on submission/completion times
+        stage_dependencies = {}
+        execution_timeline = []
+
+        # Create stage info with timing
+        stage_info = {}
+        for stage in relevant_stages:
+            stage_id = stage.stage_id
+            stage_info[stage_id] = {
+                "stage_id": stage_id,
+                "stage_name": stage.name,
+                "status": stage.status,
+                "num_tasks": stage.num_tasks,
+                "submission_time": stage.submission_time.isoformat() if stage.submission_time else None,
+                "completion_time": stage.completion_time.isoformat() if stage.completion_time else None,
+                "duration_ms": None,
+                "attempt_id": stage.attempt_id
+            }
+
+            # Calculate duration
+            if stage.submission_time and stage.completion_time:
+                duration = (stage.completion_time - stage.submission_time).total_seconds() * 1000
+                stage_info[stage_id]["duration_ms"] = int(duration)
+
+        # Sort stages by submission time for timeline
+        timeline_stages = [s for s in relevant_stages if s.submission_time]
+        timeline_stages.sort(key=lambda s: s.submission_time)
+
+        execution_timeline = [
+            {
+                "stage_id": stage.stage_id,
+                "stage_name": stage.name,
+                "submission_time": stage.submission_time.isoformat(),
+                "completion_time": stage.completion_time.isoformat() if stage.completion_time else None,
+                "status": stage.status
+            }
+            for stage in timeline_stages
+        ]
+
+        # Infer dependencies based on timing and job relationships
+        for i, stage in enumerate(timeline_stages):
+            stage_id = stage.stage_id
+            stage_dependencies[stage_id] = {
+                "parents": [],
+                "children": [],
+                "stage_info": stage_info.get(stage_id, {})
+            }
+
+            # Find potential parent stages (completed before this stage started)
+            for j in range(i):
+                prev_stage = timeline_stages[j]
+                if (prev_stage.completion_time and
+                    prev_stage.completion_time <= stage.submission_time):
+
+                    # Check if they're in related jobs (more likely to be dependencies)
+                    prev_jobs = set(job["job_id"] for job in stage_job_mapping.get(prev_stage.stage_id, []))
+                    curr_jobs = set(job["job_id"] for job in stage_job_mapping.get(stage_id, []))
+
+                    # If they share jobs or are sequential, likely dependency
+                    if prev_jobs.intersection(curr_jobs) or abs(j - i) <= 2:
+                        stage_dependencies[stage_id]["parents"].append({
+                            "stage_id": prev_stage.stage_id,
+                            "stage_name": prev_stage.name,
+                            "relationship_type": "timing_based"
+                        })
+
+                        # Add child relationship to parent
+                        if prev_stage.stage_id not in stage_dependencies:
+                            stage_dependencies[prev_stage.stage_id] = {
+                                "parents": [],
+                                "children": [],
+                                "stage_info": stage_info.get(prev_stage.stage_id, {})
+                            }
+
+                        stage_dependencies[prev_stage.stage_id]["children"].append({
+                            "stage_id": stage_id,
+                            "stage_name": stage.name,
+                            "relationship_type": "timing_based"
+                        })
+
+        # Identify critical path (longest duration sequence)
+        critical_path = []
+        if timeline_stages:
+            # Simple heuristic: stages with longest individual duration
+            stages_by_duration = [(s.stage_id, stage_info[s.stage_id].get("duration_ms", 0))
+                                 for s in timeline_stages if s.stage_id in stage_info]
+            stages_by_duration.sort(key=lambda x: x[1], reverse=True)
+
+            # Take top stages that represent significant portion of execution
+            total_duration = sum(d for _, d in stages_by_duration)
+            critical_duration = 0
+
+            for stage_id, duration in stages_by_duration:
+                critical_path.append({
+                    "stage_id": stage_id,
+                    "stage_name": stage_info[stage_id]["stage_name"],
+                    "duration_ms": duration,
+                    "percentage_of_total": (duration / total_duration * 100) if total_duration > 0 else 0
+                })
+                critical_duration += duration
+
+                # Include stages that make up ~80% of execution time
+                if critical_duration / total_duration >= 0.8:
+                    break
+
+        return {
+            "app_id": app_id,
+            "execution_id": execution_id,
+            "sql_description": execution.description,
+            "execution_status": execution.status,
+            "total_jobs": len(relevant_jobs),
+            "total_stages": len(relevant_stages),
+            "stage_dependencies": stage_dependencies,
+            "execution_timeline": execution_timeline,
+            "critical_path": critical_path,
+            "stage_job_mapping": stage_job_mapping,
+            "analysis_metadata": {
+                "dependency_inference": "timing_based",
+                "stages_analyzed": len(relevant_stages),
+                "jobs_analyzed": len(relevant_jobs)
+            }
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to analyze stage dependencies: {str(e)}",
+            "app_id": app_id,
+            "execution_id": execution_id,
+            "stage_dependencies": {},
+            "execution_timeline": [],
+            "critical_path": [],
+            "stage_job_mapping": {}
+        }
+
+
+@mcp.tool()
 def get_job_bottlenecks(
     app_id: str, server: Optional[str] = None, top_n: int = 5
 ) -> Dict[str, Any]:

@@ -27,6 +27,7 @@ from spark_history_mcp.tools.tools import (
     get_application_insights,
     get_client_or_default,
     get_stage,
+    get_stage_dependency_from_sql_plan,
     get_stage_task_summary,
     list_applications,
     list_jobs,
@@ -2843,3 +2844,209 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertIn("Failed to compare app executor timelines", result["error"])
         self.assertEqual(result["app1_id"], "app-123")
         self.assertEqual(result["app2_id"], "app-456")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_from_sql_plan_success(self, mock_get_client):
+        """Test successful stage dependency analysis from SQL plan"""
+        mock_get_client.return_value = self.mock_client
+
+        # Mock SQL execution data
+        mock_execution = MagicMock()
+        mock_execution.id = 1
+        mock_execution.description = "Test SQL Query"
+        mock_execution.status = "COMPLETED"
+        mock_execution.duration = 10000
+        mock_execution.success_job_ids = [1, 2]
+        mock_execution.running_job_ids = []
+        mock_execution.failed_job_ids = []
+
+        # Mock job data
+        job1 = MagicMock(spec=JobData)
+        job1.job_id = 1
+        job1.name = "Job 1"
+        job1.status = "SUCCEEDED"
+        job1.stage_ids = [1, 2]
+        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        job1.completion_time = datetime(2024, 1, 1, 10, 2, 0)
+
+        job2 = MagicMock(spec=JobData)
+        job2.job_id = 2
+        job2.name = "Job 2"
+        job2.status = "SUCCEEDED"
+        job2.stage_ids = [3, 4]
+        job2.submission_time = datetime(2024, 1, 1, 10, 2, 30)
+        job2.completion_time = datetime(2024, 1, 1, 10, 4, 0)
+
+        # Mock stage data
+        stage1 = MagicMock(spec=StageData)
+        stage1.stage_id = 1
+        stage1.name = "Stage 1"
+        stage1.status = "COMPLETE"
+        stage1.num_tasks = 10
+        stage1.attempt_id = 0
+        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        stage1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
+
+        stage2 = MagicMock(spec=StageData)
+        stage2.stage_id = 2
+        stage2.name = "Stage 2"
+        stage2.status = "COMPLETE"
+        stage2.num_tasks = 8
+        stage2.attempt_id = 0
+        stage2.submission_time = datetime(2024, 1, 1, 10, 1, 30)
+        stage2.completion_time = datetime(2024, 1, 1, 10, 2, 0)
+
+        stage3 = MagicMock(spec=StageData)
+        stage3.stage_id = 3
+        stage3.name = "Stage 3"
+        stage3.status = "COMPLETE"
+        stage3.num_tasks = 12
+        stage3.attempt_id = 0
+        stage3.submission_time = datetime(2024, 1, 1, 10, 2, 30)
+        stage3.completion_time = datetime(2024, 1, 1, 10, 3, 30)
+
+        stage4 = MagicMock(spec=StageData)
+        stage4.stage_id = 4
+        stage4.name = "Stage 4"
+        stage4.status = "COMPLETE"
+        stage4.num_tasks = 6
+        stage4.attempt_id = 0
+        stage4.submission_time = datetime(2024, 1, 1, 10, 3, 45)
+        stage4.completion_time = datetime(2024, 1, 1, 10, 4, 0)
+
+        # Set up mock client responses
+        self.mock_client.get_sql_execution.return_value = mock_execution
+        self.mock_client.list_jobs.return_value = [job1, job2]
+        self.mock_client.list_stages.return_value = [stage1, stage2, stage3, stage4]
+
+        # Call the function
+        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
+
+        # Verify the result structure
+        self.assertEqual(result["app_id"], "app-123")
+        self.assertEqual(result["execution_id"], 1)
+        self.assertEqual(result["sql_description"], "Test SQL Query")
+        self.assertEqual(result["execution_status"], "COMPLETED")
+        self.assertEqual(result["total_jobs"], 2)
+        self.assertEqual(result["total_stages"], 4)
+
+        # Verify stage dependencies structure
+        self.assertIn("stage_dependencies", result)
+        self.assertIn("execution_timeline", result)
+        self.assertIn("critical_path", result)
+        self.assertIn("stage_job_mapping", result)
+        self.assertIn("analysis_metadata", result)
+
+        # Verify timeline is ordered chronologically
+        timeline = result["execution_timeline"]
+        self.assertEqual(len(timeline), 4)
+        self.assertEqual(timeline[0]["stage_id"], 1)  # First stage
+        self.assertEqual(timeline[-1]["stage_id"], 4)  # Last stage
+
+        # Verify stage-job mapping
+        mapping = result["stage_job_mapping"]
+        self.assertEqual(len(mapping[1]), 1)  # Stage 1 in 1 job
+        self.assertEqual(mapping[1][0]["job_id"], 1)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_from_sql_plan_no_execution_id(self, mock_get_client):
+        """Test stage dependency analysis without specifying execution_id"""
+        mock_get_client.return_value = self.mock_client
+
+        # Mock multiple SQL executions
+        execution1 = MagicMock()
+        execution1.id = 1
+        execution1.duration = 5000
+        execution1.description = "Short Query"
+        execution1.status = "COMPLETED"
+        execution1.success_job_ids = [1]
+        execution1.running_job_ids = []
+        execution1.failed_job_ids = []
+
+        execution2 = MagicMock()
+        execution2.id = 2
+        execution2.duration = 15000  # Longest duration
+        execution2.description = "Long Query"
+        execution2.status = "COMPLETED"
+        execution2.success_job_ids = [2, 3]
+        execution2.running_job_ids = []
+        execution2.failed_job_ids = []
+
+        self.mock_client.get_sql_list.return_value = [execution1, execution2]
+
+        # Mock job and stage data for the longest execution
+        job2 = MagicMock(spec=JobData)
+        job2.job_id = 2
+        job2.name = "Job 2"
+        job2.status = "SUCCEEDED"
+        job2.stage_ids = [2]
+        job2.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        job2.completion_time = datetime(2024, 1, 1, 10, 5, 0)
+
+        stage2 = MagicMock(spec=StageData)
+        stage2.stage_id = 2
+        stage2.name = "Stage 2"
+        stage2.status = "COMPLETE"
+        stage2.num_tasks = 20
+        stage2.attempt_id = 0
+        stage2.submission_time = datetime(2024, 1, 1, 10, 0, 0)
+        stage2.completion_time = datetime(2024, 1, 1, 10, 5, 0)
+
+        self.mock_client.list_jobs.return_value = [job2]
+        self.mock_client.list_stages.return_value = [stage2]
+
+        # Call without execution_id - should pick longest duration execution
+        result = get_stage_dependency_from_sql_plan("app-123")
+
+        # Should have picked execution 2 (longest duration)
+        self.assertEqual(result["execution_id"], 2)
+        self.assertEqual(result["sql_description"], "Long Query")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_from_sql_plan_no_sql_executions(self, mock_get_client):
+        """Test when no SQL executions are found"""
+        mock_get_client.return_value = self.mock_client
+        self.mock_client.get_sql_list.return_value = []
+
+        result = get_stage_dependency_from_sql_plan("app-123")
+
+        self.assertIn("error", result)
+        self.assertEqual(result["error"], "No SQL executions found for application")
+        self.assertEqual(result["app_id"], "app-123")
+        self.assertEqual(result["stage_dependencies"], {})
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_from_sql_plan_no_jobs(self, mock_get_client):
+        """Test when SQL execution has no associated jobs"""
+        mock_get_client.return_value = self.mock_client
+
+        # Mock execution with no job IDs
+        mock_execution = MagicMock()
+        mock_execution.id = 1
+        mock_execution.description = "Query with no jobs"
+        mock_execution.status = "FAILED"
+        mock_execution.success_job_ids = []
+        mock_execution.running_job_ids = []
+        mock_execution.failed_job_ids = []
+
+        self.mock_client.get_sql_execution.return_value = mock_execution
+
+        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
+
+        self.assertIn("error", result)
+        self.assertEqual(result["error"], "No jobs found for SQL execution")
+        self.assertEqual(result["execution_id"], 1)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_stage_dependency_from_sql_plan_exception_handling(self, mock_get_client):
+        """Test exception handling in get_stage_dependency_from_sql_plan"""
+        mock_get_client.return_value = self.mock_client
+
+        # Simulate an exception
+        self.mock_client.get_sql_execution.side_effect = Exception("API Error")
+
+        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
+
+        self.assertIn("error", result)
+        self.assertIn("Failed to analyze stage dependencies", result["error"])
+        self.assertEqual(result["execution_id"], 1)
