@@ -1000,7 +1000,8 @@ def get_stage_dependency_from_sql_plan(
         - critical_path: Stages on the critical execution path
         - stage_job_mapping: Mapping between stages and jobs
     """
-    client = get_client_or_default(server)
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
 
     try:
         # Get SQL execution data
