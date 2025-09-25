@@ -6,6 +6,7 @@ of Spark applications, identifying bottlenecks, and suggesting optimizations.
 """
 
 from typing import Optional
+
 from spark_history_mcp.core.app import mcp
 
 

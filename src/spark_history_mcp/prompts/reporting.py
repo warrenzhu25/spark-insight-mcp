@@ -6,6 +6,7 @@ summaries, and trend analysis for Spark applications and infrastructure.
 """
 
 from typing import Optional
+
 from spark_history_mcp.core.app import mcp
 
 

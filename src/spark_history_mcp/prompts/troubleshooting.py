@@ -6,6 +6,7 @@ issues, failures, and configuration problems.
 """
 
 from typing import Optional
+
 from spark_history_mcp.core.app import mcp
 
 

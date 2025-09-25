@@ -16,10 +16,10 @@ from spark_history_mcp.core.app import mcp
 
 # Import all prompt modules to register them with FastMCP
 from spark_history_mcp.prompts import (
-    performance,
-    troubleshooting,
     optimization,
+    performance,
     reporting,
+    troubleshooting,
 )
 
 __all__ = [

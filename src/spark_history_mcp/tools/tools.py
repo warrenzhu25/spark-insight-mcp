@@ -2188,13 +2188,13 @@ def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict
         if config == "spark.executor.memory":
             return {
                 "category": "memory_allocation",
-                "description": f"Different executor memory allocation may affect task performance and spill behavior",
+                "description": "Different executor memory allocation may affect task performance and spill behavior",
                 "severity": "high" if abs(hash(str(val1)) - hash(str(val2))) > 1000000 else "medium"
             }
         elif "fraction" in config.lower():
             return {
                 "category": "memory_management",
-                "description": f"Memory fraction differences can impact caching and shuffle performance",
+                "description": "Memory fraction differences can impact caching and shuffle performance",
                 "severity": "medium"
             }
 
@@ -2209,7 +2209,7 @@ def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict
     elif "dynamicAllocation" in config:
         return {
             "category": "auto_scaling",
-            "description": f"Dynamic allocation settings impact resource scaling behavior",
+            "description": "Dynamic allocation settings impact resource scaling behavior",
             "severity": "medium"
         }
 
@@ -2224,14 +2224,14 @@ def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict
     elif "adaptive" in config.lower():
         return {
             "category": "query_optimization",
-            "description": f"Adaptive query execution settings affect SQL optimization",
+            "description": "Adaptive query execution settings affect SQL optimization",
             "severity": "medium"
         }
 
     elif "compress" in config.lower() or "codec" in config.lower():
         return {
             "category": "compression",
-            "description": f"Compression settings impact I/O performance and storage efficiency",
+            "description": "Compression settings impact I/O performance and storage efficiency",
             "severity": "low"
         }
 
@@ -2787,7 +2787,7 @@ def _analyze_executor_performance_patterns(
             "total_shuffle_write": sum(shuffle_writes),
             "executors_with_failures": executors_with_failures,
             "executors_with_spill": executors_with_spill,
-            "task_efficiency": statistics.mean([s / (s + f) for s, f in zip(succeeded_tasks, failed_tasks) if (s + f) > 0]) if succeeded_tasks and failed_tasks else 1.0
+            "task_efficiency": statistics.mean([s / (s + f) for s, f in zip(succeeded_tasks, failed_tasks, strict=False) if (s + f) > 0]) if succeeded_tasks and failed_tasks else 1.0
         }
 
     app1_analysis = analyze_executor_group(executor_summary1)
@@ -3998,7 +3998,8 @@ def compare_stages(
             ("duration", dist1.duration, dist2.duration),
             ("executor_run_time", dist1.executor_run_time, dist2.executor_run_time),
             ("peak_execution_memory", dist1.peak_execution_memory, dist2.peak_execution_memory),
-            ("memory_bytes_spilled", dist1.memory_bytes_spilled, dist2.memory_bytes_spilled)
+            ("memory_bytes_spilled", dist1.memory_bytes_spilled, dist2.memory_bytes_spilled),
+            ("disk_bytes_spilled", dist1.disk_bytes_spilled, dist2.disk_bytes_spilled)
         ]
 
         for metric_name, vals1, vals2 in task_dist_metrics:
@@ -4043,6 +4044,56 @@ def compare_stages(
             if read_comparison:
                 task_distributions["shuffle_read_bytes"] = read_comparison
 
+        # Add fetch_wait_time comparison
+        if (dist1.shuffle_read_metrics and dist2.shuffle_read_metrics and
+            dist1.shuffle_read_metrics.fetch_wait_time and dist2.shuffle_read_metrics.fetch_wait_time and
+            len(dist1.shuffle_read_metrics.fetch_wait_time) >= 5 and len(dist2.shuffle_read_metrics.fetch_wait_time) >= 5):
+
+            fetch_wait_comparison = {}
+            median_diff = calculate_difference(
+                dist1.shuffle_read_metrics.fetch_wait_time[2],
+                dist2.shuffle_read_metrics.fetch_wait_time[2],
+                "fetch_wait_time_median"
+            )
+            if median_diff:
+                fetch_wait_comparison["median"] = median_diff
+
+            max_diff = calculate_difference(
+                dist1.shuffle_read_metrics.fetch_wait_time[4],
+                dist2.shuffle_read_metrics.fetch_wait_time[4],
+                "fetch_wait_time_max"
+            )
+            if max_diff:
+                fetch_wait_comparison["max"] = max_diff
+
+            if fetch_wait_comparison:
+                task_distributions["shuffle_fetch_wait_time"] = fetch_wait_comparison
+
+        # Add remote_reqs_duration comparison
+        if (dist1.shuffle_read_metrics and dist2.shuffle_read_metrics and
+            dist1.shuffle_read_metrics.remote_reqs_duration and dist2.shuffle_read_metrics.remote_reqs_duration and
+            len(dist1.shuffle_read_metrics.remote_reqs_duration) >= 5 and len(dist2.shuffle_read_metrics.remote_reqs_duration) >= 5):
+
+            remote_reqs_comparison = {}
+            median_diff = calculate_difference(
+                dist1.shuffle_read_metrics.remote_reqs_duration[2],
+                dist2.shuffle_read_metrics.remote_reqs_duration[2],
+                "remote_reqs_duration_median"
+            )
+            if median_diff:
+                remote_reqs_comparison["median"] = median_diff
+
+            max_diff = calculate_difference(
+                dist1.shuffle_read_metrics.remote_reqs_duration[4],
+                dist2.shuffle_read_metrics.remote_reqs_duration[4],
+                "remote_reqs_duration_max"
+            )
+            if max_diff:
+                remote_reqs_comparison["max"] = max_diff
+
+            if remote_reqs_comparison:
+                task_distributions["shuffle_remote_reqs_duration"] = remote_reqs_comparison
+
         if (dist1.shuffle_write_metrics and dist2.shuffle_write_metrics and
             dist1.shuffle_write_metrics.write_bytes and dist2.shuffle_write_metrics.write_bytes and
             len(dist1.shuffle_write_metrics.write_bytes) >= 5 and len(dist2.shuffle_write_metrics.write_bytes) >= 5):
@@ -4081,7 +4132,8 @@ def compare_stages(
         exec_dist_metrics = [
             ("task_time", exec_dist1.task_time, exec_dist2.task_time),
             ("shuffle_write", exec_dist1.shuffle_write, exec_dist2.shuffle_write),
-            ("memory_bytes_spilled", exec_dist1.memory_bytes_spilled, exec_dist2.memory_bytes_spilled)
+            ("memory_bytes_spilled", exec_dist1.memory_bytes_spilled, exec_dist2.memory_bytes_spilled),
+            ("disk_bytes_spilled", exec_dist1.disk_bytes_spilled, exec_dist2.disk_bytes_spilled)
         ]
 
         for metric_name, vals1, vals2 in exec_dist_metrics:
@@ -4104,18 +4156,74 @@ def compare_stages(
     if executor_distributions:
         result["significant_differences"]["executor_distributions"] = executor_distributions
 
-    # Count total significant differences
-    total_diffs = 0
-    for category in result["significant_differences"].values():
-        if isinstance(category, dict):
-            for metric_data in category.values():
-                if isinstance(metric_data, dict):
-                    if "stage1" in metric_data:  # Single metric
-                        total_diffs += 1
-                    else:  # Distribution with median/max
-                        total_diffs += len(metric_data)
+    # Collect all differences with significance scores for top 5 filtering
+    all_differences = []
 
+    # Collect stage-level metrics
+    if stage_metrics:
+        for metric_name, metric_data in stage_metrics.items():
+            all_differences.append({
+                "category": "stage_metrics",
+                "metric_name": metric_name,
+                "full_name": f"stage_metrics.{metric_name}",
+                "significance": metric_data["significance"],
+                "data": metric_data
+            })
+
+    # Collect task distribution metrics
+    if task_distributions:
+        for metric_name, metric_data in task_distributions.items():
+            if isinstance(metric_data, dict):
+                for sub_metric, sub_data in metric_data.items():  # median/max
+                    all_differences.append({
+                        "category": "task_distributions",
+                        "metric_name": metric_name,
+                        "sub_metric": sub_metric,
+                        "full_name": f"task_distributions.{metric_name}.{sub_metric}",
+                        "significance": sub_data["significance"],
+                        "data": sub_data
+                    })
+
+    # Collect executor distribution metrics
+    if executor_distributions:
+        for metric_name, metric_data in executor_distributions.items():
+            if isinstance(metric_data, dict):
+                for sub_metric, sub_data in metric_data.items():  # median/max
+                    all_differences.append({
+                        "category": "executor_distributions",
+                        "metric_name": metric_name,
+                        "sub_metric": sub_metric,
+                        "full_name": f"executor_distributions.{metric_name}.{sub_metric}",
+                        "significance": sub_data["significance"],
+                        "data": sub_data
+                    })
+
+    # Sort by significance (highest first) and take top 5
+    total_diffs = len(all_differences)
+    all_differences.sort(key=lambda x: x["significance"], reverse=True)
+    top_differences = all_differences[:5]
+
+    # Rebuild the significant_differences structure with only top 5
+    filtered_significant_differences = {}
+
+    for diff in top_differences:
+        category = diff["category"]
+        if category not in filtered_significant_differences:
+            filtered_significant_differences[category] = {}
+
+        if category == "stage_metrics":
+            # Stage metrics are single-level
+            filtered_significant_differences[category][diff["metric_name"]] = diff["data"]
+        else:
+            # Task and executor distributions have sub-metrics (median/max)
+            metric_name = diff["metric_name"]
+            if metric_name not in filtered_significant_differences[category]:
+                filtered_significant_differences[category][metric_name] = {}
+            filtered_significant_differences[category][metric_name][diff["sub_metric"]] = diff["data"]
+
+    result["significant_differences"] = filtered_significant_differences
     result["summary"]["total_differences_found"] = total_diffs
+    result["summary"]["differences_shown"] = len(top_differences)
 
     return result
 
@@ -4175,19 +4283,35 @@ def compare_stage_executor_timeline(
             if not stage.submission_time:
                 return {
                     "error": f"Stage {stage.stage_id} has no submission time",
+                    "stage_info": {
+                        "stage_id": stage.stage_id,
+                        "attempt_id": getattr(stage, 'attempt_id', 0),
+                        "name": getattr(stage, 'name', 'unknown'),
+                        "submission_time": None,
+                        "completion_time": None,
+                        "duration_seconds": 0
+                    },
                     "timeline": []
                 }
 
             stage_start = stage.submission_time
             stage_end = stage.completion_time or stage_start + timedelta(hours=24)  # Default to 24h if not completed
 
+            # Sanity check: ensure stage_end is after stage_start
+            if stage_end <= stage_start:
+                stage_end = stage_start + timedelta(minutes=interval_minutes)
+
             # Create timeline intervals
             timeline = []
             current_time = stage_start
+            max_intervals = 10000  # Safety limit to prevent excessive memory usage
 
-            while current_time <= stage_end:
+            interval_count = 0
+            while current_time < stage_end and interval_count < max_intervals:
                 interval_end = current_time + timedelta(minutes=interval_minutes)
-                if interval_end > stage_end:
+
+                # Ensure we don't go past the stage end, but break if we're at the end
+                if interval_end >= stage_end:
                     interval_end = stage_end
 
                 # Find active executors during this interval
@@ -4221,7 +4345,20 @@ def compare_stage_executor_timeline(
                     "active_executors": active_executors
                 })
 
+                # Break if we've reached the stage end to prevent infinite loop
+                if interval_end >= stage_end:
+                    break
+
                 current_time = interval_end
+                interval_count += 1
+
+            # Add warning if we hit the interval limit
+            if interval_count >= max_intervals:
+                timeline.append({
+                    "warning": f"Timeline truncated at {max_intervals} intervals to prevent excessive memory usage",
+                    "stage_duration_hours": (stage_end - stage_start).total_seconds() / 3600,
+                    "interval_minutes": interval_minutes
+                })
 
             return {
                 "stage_info": {

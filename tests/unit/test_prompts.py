@@ -1,29 +1,28 @@
 import unittest
-from unittest.mock import MagicMock, patch
 
-from spark_history_mcp.prompts.performance import (
-    analyze_slow_application,
-    compare_job_performance,
-    diagnose_resource_issues,
-    investigate_stage_bottlenecks,
-)
-from spark_history_mcp.prompts.troubleshooting import (
-    diagnose_shuffle_problems,
-    examine_memory_issues,
-    identify_configuration_issues,
-    investigate_failures,
-)
 from spark_history_mcp.prompts.optimization import (
     improve_query_performance,
     optimize_resource_allocation,
     reduce_data_skew,
     suggest_autoscaling_config,
 )
+from spark_history_mcp.prompts.performance import (
+    analyze_slow_application,
+    compare_job_performance,
+    diagnose_resource_issues,
+    investigate_stage_bottlenecks,
+)
 from spark_history_mcp.prompts.reporting import (
     benchmark_comparison,
     create_executive_summary,
     generate_performance_report,
     summarize_trends,
+)
+from spark_history_mcp.prompts.troubleshooting import (
+    diagnose_shuffle_problems,
+    examine_memory_issues,
+    identify_configuration_issues,
+    investigate_failures,
 )
 
 

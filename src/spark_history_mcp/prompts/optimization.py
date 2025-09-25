@@ -6,6 +6,7 @@ applications, including resource allocation, auto-scaling, and performance tunin
 """
 
 from typing import Optional
+
 from spark_history_mcp.core.app import mcp
 
 

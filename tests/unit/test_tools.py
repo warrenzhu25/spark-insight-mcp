@@ -14,14 +14,14 @@ from spark_history_mcp.models.spark_types import (
     TaskMetricDistributions,
 )
 from spark_history_mcp.tools.tools import (
+    _analyze_executor_performance_patterns,
     analyze_auto_scaling,
     analyze_executor_utilization,
     analyze_failed_tasks,
     analyze_shuffle_skew,
     compare_app_performance,
-    compare_stages,
     compare_stage_executor_timeline,
-    _analyze_executor_performance_patterns,
+    compare_stages,
     get_application,
     get_application_insights,
     get_client_or_default,
@@ -1298,13 +1298,13 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_app = MagicMock(spec=ApplicationInfo)
         mock_app.id = app_id
         mock_app.name = name
-        
+
         # Create mock attempt
         mock_attempt = MagicMock(spec=ApplicationAttemptInfo)
         mock_attempt.start_time = self.mock_now
         mock_attempt.end_time = self.mock_now + timedelta(minutes=30)
         mock_app.attempts = [mock_attempt]
-        
+
         return mock_app
 
     def _create_mock_environment(self, spark_props=None):
@@ -1337,7 +1337,7 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_stage.executor_metrics_distributions = executor_metrics_distributions
         return mock_stage
 
-    def _create_mock_executor(self, exec_id="1", host="worker1", failed_tasks=0, 
+    def _create_mock_executor(self, exec_id="1", host="worker1", failed_tasks=0,
                              completed_tasks=10, is_active=True, total_cores=4,
                              max_memory=1024*1024*1024, add_time=None, remove_time=None):
         """Helper to create mock executor"""
@@ -1358,17 +1358,17 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_auto_scaling_success(self, mock_get_client):
         """Test successful auto-scaling analysis"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Setup mock data
         mock_app = self._create_mock_application()
         mock_env = self._create_mock_environment()
-        
+
         # Create stages with different patterns
         stages = [
             self._create_mock_stage(1, "Stage 1", executor_run_time=120000, num_tasks=20),
             self._create_mock_stage(2, "Stage 2", executor_run_time=180000, num_tasks=30),
         ]
-        
+
         self.mock_client.get_application.return_value = mock_app
         self.mock_client.get_environment.return_value = mock_env
         self.mock_client.list_stages.return_value = stages
@@ -1388,10 +1388,10 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_auto_scaling_no_stages(self, mock_get_client):
         """Test auto-scaling analysis with no stages"""
         mock_get_client.return_value = self.mock_client
-        
+
         mock_app = self._create_mock_application()
         mock_env = self._create_mock_environment()
-        
+
         self.mock_client.get_application.return_value = mock_app
         self.mock_client.get_environment.return_value = mock_env
         self.mock_client.list_stages.return_value = []
@@ -1407,23 +1407,23 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_shuffle_skew_success(self, mock_get_client):
         """Test successful shuffle skew analysis"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Create stage with significant shuffle write
         mock_stage = self._create_mock_stage(
-            1, "Shuffle Stage", 
+            1, "Shuffle Stage",
             shuffle_write_bytes=15 * 1024 * 1024 * 1024  # 15 GB
         )
-        
+
         # Create mock task summary with skew
         mock_task_summary = MagicMock(spec=TaskMetricDistributions)
         mock_task_summary.shuffle_write_bytes = [
             100 * 1024 * 1024,      # min: 100 MB
-            500 * 1024 * 1024,      # 25th: 500 MB  
+            500 * 1024 * 1024,      # 25th: 500 MB
             1024 * 1024 * 1024,     # median: 1 GB
             2048 * 1024 * 1024,     # 75th: 2 GB
             5120 * 1024 * 1024      # max: 5 GB (5x median = high skew)
         ]
-        
+
         self.mock_client.list_stages.return_value = [mock_stage]
         self.mock_client.get_stage_task_summary.return_value = mock_task_summary
 
@@ -1435,7 +1435,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertEqual(result["analysis_type"], "Shuffle Skew Analysis")
         self.assertIn("skewed_stages", result)
         self.assertIn("recommendations", result)
-        
+
         # Should detect skew (5 GB / 1 GB = 5.0 ratio > 2.0 threshold)
         self.assertEqual(len(result["skewed_stages"]), 1)
         self.assertEqual(result["skewed_stages"][0]["stage_id"], 1)
@@ -1446,13 +1446,13 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_shuffle_skew_no_skew(self, mock_get_client):
         """Test shuffle skew analysis with no skew detected"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Create stage with small shuffle write (below threshold)
         mock_stage = self._create_mock_stage(
             1, "Small Shuffle Stage",
             shuffle_write_bytes=5 * 1024 * 1024 * 1024  # 5 GB (below 10 GB threshold)
         )
-        
+
         self.mock_client.list_stages.return_value = [mock_stage]
 
         # Call the function
@@ -1466,15 +1466,15 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_failed_tasks_success(self, mock_get_client):
         """Test successful failed task analysis"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Create stages with failures
         failed_stage = self._create_mock_stage(1, "Failed Stage", num_failed_tasks=5, num_tasks=20)
         good_stage = self._create_mock_stage(2, "Good Stage", num_failed_tasks=0, num_tasks=10)
-        
+
         # Create executors with failures
         failed_executor = self._create_mock_executor("1", "worker1", failed_tasks=3, completed_tasks=7)
         good_executor = self._create_mock_executor("2", "worker2", failed_tasks=0, completed_tasks=10)
-        
+
         self.mock_client.list_stages.return_value = [failed_stage, good_stage]
         self.mock_client.list_all_executors.return_value = [failed_executor, good_executor]
 
@@ -1487,12 +1487,12 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("failed_stages", result)
         self.assertIn("problematic_executors", result)
         self.assertIn("recommendations", result)
-        
+
         # Should detect failed stage and problematic executor
         self.assertEqual(len(result["failed_stages"]), 1)
         self.assertEqual(result["failed_stages"][0]["stage_id"], 1)
         self.assertEqual(result["failed_stages"][0]["failed_tasks"], 5)
-        
+
         self.assertEqual(len(result["problematic_executors"]), 1)
         self.assertEqual(result["problematic_executors"][0]["executor_id"], "1")
         self.assertEqual(result["problematic_executors"][0]["failed_tasks"], 3)
@@ -1501,11 +1501,11 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_failed_tasks_no_failures(self, mock_get_client):
         """Test failed task analysis with no failures"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Create stages and executors with no failures
         good_stage = self._create_mock_stage(1, "Good Stage", num_failed_tasks=0)
         good_executor = self._create_mock_executor("1", "worker1", failed_tasks=0)
-        
+
         self.mock_client.list_stages.return_value = [good_stage]
         self.mock_client.list_all_executors.return_value = [good_executor]
 
@@ -1521,12 +1521,12 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_executor_utilization_success(self, mock_get_client):
         """Test successful executor utilization analysis"""
         mock_get_client.return_value = self.mock_client
-        
+
         mock_app = self._create_mock_application()
-        
+
         # Create executors with different lifecycles
         executor1 = self._create_mock_executor(
-            "1", "worker1", 
+            "1", "worker1",
             add_time=self.mock_now,
             remove_time=self.mock_now + timedelta(minutes=20)
         )
@@ -1535,7 +1535,7 @@ class TestSparkInsightTools(unittest.TestCase):
             add_time=self.mock_now + timedelta(minutes=10),
             remove_time=None  # Still active
         )
-        
+
         self.mock_client.get_application.return_value = mock_app
         self.mock_client.list_all_executors.return_value = [executor1, executor2]
 
@@ -1548,7 +1548,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("timeline", result)
         self.assertIn("summary", result)
         self.assertIn("recommendations", result)
-        
+
         # Should have utilization metrics
         self.assertIn("peak_executors", result["summary"])
         self.assertIn("average_executors", result["summary"])
@@ -1558,10 +1558,10 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_executor_utilization_no_attempts(self, mock_get_client):
         """Test executor utilization analysis with no application attempts"""
         mock_get_client.return_value = self.mock_client
-        
+
         mock_app = self._create_mock_application()
         mock_app.attempts = []  # No attempts
-        
+
         self.mock_client.get_application.return_value = mock_app
 
         # Call the function
@@ -1577,7 +1577,7 @@ class TestSparkInsightTools(unittest.TestCase):
         """Test comprehensive application insights analysis"""
         mock_datetime.now.return_value = self.mock_now
         mock_get_client.return_value = self.mock_client
-        
+
         mock_app = self._create_mock_application()
         self.mock_client.get_application.return_value = mock_app
 
@@ -1591,7 +1591,7 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("analyses", result)
         self.assertIn("summary", result)
         self.assertIn("recommendations", result)
-        
+
         # Should include all analyses by default
         expected_analyses = ["auto_scaling", "shuffle_skew", "failed_tasks", "executor_utilization"]
         for analysis in expected_analyses:
@@ -1603,13 +1603,13 @@ class TestSparkInsightTools(unittest.TestCase):
         """Test application insights with selective analysis"""
         mock_datetime.now.return_value = self.mock_now
         mock_get_client.return_value = self.mock_client
-        
+
         mock_app = self._create_mock_application()
         self.mock_client.get_application.return_value = mock_app
 
         # Call with only specific analyses enabled
         result = get_application_insights(
-            "app-123", 
+            "app-123",
             include_auto_scaling=True,
             include_shuffle_skew=False,
             include_failed_tasks=True,
@@ -1626,13 +1626,13 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_shuffle_skew_task_summary_error(self, mock_get_client):
         """Test shuffle skew analysis when task summary fetch fails"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Create stage with shuffle write
         mock_stage = self._create_mock_stage(
             1, "Shuffle Stage",
             shuffle_write_bytes=15 * 1024 * 1024 * 1024  # 15 GB
         )
-        
+
         self.mock_client.list_stages.return_value = [mock_stage]
         # Make task summary fetch fail
         self.mock_client.get_stage_task_summary.side_effect = Exception("Task summary not available")
@@ -1708,15 +1708,15 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_failed_tasks_host_concentration(self, mock_get_client):
         """Test failed task analysis detecting host-specific issues"""
         mock_get_client.return_value = self.mock_client
-        
+
         # Create stage with failures
         failed_stage = self._create_mock_stage(1, "Failed Stage", num_failed_tasks=10)
-        
+
         # Create executors where most failures are on one host
         executor1 = self._create_mock_executor("1", "problematic-host", failed_tasks=8, completed_tasks=2)
         executor2 = self._create_mock_executor("2", "good-host", failed_tasks=1, completed_tasks=9)
         executor3 = self._create_mock_executor("3", "another-good-host", failed_tasks=1, completed_tasks=9)
-        
+
         self.mock_client.list_stages.return_value = [failed_stage]
         self.mock_client.list_all_executors.return_value = [executor1, executor2, executor3]
 
@@ -1736,9 +1736,9 @@ class TestSparkInsightTools(unittest.TestCase):
     def test_analyze_executor_utilization_low_efficiency(self, mock_get_client):
         """Test executor utilization analysis detecting low efficiency"""
         mock_get_client.return_value = self.mock_client
-        
+
         mock_app = self._create_mock_application()
-        
+
         # Create scenario with low utilization efficiency (high peak, low average)
         # Executor 1: Active for 5 minutes
         executor1 = self._create_mock_executor(
@@ -1746,7 +1746,7 @@ class TestSparkInsightTools(unittest.TestCase):
             add_time=self.mock_now,
             remove_time=self.mock_now + timedelta(minutes=5)
         )
-        # Executor 2: Active for full 30 minutes 
+        # Executor 2: Active for full 30 minutes
         executor2 = self._create_mock_executor(
             "2", "worker2",
             add_time=self.mock_now,
@@ -1754,11 +1754,11 @@ class TestSparkInsightTools(unittest.TestCase):
         )
         # Executor 3: Active for only 2 minutes (short burst)
         executor3 = self._create_mock_executor(
-            "3", "worker3", 
+            "3", "worker3",
             add_time=self.mock_now + timedelta(minutes=10),
             remove_time=self.mock_now + timedelta(minutes=12)
         )
-        
+
         self.mock_client.get_application.return_value = mock_app
         self.mock_client.list_all_executors.return_value = [executor1, executor2, executor3]
 
@@ -1771,7 +1771,7 @@ class TestSparkInsightTools(unittest.TestCase):
             rec.get("type") == "resource_efficiency" and "Low executor utilization" in rec.get("issue", "")
             for rec in recommendations
         )
-        
+
         # The efficiency calculation should trigger the recommendation if < 70%
         if result["summary"]["utilization_efficiency_percent"] < 70:
             self.assertTrue(efficiency_issue_found)
@@ -2011,6 +2011,10 @@ class TestCompareAppPerformance(unittest.TestCase):
         mock_stage.num_active_tasks = 0
         mock_stage.num_complete_tasks = num_tasks - num_failed_tasks
         mock_stage.first_task_launched_time = self.mock_now
+
+        # Add attributes for compare_stages function
+        mock_stage.task_metrics_distributions = None  # Will be set by client.get_stage_task_summary
+        mock_stage.executor_metrics_distributions = None  # Mock executor distributions
 
         return mock_stage
 
@@ -2274,15 +2278,15 @@ class TestCompareAppPerformance(unittest.TestCase):
             stage_id=1,
             name="Stage 1",
             num_tasks=100,
-            memory_bytes_spilled=1000,
-            duration_seconds=10
+            memory_spilled_bytes=1000,
+            duration_ms=10000  # 10 seconds in ms
         )
         stage2 = self._create_mock_stage(
             stage_id=2,
             name="Stage 2",
             num_tasks=150,  # 50% increase
-            memory_bytes_spilled=2000,  # 100% increase
-            duration_seconds=15  # 50% increase
+            memory_spilled_bytes=2000,  # 100% increase
+            duration_ms=15000  # 15 seconds in ms
         )
 
         # Mock the client method calls
@@ -2337,13 +2341,13 @@ class TestCompareAppPerformance(unittest.TestCase):
             stage_id=1,
             name="Stage 1",
             num_tasks=100,
-            memory_bytes_spilled=1000
+            memory_spilled_bytes=1000
         )
         stage2 = self._create_mock_stage(
             stage_id=2,
             name="Stage 2",
             num_tasks=105,  # Only 5% increase (below 20% threshold)
-            memory_bytes_spilled=1050  # Only 5% increase
+            memory_spilled_bytes=1050  # Only 5% increase
         )
 
         # Mock the client method calls
