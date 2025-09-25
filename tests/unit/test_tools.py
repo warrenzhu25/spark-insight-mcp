@@ -19,6 +19,7 @@ from spark_history_mcp.tools.tools import (
     analyze_executor_utilization,
     analyze_failed_tasks,
     analyze_shuffle_skew,
+    compare_app_executor_timeline,
     compare_app_performance,
     compare_stage_executor_timeline,
     compare_stages,
@@ -2574,3 +2575,271 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         # Should handle uncompleted stage (defaults to 24h duration)
         self.assertIn("timeline_comparison", result)
         self.assertFalse(result["summary"]["stages_overlap"])  # One stage incomplete
+
+
+class TestCompareAppExecutorTimeline(unittest.TestCase):
+    """Test cases for compare_app_executor_timeline function"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.mock_client = MagicMock()
+
+    def _create_mock_application(self, app_id, name, start_time, end_time):
+        """Create a mock application with attempts"""
+        app = MagicMock()
+        app.id = app_id
+        app.name = name
+
+        # Mock attempts
+        attempt = MagicMock()
+        attempt.start_time = start_time
+        attempt.end_time = end_time
+        app.attempts = [attempt]
+
+        return app
+
+    def _create_mock_executor(self, executor_id, add_time, remove_time=None, cores=4, memory_bytes=4096*1024*1024):
+        """Create a mock executor"""
+        executor = MagicMock()
+        executor.id = executor_id
+        executor.add_time = add_time
+        executor.remove_time = remove_time
+        executor.total_cores = cores
+        executor.max_memory = memory_bytes
+        return executor
+
+    def _create_mock_stage(self, stage_id, name, submission_time, completion_time=None):
+        """Create a mock stage"""
+        stage = MagicMock()
+        stage.stage_id = stage_id
+        stage.name = name
+        stage.submission_time = submission_time
+        stage.completion_time = completion_time
+        return stage
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_app_executor_timeline_basic_success(self, mock_get_client):
+        """Test basic successful application timeline comparison"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create mock applications
+        start_time1 = datetime(2024, 1, 1, 10, 0, 0)
+        end_time1 = datetime(2024, 1, 1, 10, 30, 0)
+        start_time2 = datetime(2024, 1, 1, 11, 0, 0)
+        end_time2 = datetime(2024, 1, 1, 11, 20, 0)
+
+        app1 = self._create_mock_application("app-123", "ETL Job v1", start_time1, end_time1)
+        app2 = self._create_mock_application("app-456", "ETL Job v2", start_time2, end_time2)
+
+        # Create mock executors
+        executor1_1 = self._create_mock_executor("1", start_time1, end_time1, cores=4, memory_bytes=4096*1024*1024)
+        executor1_2 = self._create_mock_executor("2", start_time1, end_time1, cores=4, memory_bytes=4096*1024*1024)
+
+        executor2_1 = self._create_mock_executor("1", start_time2, end_time2, cores=8, memory_bytes=8192*1024*1024)
+        executor2_2 = self._create_mock_executor("2", start_time2, end_time2, cores=8, memory_bytes=8192*1024*1024)
+        executor2_3 = self._create_mock_executor("3", start_time2, end_time2, cores=8, memory_bytes=8192*1024*1024)
+
+        # Create mock stages
+        stage1_1 = self._create_mock_stage(1, "Stage 1-1", start_time1, start_time1 + timedelta(minutes=15))
+        stage1_2 = self._create_mock_stage(2, "Stage 1-2", start_time1 + timedelta(minutes=10), end_time1)
+
+        stage2_1 = self._create_mock_stage(1, "Stage 2-1", start_time2, start_time2 + timedelta(minutes=10))
+        stage2_2 = self._create_mock_stage(2, "Stage 2-2", start_time2 + timedelta(minutes=5), end_time2)
+
+        # Mock client responses
+        self.mock_client.get_application.side_effect = [app1, app2]
+        self.mock_client.list_all_executors.side_effect = [
+            [executor1_1, executor1_2],
+            [executor2_1, executor2_2, executor2_3]
+        ]
+        self.mock_client.list_stages.side_effect = [
+            [stage1_1, stage1_2],
+            [stage2_1, stage2_2]
+        ]
+
+        # Call the function
+        result = compare_app_executor_timeline("app-123", "app-456", interval_minutes=5)
+
+        # Verify the result structure
+        self.assertIn("app1_info", result)
+        self.assertIn("app2_info", result)
+        self.assertIn("comparison_config", result)
+        self.assertIn("timeline_comparison", result)
+        self.assertIn("resource_efficiency", result)
+        self.assertIn("summary", result)
+        self.assertIn("recommendations", result)
+        self.assertIn("key_differences", result)
+
+        # Check app info
+        self.assertEqual(result["app1_info"]["app_id"], "app-123")
+        self.assertEqual(result["app1_info"]["name"], "ETL Job v1")
+        self.assertEqual(result["app2_info"]["app_id"], "app-456")
+        self.assertEqual(result["app2_info"]["name"], "ETL Job v2")
+
+        # Check configuration
+        self.assertEqual(result["comparison_config"]["interval_minutes"], 5)
+        self.assertEqual(result["comparison_config"]["analysis_type"], "App-Level Executor Timeline Comparison")
+
+        # Check that timeline comparison has data
+        self.assertGreater(len(result["timeline_comparison"]), 0)
+
+        # Check resource efficiency data
+        self.assertIn("app1", result["resource_efficiency"])
+        self.assertIn("app2", result["resource_efficiency"])
+        self.assertIn("peak_executor_count", result["resource_efficiency"]["app1"])
+        self.assertIn("avg_executor_count", result["resource_efficiency"]["app1"])
+
+        # Verify client was called correctly
+        self.mock_client.get_application.assert_any_call("app-123")
+        self.mock_client.get_application.assert_any_call("app-456")
+        self.mock_client.list_all_executors.assert_any_call(app_id="app-123")
+        self.mock_client.list_all_executors.assert_any_call(app_id="app-456")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_app_executor_timeline_no_attempts(self, mock_get_client):
+        """Test handling applications with no attempts"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create mock applications without attempts
+        app1 = MagicMock()
+        app1.id = "app-123"
+        app1.attempts = []
+
+        app2 = MagicMock()
+        app2.id = "app-456"
+        app2.attempts = [MagicMock()]  # Only app2 has attempts
+
+        self.mock_client.get_application.side_effect = [app1, app2]
+
+        # Call the function
+        result = compare_app_executor_timeline("app-123", "app-456")
+
+        # Should return error
+        self.assertIn("error", result)
+        self.assertEqual(result["error"], "One or both applications have no attempts")
+        self.assertIn("applications", result)
+        self.assertFalse(result["applications"]["app1"]["has_attempts"])
+        self.assertTrue(result["applications"]["app2"]["has_attempts"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_app_executor_timeline_no_start_time(self, mock_get_client):
+        """Test handling applications with no start time"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create mock applications
+        app1 = MagicMock()
+        app1.id = "app-123"
+        attempt1 = MagicMock()
+        attempt1.start_time = None  # No start time
+        attempt1.end_time = datetime(2024, 1, 1, 10, 30, 0)
+        app1.attempts = [attempt1]
+
+        app2 = self._create_mock_application("app-456", "App2",
+                                             datetime(2024, 1, 1, 11, 0, 0),
+                                             datetime(2024, 1, 1, 11, 20, 0))
+
+        self.mock_client.get_application.side_effect = [app1, app2]
+        self.mock_client.list_all_executors.side_effect = [[], []]
+        self.mock_client.list_stages.side_effect = [[], []]
+
+        # Call the function
+        result = compare_app_executor_timeline("app-123", "app-456")
+
+        # Should return error about building timeline
+        self.assertIn("error", result)
+        self.assertEqual(result["error"], "Could not build timeline for one or both applications")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_app_executor_timeline_efficiency_analysis(self, mock_get_client):
+        """Test efficiency analysis and recommendations"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create applications with different efficiency patterns
+        start_time1 = datetime(2024, 1, 1, 10, 0, 0)
+        end_time1 = datetime(2024, 1, 1, 10, 60, 0)  # 1 hour
+        start_time2 = datetime(2024, 1, 1, 11, 0, 0)
+        end_time2 = datetime(2024, 1, 1, 11, 30, 0)  # 30 minutes (faster)
+
+        app1 = self._create_mock_application("app-123", "Slow App", start_time1, end_time1)
+        app2 = self._create_mock_application("app-456", "Fast App", start_time2, end_time2)
+
+        # App1: Lower efficiency (few executors, long duration)
+        executor1_1 = self._create_mock_executor("1", start_time1, end_time1, cores=2)
+        executor1_2 = self._create_mock_executor("2", start_time1, end_time1, cores=2)
+
+        # App2: Higher efficiency (more executors, shorter duration)
+        executor2_1 = self._create_mock_executor("1", start_time2, end_time2, cores=4)
+        executor2_2 = self._create_mock_executor("2", start_time2, end_time2, cores=4)
+        executor2_3 = self._create_mock_executor("3", start_time2, end_time2, cores=4)
+        executor2_4 = self._create_mock_executor("4", start_time2, end_time2, cores=4)
+
+        # Mock client responses
+        self.mock_client.get_application.side_effect = [app1, app2]
+        self.mock_client.list_all_executors.side_effect = [
+            [executor1_1, executor1_2],
+            [executor2_1, executor2_2, executor2_3, executor2_4]
+        ]
+        self.mock_client.list_stages.side_effect = [[], []]
+
+        # Call the function
+        result = compare_app_executor_timeline("app-123", "app-456")
+
+        # Check that recommendations were generated
+        self.assertIn("recommendations", result)
+
+        # Should detect performance difference (App1 takes longer)
+        performance_recs = [r for r in result["recommendations"] if r.get("type") == "performance"]
+        self.assertGreater(len(performance_recs), 0, "Should detect performance difference")
+
+        # Should detect resource allocation difference
+        resource_recs = [r for r in result["recommendations"] if r.get("type") == "resource_allocation"]
+
+        # Check efficiency scores
+        self.assertIn("efficiency_score", result["resource_efficiency"]["app1"])
+        self.assertIn("efficiency_score", result["resource_efficiency"]["app2"])
+
+        # Check key differences
+        self.assertIn("duration_difference_seconds", result["key_differences"])
+        self.assertLess(result["key_differences"]["duration_difference_seconds"], 0)  # App2 is faster
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_app_executor_timeline_different_intervals(self, mock_get_client):
+        """Test with different interval settings"""
+        mock_get_client.return_value = self.mock_client
+
+        start_time = datetime(2024, 1, 1, 10, 0, 0)
+        end_time = datetime(2024, 1, 1, 10, 10, 0)  # 10 minutes
+
+        app1 = self._create_mock_application("app-123", "App1", start_time, end_time)
+        app2 = self._create_mock_application("app-456", "App2", start_time, end_time)
+
+        # Create simple executor setup
+        executor1 = self._create_mock_executor("1", start_time, end_time)
+        executor2 = self._create_mock_executor("1", start_time, end_time)
+
+        self.mock_client.get_application.side_effect = [app1, app2]
+        self.mock_client.list_all_executors.side_effect = [[executor1], [executor2]]
+        self.mock_client.list_stages.side_effect = [[], []]
+
+        # Test with 2-minute intervals
+        result = compare_app_executor_timeline("app-123", "app-456", interval_minutes=2)
+
+        # Should have fewer intervals (10 minutes / 2 minute intervals = 5 intervals)
+        self.assertEqual(result["comparison_config"]["interval_minutes"], 2)
+        self.assertLessEqual(len(result["timeline_comparison"]), 6)  # Allow for rounding
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_app_executor_timeline_error_handling(self, mock_get_client):
+        """Test error handling in compare_app_executor_timeline"""
+        mock_get_client.return_value = self.mock_client
+
+        # Simulate an exception in get_application
+        self.mock_client.get_application.side_effect = Exception("Connection failed")
+
+        result = compare_app_executor_timeline("app-123", "app-456")
+
+        # Should return error information
+        self.assertIn("error", result)
+        self.assertIn("Failed to compare app executor timelines", result["error"])
+        self.assertEqual(result["app1_id"], "app-123")
+        self.assertEqual(result["app2_id"], "app-456")

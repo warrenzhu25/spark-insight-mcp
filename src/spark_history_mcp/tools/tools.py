@@ -4442,3 +4442,341 @@ def compare_stage_executor_timeline(
             "app2_id": app_id2,
             "stage_ids": [stage_id1, stage_id2]
         }
+
+
+@mcp.tool()
+def compare_app_executor_timeline(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+    interval_minutes: int = 1
+) -> Dict[str, Any]:
+    """
+    Compare executor timeline patterns between two Spark applications.
+
+    Analyzes application-level executor allocation and usage patterns throughout
+    the entire application lifecycle to identify differences in resource utilization,
+    efficiency, and optimization opportunities.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional server name to use (uses default if not specified)
+        interval_minutes: Time interval for analysis in minutes (default: 1)
+
+    Returns:
+        Dictionary containing comprehensive application executor timeline comparison
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    try:
+        # Get application information for both apps
+        app1 = client.get_application(app_id1)
+        app2 = client.get_application(app_id2)
+
+        if not app1.attempts or not app2.attempts:
+            return {
+                "error": "One or both applications have no attempts",
+                "applications": {
+                    "app1": {"id": app_id1, "has_attempts": bool(app1.attempts)},
+                    "app2": {"id": app_id2, "has_attempts": bool(app2.attempts)}
+                }
+            }
+
+        # Get executors for both applications
+        executors1 = client.list_all_executors(app_id=app_id1)
+        executors2 = client.list_all_executors(app_id=app_id2)
+
+        # Get stages for both applications to track active stages
+        stages1 = client.list_stages(app_id=app_id1)
+        stages2 = client.list_stages(app_id=app_id2)
+
+        def build_app_executor_timeline(app, executors, stages, app_id):
+            """Build timeline for an application"""
+            if not app.attempts:
+                return None
+
+            start_time = app.attempts[0].start_time
+            end_time = app.attempts[0].end_time
+
+            if not start_time:
+                return None
+
+            if not end_time:
+                # If still running, use current time or estimate
+                end_time = start_time + timedelta(hours=24)
+
+            # Create timeline events for executors
+            timeline_events = []
+
+            # Add executor events
+            for executor in executors:
+                if executor.add_time:
+                    timeline_events.append({
+                        "timestamp": executor.add_time,
+                        "type": "executor_add",
+                        "executor_id": executor.id,
+                        "cores": executor.total_cores or 0,
+                        "memory_mb": (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
+                    })
+
+                if executor.remove_time:
+                    timeline_events.append({
+                        "timestamp": executor.remove_time,
+                        "type": "executor_remove",
+                        "executor_id": executor.id
+                    })
+
+            # Add stage events for tracking active stages
+            for stage in stages:
+                if stage.submission_time:
+                    timeline_events.append({
+                        "timestamp": stage.submission_time,
+                        "type": "stage_start",
+                        "stage_id": stage.stage_id,
+                        "name": stage.name
+                    })
+
+                if stage.completion_time:
+                    timeline_events.append({
+                        "timestamp": stage.completion_time,
+                        "type": "stage_end",
+                        "stage_id": stage.stage_id
+                    })
+
+            # Sort events by timestamp
+            timeline_events.sort(key=lambda x: x["timestamp"])
+
+            # Build interval-based timeline
+            timeline = []
+            current_time = start_time
+            max_intervals = 10000  # Safety limit
+
+            interval_count = 0
+            while current_time < end_time and interval_count < max_intervals:
+                interval_end = current_time + timedelta(minutes=interval_minutes)
+
+                if interval_end > end_time:
+                    interval_end = end_time
+
+                # Calculate active resources at this interval
+                active_executor_count = 0
+                total_cores = 0
+                total_memory_mb = 0
+                active_stages = set()
+
+                # Count active executors
+                for executor in executors:
+                    executor_start = executor.add_time or start_time
+                    executor_end = executor.remove_time or end_time
+
+                    if (executor_start <= interval_end and executor_end >= current_time):
+                        active_executor_count += 1
+                        total_cores += executor.total_cores or 0
+                        total_memory_mb += (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
+
+                # Count active stages
+                for stage in stages:
+                    stage_start = stage.submission_time
+                    stage_end = stage.completion_time or end_time
+
+                    if (stage_start and stage_start <= interval_end and stage_end >= current_time):
+                        active_stages.add(stage.stage_id)
+
+                timeline.append({
+                    "interval_start": current_time.isoformat(),
+                    "interval_end": interval_end.isoformat(),
+                    "active_executor_count": active_executor_count,
+                    "total_cores": total_cores,
+                    "total_memory_mb": total_memory_mb,
+                    "active_stages_count": len(active_stages)
+                })
+
+                current_time = interval_end
+                interval_count += 1
+
+            return {
+                "app_info": {
+                    "app_id": app_id,
+                    "name": app.name,
+                    "start_time": start_time.isoformat() if start_time else None,
+                    "end_time": end_time.isoformat() if app.attempts[0].end_time else None,
+                    "duration_seconds": (end_time - start_time).total_seconds() if start_time else 0
+                },
+                "timeline": timeline,
+                "summary": {
+                    "total_executors": len(executors),
+                    "total_stages": len(stages),
+                    "peak_executor_count": max((interval["active_executor_count"] for interval in timeline), default=0),
+                    "avg_executor_count": sum(interval["active_executor_count"] for interval in timeline) / len(timeline) if timeline else 0,
+                    "peak_cores": max((interval["total_cores"] for interval in timeline), default=0),
+                    "peak_memory_mb": max((interval["total_memory_mb"] for interval in timeline), default=0)
+                }
+            }
+
+        # Build timelines for both applications
+        timeline1 = build_app_executor_timeline(app1, executors1, stages1, app_id1)
+        timeline2 = build_app_executor_timeline(app2, executors2, stages2, app_id2)
+
+        if not timeline1 or not timeline2:
+            return {
+                "error": "Could not build timeline for one or both applications",
+                "applications": {
+                    "app1": {"id": app_id1, "timeline_built": timeline1 is not None},
+                    "app2": {"id": app_id2, "timeline_built": timeline2 is not None}
+                }
+            }
+
+        # Compare timelines interval by interval
+        comparison_data = []
+        min_length = min(len(timeline1["timeline"]), len(timeline2["timeline"]))
+
+        total_executor_diff = 0
+        total_cores_diff = 0
+        total_memory_diff = 0
+        intervals_with_differences = 0
+
+        for i in range(min_length):
+            interval1 = timeline1["timeline"][i]
+            interval2 = timeline2["timeline"][i]
+
+            executor_diff = interval2["active_executor_count"] - interval1["active_executor_count"]
+            cores_diff = interval2["total_cores"] - interval1["total_cores"]
+            memory_diff = interval2["total_memory_mb"] - interval1["total_memory_mb"]
+            stages_diff = interval2["active_stages_count"] - interval1["active_stages_count"]
+
+            if executor_diff != 0 or cores_diff != 0 or memory_diff != 0:
+                intervals_with_differences += 1
+
+            total_executor_diff += abs(executor_diff)
+            total_cores_diff += abs(cores_diff)
+            total_memory_diff += abs(memory_diff)
+
+            comparison_data.append({
+                "interval": i + 1,
+                "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
+                "app1": {
+                    "executor_count": interval1["active_executor_count"],
+                    "total_cores": interval1["total_cores"],
+                    "total_memory_mb": interval1["total_memory_mb"],
+                    "active_stages": interval1["active_stages_count"]
+                },
+                "app2": {
+                    "executor_count": interval2["active_executor_count"],
+                    "total_cores": interval2["total_cores"],
+                    "total_memory_mb": interval2["total_memory_mb"],
+                    "active_stages": interval2["active_stages_count"]
+                },
+                "differences": {
+                    "executor_count_diff": executor_diff,
+                    "cores_diff": cores_diff,
+                    "memory_mb_diff": memory_diff,
+                    "stages_diff": stages_diff
+                }
+            })
+
+        # Calculate efficiency metrics
+        def calculate_efficiency_metrics(timeline_data):
+            timeline = timeline_data["timeline"]
+            if not timeline:
+                return {}
+
+            total_intervals = len(timeline)
+            non_zero_intervals = [t for t in timeline if t["active_executor_count"] > 0]
+
+            if not non_zero_intervals:
+                return {"avg_utilization": 0, "efficiency_score": 0}
+
+            avg_utilization = sum(t["active_executor_count"] for t in non_zero_intervals) / len(non_zero_intervals)
+            peak_count = max(t["active_executor_count"] for t in timeline)
+
+            # Simple efficiency score: how close to peak utilization on average
+            efficiency_score = (avg_utilization / peak_count) if peak_count > 0 else 0
+
+            return {
+                "avg_utilization": avg_utilization,
+                "efficiency_score": efficiency_score,
+                "resource_waste_intervals": sum(1 for t in timeline if t["active_executor_count"] < avg_utilization * 0.5)
+            }
+
+        efficiency1 = calculate_efficiency_metrics(timeline1)
+        efficiency2 = calculate_efficiency_metrics(timeline2)
+
+        # Generate recommendations
+        recommendations = []
+
+        app1_peak = timeline1["summary"]["peak_executor_count"]
+        app2_peak = timeline2["summary"]["peak_executor_count"]
+        app1_avg = timeline1["summary"]["avg_executor_count"]
+        app2_avg = timeline2["summary"]["avg_executor_count"]
+
+        if app2_avg > app1_avg * 1.2:
+            recommendations.append({
+                "type": "resource_allocation",
+                "priority": "medium",
+                "issue": f"App2 uses {((app2_avg/app1_avg - 1) * 100):.0f}% more executors on average",
+                "suggestion": "Consider if App2's higher resource allocation provides proportional performance benefits"
+            })
+
+        if efficiency2.get("efficiency_score", 0) > efficiency1.get("efficiency_score", 0) * 1.1:
+            recommendations.append({
+                "type": "efficiency",
+                "priority": "high",
+                "issue": "App2 shows significantly better executor utilization efficiency",
+                "suggestion": "Apply App2's resource allocation pattern to App1 for better efficiency"
+            })
+
+        if timeline1["app_info"]["duration_seconds"] > timeline2["app_info"]["duration_seconds"] * 1.2:
+            time_savings = timeline1["app_info"]["duration_seconds"] - timeline2["app_info"]["duration_seconds"]
+            recommendations.append({
+                "type": "performance",
+                "priority": "high",
+                "issue": f"App1 takes {time_savings:.0f}s longer to complete",
+                "suggestion": "Analyze App2's parallelization and resource allocation strategy"
+            })
+
+        return {
+            "app1_info": timeline1["app_info"],
+            "app2_info": timeline2["app_info"],
+            "comparison_config": {
+                "interval_minutes": interval_minutes,
+                "total_intervals_compared": min_length,
+                "analysis_type": "App-Level Executor Timeline Comparison"
+            },
+            "timeline_comparison": comparison_data,
+            "resource_efficiency": {
+                "app1": {
+                    **timeline1["summary"],
+                    **efficiency1
+                },
+                "app2": {
+                    **timeline2["summary"],
+                    **efficiency2
+                }
+            },
+            "summary": {
+                "total_intervals": min_length,
+                "intervals_with_differences": intervals_with_differences,
+                "avg_executor_count_difference": total_executor_diff / min_length if min_length > 0 else 0,
+                "max_executor_count_difference": max((abs(c["differences"]["executor_count_diff"]) for c in comparison_data), default=0),
+                "app2_more_efficient": efficiency2.get("efficiency_score", 0) > efficiency1.get("efficiency_score", 0),
+                "performance_improvement": {
+                    "time_difference_seconds": timeline1["app_info"]["duration_seconds"] - timeline2["app_info"]["duration_seconds"],
+                    "efficiency_improvement_ratio": (efficiency2.get("efficiency_score", 0) / efficiency1.get("efficiency_score", 1)) if efficiency1.get("efficiency_score", 0) > 0 else 1
+                }
+            },
+            "recommendations": recommendations,
+            "key_differences": {
+                "peak_executor_difference": app2_peak - app1_peak,
+                "avg_executor_difference": app2_avg - app1_avg,
+                "duration_difference_seconds": timeline2["app_info"]["duration_seconds"] - timeline1["app_info"]["duration_seconds"]
+            }
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to compare app executor timelines: {str(e)}",
+            "app1_id": app_id1,
+            "app2_id": app_id2
+        }
