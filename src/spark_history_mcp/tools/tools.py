@@ -1464,11 +1464,7 @@ def analyze_shuffle_skew(
 
         # Check task-level skew
         try:
-            task_summary = client.get_stage_task_summary(
-                app_id=app_id,
-                stage_id=stage.stage_id,
-                attempt_id=stage.attempt_id
-            )
+            task_summary = stage.task_metrics_distributions
 
             if task_summary.shuffle_write_bytes:
                 # Extract quantiles (typically [min, 25th, 50th, 75th, max])
@@ -2138,11 +2134,6 @@ def _compare_environments(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
 
     return {
         "spark_properties": {
-            "common": {
-                k: {"app1": v, "app2": spark_props2.get(k)}
-                for k, v in spark_props1.items()
-                if k in spark_props2 and v == spark_props2[k]
-            },
             "different": {
                 k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
                 for k, v in spark_props1.items()
@@ -2857,7 +2848,7 @@ def _analyze_executor_performance_patterns(
     }
 
 
-def _get_stage_summary_with_fallback(
+def get_stage_summary(
     client, app_id: str, stage: StageData
 ) -> Optional[Dict[str, Any]]:
     """
@@ -2873,11 +2864,7 @@ def _get_stage_summary_with_fallback(
     """
     # First try: get detailed task summary via API
     try:
-        task_summary = client.get_stage_task_summary(
-            app_id=app_id,
-            stage_id=stage.stage_id,
-            attempt_id=stage.attempt_id or 0
-        )
+        task_summary = stage.task
 
         return {
             "quantiles": task_summary.quantiles,
@@ -3475,17 +3462,8 @@ def compare_app_performance(
     app1 = client.get_application(app_id1)
     app2 = client.get_application(app_id2)
 
-    # Get stages from both applications - try with summaries first, fallback if needed
-    try:
-        stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
-        stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
-    except Exception as e:
-        if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
-            # Known issue with executor metrics distributions - use stages without summaries
-            stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
-            stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
-        else:
-            raise e
+    stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
+    stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
 
     if not stages1 or not stages2:
         return {
@@ -3634,8 +3612,8 @@ def compare_app_performance(
         stage1, stage2 = diff["stage1"], diff["stage2"]
 
         # Get stage summaries
-        stage1_summary = _get_stage_summary_with_fallback(client, app_id1, stage1)
-        stage2_summary = _get_stage_summary_with_fallback(client, app_id2, stage2)
+        stage1_summary = stage1.task_metrics_distributions
+        stage2_summary = stage2.task_metrics_distributions
 
         # Extract executor summaries with improved fallback logic
         def get_executor_summary_for_stage(stage, app_id):
