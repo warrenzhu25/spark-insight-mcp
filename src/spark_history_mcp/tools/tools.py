@@ -2244,6 +2244,8 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
             "total_disk_spilled": 0,
             "total_shuffle_read_bytes": 0,
             "total_shuffle_write_bytes": 0,
+            "total_shuffle_fetch_wait_time": 0,
+            "total_shuffle_remote_reqs_duration": 0,
             "total_input_bytes": 0,
             "total_output_bytes": 0,
             "total_tasks": 0,
@@ -2262,6 +2264,8 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
         "total_disk_spilled": 0,
         "total_shuffle_read_bytes": 0,
         "total_shuffle_write_bytes": 0,
+        "total_shuffle_fetch_wait_time": 0,
+        "total_shuffle_remote_reqs_duration": 0,
         "total_input_bytes": 0,
         "total_output_bytes": 0,
         "total_tasks": 0,
@@ -2289,6 +2293,26 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
         metrics["total_output_bytes"] += stage.output_bytes or 0
         metrics["total_tasks"] += stage.num_tasks or 0
         metrics["total_failed_tasks"] += stage.num_failed_tasks or 0
+
+        # Aggregate shuffle timing metrics from task distributions
+        if hasattr(stage, 'task_metrics_distributions') and stage.task_metrics_distributions:
+            dist = stage.task_metrics_distributions
+
+            # Aggregate fetch wait time (use median values to avoid outlier skew)
+            if (dist.shuffle_read_metrics and
+                dist.shuffle_read_metrics.fetch_wait_time and
+                len(dist.shuffle_read_metrics.fetch_wait_time) >= 5):
+                # Use median value (index 2) multiplied by number of tasks for approximation
+                median_fetch_wait = dist.shuffle_read_metrics.fetch_wait_time[2]
+                metrics["total_shuffle_fetch_wait_time"] += median_fetch_wait * (stage.num_tasks or 1)
+
+            # Aggregate remote requests duration (use median values)
+            if (dist.shuffle_read_metrics and
+                dist.shuffle_read_metrics.remote_reqs_duration and
+                len(dist.shuffle_read_metrics.remote_reqs_duration) >= 5):
+                # Use median value (index 2) multiplied by number of tasks for approximation
+                median_remote_reqs = dist.shuffle_read_metrics.remote_reqs_duration[2]
+                metrics["total_shuffle_remote_reqs_duration"] += median_remote_reqs * (stage.num_tasks or 1)
 
     metrics.update({
         "total_stage_duration": total_stage_duration,
@@ -3144,7 +3168,7 @@ def compare_app_resources(
     Returns:
         Dict containing resource allocation comparison, efficiency ratios, and recommendations
     """
-    ctx = mcp.request_context.lifespan_context
+    ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
     try:
@@ -3244,7 +3268,8 @@ def compare_app_executors(
     Returns:
         Dict containing executor performance comparison, efficiency ratios, and recommendations
     """
-    ctx = mcp.request_context.lifespan_context
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
 
     try:
         # Get executor summaries for both applications
@@ -3378,7 +3403,7 @@ def compare_app_jobs(
     Returns:
         Dict containing job performance comparison, timing analysis, and recommendations
     """
-    ctx = mcp.request_context.lifespan_context
+    ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
     try:
@@ -3502,7 +3527,7 @@ def compare_app_stages_aggregated(
     Returns:
         Dict containing aggregated stage comparison, I/O analysis, and recommendations
     """
-    ctx = mcp.request_context.lifespan_context
+    ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
     try:
