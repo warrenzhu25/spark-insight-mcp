@@ -3835,3 +3835,286 @@ def compare_app_performance(
         },
         "recommendations": recommendations
     }
+
+
+@mcp.tool()
+def compare_stages(
+    app_id1: str,
+    app_id2: str,
+    stage_id1: int,
+    stage_id2: int,
+    server: Optional[str] = None,
+    significance_threshold: float = 0.2
+) -> Dict[str, Any]:
+    """
+    Compare specific stages between two Spark applications.
+
+    Focuses on median and max values from distributions, showing only metrics
+    with significant differences to reduce noise and highlight actionable insights.
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        stage_id1: Stage ID from first application
+        stage_id2: Stage ID from second application
+        server: Optional server name to use (uses default if not specified)
+        significance_threshold: Minimum difference threshold to include metric (default: 0.2)
+
+    Returns:
+        Dictionary containing stage comparison with significant differences only
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    try:
+        # Get stage data with summaries
+        stage1 = client.get_stage_attempt(
+            app_id=app_id1,
+            stage_id=stage_id1,
+            attempt_id=0,
+            details=False,
+            with_summaries=True
+        )
+        stage2 = client.get_stage_attempt(
+            app_id=app_id2,
+            stage_id=stage_id2,
+            attempt_id=0,
+            details=False,
+            with_summaries=True
+        )
+
+        # Get task metric distributions
+        try:
+            task_dist1 = client.get_stage_task_summary(
+                app_id=app_id1, stage_id=stage_id1, attempt_id=0
+            )
+            stage1.task_metrics_distributions = task_dist1
+        except Exception:
+            pass
+
+        try:
+            task_dist2 = client.get_stage_task_summary(
+                app_id=app_id2, stage_id=stage_id2, attempt_id=0
+            )
+            stage2.task_metrics_distributions = task_dist2
+        except Exception:
+            pass
+
+    except Exception as e:
+        return {
+            "error": f"Failed to retrieve stage data: {str(e)}",
+            "stages": {
+                "stage1": {"app_id": app_id1, "stage_id": stage_id1},
+                "stage2": {"app_id": app_id2, "stage_id": stage_id2}
+            }
+        }
+
+    # Build comparison result
+    result = {
+        "stage_comparison": {
+            "stage1": {
+                "app_id": app_id1,
+                "stage_id": stage_id1,
+                "name": stage1.name,
+                "status": stage1.status
+            },
+            "stage2": {
+                "app_id": app_id2,
+                "stage_id": stage_id2,
+                "name": stage2.name,
+                "status": stage2.status
+            }
+        },
+        "significant_differences": {},
+        "summary": {
+            "significance_threshold": significance_threshold,
+            "total_differences_found": 0
+        }
+    }
+
+    # Helper function to calculate significance and format comparison
+    def calculate_difference(val1: float, val2: float, metric_name: str) -> Optional[Dict[str, Any]]:
+        if val1 == 0 and val2 == 0:
+            return None
+
+        # Avoid division by zero
+        denominator = max(abs(val1), abs(val2), 1)
+        diff_ratio = abs(val1 - val2) / denominator
+
+        if diff_ratio >= significance_threshold:
+            change_pct = ((val2 - val1) / max(abs(val1), 1)) * 100
+            return {
+                "stage1": val1,
+                "stage2": val2,
+                "change": f"{change_pct:+.1f}%",
+                "significance": diff_ratio
+            }
+        return None
+
+    # Compare stage-level metrics
+    stage_metrics = {}
+
+    # Duration comparison
+    duration1 = 0
+    duration2 = 0
+    if stage1.completion_time and stage1.first_task_launched_time:
+        duration1 = (stage1.completion_time - stage1.first_task_launched_time).total_seconds()
+    if stage2.completion_time and stage2.first_task_launched_time:
+        duration2 = (stage2.completion_time - stage2.first_task_launched_time).total_seconds()
+
+    duration_diff = calculate_difference(duration1, duration2, "duration")
+    if duration_diff:
+        stage_metrics["duration_seconds"] = duration_diff
+
+    # Task count comparisons
+    task_metrics = [
+        ("num_tasks", stage1.num_tasks or 0, stage2.num_tasks or 0),
+        ("num_failed_tasks", stage1.num_failed_tasks or 0, stage2.num_failed_tasks or 0),
+        ("memory_bytes_spilled", stage1.memory_bytes_spilled or 0, stage2.memory_bytes_spilled or 0),
+        ("disk_bytes_spilled", stage1.disk_bytes_spilled or 0, stage2.disk_bytes_spilled or 0),
+        ("input_bytes", stage1.input_bytes or 0, stage2.input_bytes or 0),
+        ("output_bytes", stage1.output_bytes or 0, stage2.output_bytes or 0),
+        ("shuffle_read_bytes", stage1.shuffle_read_bytes or 0, stage2.shuffle_read_bytes or 0),
+        ("shuffle_write_bytes", stage1.shuffle_write_bytes or 0, stage2.shuffle_write_bytes or 0)
+    ]
+
+    for metric_name, val1, val2 in task_metrics:
+        diff = calculate_difference(val1, val2, metric_name)
+        if diff:
+            stage_metrics[metric_name] = diff
+
+    if stage_metrics:
+        result["significant_differences"]["stage_metrics"] = stage_metrics
+
+    # Compare task-level distributions (median and max)
+    task_distributions = {}
+
+    if (stage1.task_metrics_distributions and stage2.task_metrics_distributions):
+        dist1 = stage1.task_metrics_distributions
+        dist2 = stage2.task_metrics_distributions
+
+        # Task distribution metrics to compare
+        task_dist_metrics = [
+            ("duration", dist1.duration, dist2.duration),
+            ("executor_run_time", dist1.executor_run_time, dist2.executor_run_time),
+            ("peak_execution_memory", dist1.peak_execution_memory, dist2.peak_execution_memory),
+            ("memory_bytes_spilled", dist1.memory_bytes_spilled, dist2.memory_bytes_spilled)
+        ]
+
+        for metric_name, vals1, vals2 in task_dist_metrics:
+            if vals1 and vals2 and len(vals1) >= 5 and len(vals2) >= 5:
+                metric_comparison = {}
+
+                # Compare median (50th percentile - index 2)
+                median_diff = calculate_difference(vals1[2], vals2[2], f"{metric_name}_median")
+                if median_diff:
+                    metric_comparison["median"] = median_diff
+
+                # Compare max (100th percentile - index 4)
+                max_diff = calculate_difference(vals1[4], vals2[4], f"{metric_name}_max")
+                if max_diff:
+                    metric_comparison["max"] = max_diff
+
+                if metric_comparison:
+                    task_distributions[metric_name] = metric_comparison
+
+        # Shuffle metrics from nested objects
+        if (dist1.shuffle_read_metrics and dist2.shuffle_read_metrics and
+            dist1.shuffle_read_metrics.read_bytes and dist2.shuffle_read_metrics.read_bytes and
+            len(dist1.shuffle_read_metrics.read_bytes) >= 5 and len(dist2.shuffle_read_metrics.read_bytes) >= 5):
+
+            read_comparison = {}
+            median_diff = calculate_difference(
+                dist1.shuffle_read_metrics.read_bytes[2],
+                dist2.shuffle_read_metrics.read_bytes[2],
+                "shuffle_read_median"
+            )
+            if median_diff:
+                read_comparison["median"] = median_diff
+
+            max_diff = calculate_difference(
+                dist1.shuffle_read_metrics.read_bytes[4],
+                dist2.shuffle_read_metrics.read_bytes[4],
+                "shuffle_read_max"
+            )
+            if max_diff:
+                read_comparison["max"] = max_diff
+
+            if read_comparison:
+                task_distributions["shuffle_read_bytes"] = read_comparison
+
+        if (dist1.shuffle_write_metrics and dist2.shuffle_write_metrics and
+            dist1.shuffle_write_metrics.write_bytes and dist2.shuffle_write_metrics.write_bytes and
+            len(dist1.shuffle_write_metrics.write_bytes) >= 5 and len(dist2.shuffle_write_metrics.write_bytes) >= 5):
+
+            write_comparison = {}
+            median_diff = calculate_difference(
+                dist1.shuffle_write_metrics.write_bytes[2],
+                dist2.shuffle_write_metrics.write_bytes[2],
+                "shuffle_write_median"
+            )
+            if median_diff:
+                write_comparison["median"] = median_diff
+
+            max_diff = calculate_difference(
+                dist1.shuffle_write_metrics.write_bytes[4],
+                dist2.shuffle_write_metrics.write_bytes[4],
+                "shuffle_write_max"
+            )
+            if max_diff:
+                write_comparison["max"] = max_diff
+
+            if write_comparison:
+                task_distributions["shuffle_write_bytes"] = write_comparison
+
+    if task_distributions:
+        result["significant_differences"]["task_distributions"] = task_distributions
+
+    # Compare executor-level distributions (median and max)
+    executor_distributions = {}
+
+    if (stage1.executor_metrics_distributions and stage2.executor_metrics_distributions):
+        exec_dist1 = stage1.executor_metrics_distributions
+        exec_dist2 = stage2.executor_metrics_distributions
+
+        # Executor distribution metrics to compare
+        exec_dist_metrics = [
+            ("task_time", exec_dist1.task_time, exec_dist2.task_time),
+            ("shuffle_write", exec_dist1.shuffle_write, exec_dist2.shuffle_write),
+            ("memory_bytes_spilled", exec_dist1.memory_bytes_spilled, exec_dist2.memory_bytes_spilled)
+        ]
+
+        for metric_name, vals1, vals2 in exec_dist_metrics:
+            if vals1 and vals2 and len(vals1) >= 5 and len(vals2) >= 5:
+                metric_comparison = {}
+
+                # Compare median (index 2)
+                median_diff = calculate_difference(vals1[2], vals2[2], f"{metric_name}_median")
+                if median_diff:
+                    metric_comparison["median"] = median_diff
+
+                # Compare max (index 4)
+                max_diff = calculate_difference(vals1[4], vals2[4], f"{metric_name}_max")
+                if max_diff:
+                    metric_comparison["max"] = max_diff
+
+                if metric_comparison:
+                    executor_distributions[metric_name] = metric_comparison
+
+    if executor_distributions:
+        result["significant_differences"]["executor_distributions"] = executor_distributions
+
+    # Count total significant differences
+    total_diffs = 0
+    for category in result["significant_differences"].values():
+        if isinstance(category, dict):
+            for metric_data in category.values():
+                if isinstance(metric_data, dict):
+                    if "stage1" in metric_data:  # Single metric
+                        total_diffs += 1
+                    else:  # Distribution with median/max
+                        total_diffs += len(metric_data)
+
+    result["summary"]["total_differences_found"] = total_diffs
+
+    return result

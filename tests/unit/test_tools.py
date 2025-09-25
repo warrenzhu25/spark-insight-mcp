@@ -19,6 +19,7 @@ from spark_history_mcp.tools.tools import (
     analyze_failed_tasks,
     analyze_shuffle_skew,
     compare_app_performance,
+    compare_stages,
     _analyze_executor_performance_patterns,
     get_application,
     get_application_insights,
@@ -2261,3 +2262,99 @@ class TestCompareAppPerformance(unittest.TestCase):
         deep_dive = result["stage_deep_dive"]
         self.assertEqual(len(deep_dive["top_stage_differences"]), 0)
         self.assertEqual(deep_dive["analysis_parameters"]["matched_stages"], 0)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stages_basic_success(self, mock_get_client):
+        """Test basic successful stage comparison"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create mock stages with different metrics to trigger significance threshold
+        stage1 = self._create_mock_stage(
+            stage_id=1,
+            name="Stage 1",
+            num_tasks=100,
+            memory_bytes_spilled=1000,
+            duration_seconds=10
+        )
+        stage2 = self._create_mock_stage(
+            stage_id=2,
+            name="Stage 2",
+            num_tasks=150,  # 50% increase
+            memory_bytes_spilled=2000,  # 100% increase
+            duration_seconds=15  # 50% increase
+        )
+
+        # Mock the client method calls
+        self.mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        self.mock_client.get_stage_task_summary.side_effect = [
+            MagicMock(),  # Mock task distributions for stage1
+            MagicMock()   # Mock task distributions for stage2
+        ]
+
+        # Call the function
+        result = compare_stages("app-123", "app-456", 1, 2)
+
+        # Verify basic structure
+        self.assertIn("stage_comparison", result)
+        self.assertIn("significant_differences", result)
+        self.assertIn("summary", result)
+
+        # Verify stage comparison info
+        stage_comp = result["stage_comparison"]
+        self.assertEqual(stage_comp["stage1"]["app_id"], "app-123")
+        self.assertEqual(stage_comp["stage1"]["stage_id"], 1)
+        self.assertEqual(stage_comp["stage2"]["app_id"], "app-456")
+        self.assertEqual(stage_comp["stage2"]["stage_id"], 2)
+
+        # Verify significance threshold is set
+        self.assertEqual(result["summary"]["significance_threshold"], 0.2)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stages_error_handling(self, mock_get_client):
+        """Test error handling in compare_stages"""
+        mock_get_client.return_value = self.mock_client
+
+        # Setup mock client to raise exception
+        self.mock_client.get_stage_attempt.side_effect = Exception("Stage not found")
+
+        # Call function
+        result = compare_stages("app-123", "app-456", 1, 2)
+
+        # Should return error structure
+        self.assertIn("error", result)
+        self.assertIn("stages", result)
+        self.assertEqual(result["stages"]["stage1"]["app_id"], "app-123")
+        self.assertEqual(result["stages"]["stage1"]["stage_id"], 1)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stages_no_significant_differences(self, mock_get_client):
+        """Test compare_stages when no differences meet significance threshold"""
+        mock_get_client.return_value = self.mock_client
+
+        # Create mock stages with very similar metrics (below default 0.2 threshold)
+        stage1 = self._create_mock_stage(
+            stage_id=1,
+            name="Stage 1",
+            num_tasks=100,
+            memory_bytes_spilled=1000
+        )
+        stage2 = self._create_mock_stage(
+            stage_id=2,
+            name="Stage 2",
+            num_tasks=105,  # Only 5% increase (below 20% threshold)
+            memory_bytes_spilled=1050  # Only 5% increase
+        )
+
+        # Mock the client method calls
+        self.mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        self.mock_client.get_stage_task_summary.side_effect = [
+            MagicMock(),
+            MagicMock()
+        ]
+
+        # Call the function
+        result = compare_stages("app-123", "app-456", 1, 2)
+
+        # Should have empty significant_differences since changes are below threshold
+        self.assertEqual(len(result["significant_differences"]), 0)
+        self.assertEqual(result["summary"]["total_differences_found"], 0)
