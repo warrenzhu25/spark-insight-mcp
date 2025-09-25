@@ -2491,14 +2491,14 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
     """Compare SQL execution plans between two Spark applications."""
     try:
         # Get SQL queries for both applications (check if method exists)
-        if not hasattr(client, 'list_sql_queries'):
+        if not hasattr(client, 'get_sql_list'):
             return {
                 "sql_analysis": "not_supported",
                 "message": "SQL query listing not supported by client"
             }
 
-        sql_queries1 = client.list_sql_queries(app_id1)
-        sql_queries2 = client.list_sql_queries(app_id2)
+        sql_queries1 = client.get_sql_list(app_id1, details=True, plan_description=False)
+        sql_queries2 = client.get_sql_list(app_id2, details=True, plan_description=False)
 
         if not sql_queries1 and not sql_queries2:
             return {
@@ -2510,14 +2510,14 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
         sql_comparison = {
             "app1": {
                 "query_count": len(sql_queries1),
-                "total_duration_ms": sum(q.duration_ms or 0 for q in sql_queries1),
-                "avg_duration_ms": sum(q.duration_ms or 0 for q in sql_queries1) / max(len(sql_queries1), 1),
+                "total_duration_ms": sum(q.duration or 0 for q in sql_queries1),
+                "avg_duration_ms": sum(q.duration or 0 for q in sql_queries1) / max(len(sql_queries1), 1),
                 "failed_queries": sum(1 for q in sql_queries1 if q.status == "FAILED"),
             },
             "app2": {
                 "query_count": len(sql_queries2),
-                "total_duration_ms": sum(q.duration_ms or 0 for q in sql_queries2),
-                "avg_duration_ms": sum(q.duration_ms or 0 for q in sql_queries2) / max(len(sql_queries2), 1),
+                "total_duration_ms": sum(q.duration or 0 for q in sql_queries2),
+                "avg_duration_ms": sum(q.duration or 0 for q in sql_queries2) / max(len(sql_queries2), 1),
                 "failed_queries": sum(1 for q in sql_queries2 if q.status == "FAILED"),
             }
         }
@@ -2540,33 +2540,35 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
         }
 
         # Try to get detailed execution plans for top queries
-        top_queries1 = sorted(sql_queries1, key=lambda x: x.duration_ms or 0, reverse=True)[:3]
-        top_queries2 = sorted(sql_queries2, key=lambda x: x.duration_ms or 0, reverse=True)[:3]
+        top_queries1 = sorted(sql_queries1, key=lambda x: x.duration or 0, reverse=True)[:3]
+        top_queries2 = sorted(sql_queries2, key=lambda x: x.duration or 0, reverse=True)[:3]
 
         plan_details1 = []
         plan_details2 = []
 
         for query in top_queries1:
             try:
-                plan = client.get_sql_query_execution_plan(app_id1, query.execution_id)
-                if plan:
-                    plan_details1.append({
-                        "execution_id": query.execution_id,
-                        "duration_ms": query.duration_ms,
-                        "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
-                    })
+                if hasattr(client, 'get_sql_execution'):
+                    plan = client.get_sql_execution(app_id1, query.execution_id, details=True, plan_description=True)
+                    if plan:
+                        plan_details1.append({
+                            "execution_id": query.execution_id,
+                            "duration_ms": query.duration,
+                            "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
+                        })
             except:
                 pass
 
         for query in top_queries2:
             try:
-                plan = client.get_sql_query_execution_plan(app_id2, query.execution_id)
-                if plan:
-                    plan_details2.append({
-                        "execution_id": query.execution_id,
-                        "duration_ms": query.duration_ms,
-                        "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
-                    })
+                if hasattr(client, 'get_sql_execution'):
+                    plan = client.get_sql_execution(app_id2, query.execution_id, details=True, plan_description=True)
+                    if plan:
+                        plan_details2.append({
+                            "execution_id": query.execution_id,
+                            "duration_ms": query.duration,
+                            "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
+                        })
             except:
                 pass
 
