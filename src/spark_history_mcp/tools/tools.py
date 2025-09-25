@@ -2256,6 +2256,7 @@ def _get_stage_summary_with_fallback(
     Returns:
         Stage summary dict or None if unavailable
     """
+    # First try: get detailed task summary via API
     try:
         task_summary = client.get_stage_task_summary(
             app_id=app_id,
@@ -2277,7 +2278,25 @@ def _get_stage_summary_with_fallback(
             "output_bytes": task_summary.output_metrics.bytes_written if task_summary.output_metrics else None
         }
     except Exception:
-        return None
+        # Second try: use basic stage data as fallback
+        try:
+            return {
+                "stage_id": stage.stage_id,
+                "stage_name": stage.name,
+                "status": stage.status,
+                "num_tasks": stage.num_tasks,
+                "num_failed_tasks": stage.num_failed_tasks,
+                "executor_run_time": stage.executor_run_time,
+                "memory_bytes_spilled": getattr(stage, 'memory_bytes_spilled', None),
+                "disk_bytes_spilled": getattr(stage, 'disk_bytes_spilled', None),
+                "shuffle_read_bytes": getattr(stage, 'shuffle_read_bytes', None),
+                "shuffle_write_bytes": getattr(stage, 'shuffle_write_bytes', None),
+                "input_bytes": getattr(stage, 'input_bytes', None),
+                "output_bytes": getattr(stage, 'output_bytes', None),
+                "fallback_note": "Using basic stage data - detailed task metrics unavailable"
+            }
+        except Exception:
+            return None
 
 
 @mcp.tool()
@@ -2318,9 +2337,17 @@ def compare_app_performance(
     app1 = client.get_application(app_id1)
     app2 = client.get_application(app_id2)
 
-    # Get stages from both applications
-    stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
-    stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
+    # Get stages from both applications - try with summaries first, fallback if needed
+    try:
+        stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
+        stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
+    except Exception as e:
+        if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
+            # Known issue with executor metrics distributions - use stages without summaries
+            stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
+            stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
+        else:
+            raise e
 
     if not stages1 or not stages2:
         return {
@@ -2472,9 +2499,23 @@ def compare_app_performance(
         stage1_summary = _get_stage_summary_with_fallback(client, app_id1, stage1)
         stage2_summary = _get_stage_summary_with_fallback(client, app_id2, stage2)
 
-        # Extract executor summaries
-        executor_summary1 = stage1.executor_summary if hasattr(stage1, 'executor_summary') and stage1.executor_summary else {}
-        executor_summary2 = stage2.executor_summary if hasattr(stage2, 'executor_summary') and stage2.executor_summary else {}
+        # Extract executor summaries with improved fallback logic
+        def get_executor_summary_for_stage(stage, app_id):
+            """Get executor summary for a stage with fallback options"""
+            # First try: stage already has executor_summary (when with_summaries=True worked)
+            if hasattr(stage, 'executor_summary') and stage.executor_summary:
+                return stage.executor_summary
+
+            # Second try: use get_executor_summary tool for the application
+            # Note: This gives application-level executor summary, not stage-specific
+            try:
+                app_executor_summary = get_executor_summary(app_id, server)
+                return app_executor_summary if app_executor_summary else {}
+            except Exception:
+                return {}
+
+        executor_summary1 = get_executor_summary_for_stage(stage1, app_id1)
+        executor_summary2 = get_executor_summary_for_stage(stage2, app_id2)
 
         stage_comparison = {
             "stage_name": stage1.name,
