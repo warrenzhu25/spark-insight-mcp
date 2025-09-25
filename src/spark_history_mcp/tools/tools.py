@@ -4991,6 +4991,90 @@ def compare_stages(
     return result
 
 
+def merge_consecutive_intervals(comparison_data: list) -> list:
+    """
+    Merge consecutive intervals that have the same executor count values.
+
+    Args:
+        comparison_data: List of comparison intervals with executor counts
+
+    Returns:
+        List of merged intervals with consolidated timestamp ranges
+    """
+    if not comparison_data:
+        return []
+
+    merged_data = []
+    current_group = [comparison_data[0]]
+
+    for i in range(1, len(comparison_data)):
+        current = comparison_data[i]
+        previous = comparison_data[i - 1]
+
+        # Check if executor counts are the same for both apps
+        if (current["app1"]["executor_count"] == previous["app1"]["executor_count"] and
+            current["app2"]["executor_count"] == previous["app2"]["executor_count"]):
+            current_group.append(current)
+        else:
+            # Process current group and start new group
+            if len(current_group) == 1:
+                merged_data.append(current_group[0])
+            else:
+                # Create merged interval
+                first_interval = current_group[0]
+                last_interval = current_group[-1]
+
+                # Extract start time from first interval and end time from last interval
+                start_time = first_interval["timestamp_range"].split(" to ")[0]
+                end_time = last_interval["timestamp_range"].split(" to ")[1]
+
+                merged_interval = {
+                    "interval": f"{first_interval['interval']}-{last_interval['interval']}",
+                    "timestamp_range": f"{start_time} to {end_time}",
+                    "app1": {
+                        "executor_count": first_interval["app1"]["executor_count"]
+                    },
+                    "app2": {
+                        "executor_count": first_interval["app2"]["executor_count"]
+                    },
+                    "differences": {
+                        "executor_count_diff": first_interval["differences"]["executor_count_diff"]
+                    },
+                    "duration_intervals": len(current_group)
+                }
+                merged_data.append(merged_interval)
+
+            current_group = [current]
+
+    # Process the last group
+    if len(current_group) == 1:
+        merged_data.append(current_group[0])
+    else:
+        first_interval = current_group[0]
+        last_interval = current_group[-1]
+
+        start_time = first_interval["timestamp_range"].split(" to ")[0]
+        end_time = last_interval["timestamp_range"].split(" to ")[1]
+
+        merged_interval = {
+            "interval": f"{first_interval['interval']}-{last_interval['interval']}",
+            "timestamp_range": f"{start_time} to {end_time}",
+            "app1": {
+                "executor_count": first_interval["app1"]["executor_count"]
+            },
+            "app2": {
+                "executor_count": first_interval["app2"]["executor_count"]
+            },
+            "differences": {
+                "executor_count_diff": first_interval["differences"]["executor_count_diff"]
+            },
+            "duration_intervals": len(current_group)
+        }
+        merged_data.append(merged_interval)
+
+    return merged_data
+
+
 @mcp.tool()
 def compare_stage_executor_timeline(
     app_id1: str,
@@ -5148,33 +5232,29 @@ def compare_stage_executor_timeline(
             interval2 = timeline2["timeline"][i]
 
             executor_diff = interval2["active_executor_count"] - interval1["active_executor_count"]
-            cores_diff = interval2["total_cores"] - interval1["total_cores"]
-            memory_diff = interval2["total_memory_mb"] - interval1["total_memory_mb"]
 
             comparison_data.append({
                 "interval": i + 1,
                 "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
                 "app1": {
-                    "executor_count": interval1["active_executor_count"],
-                    "total_cores": interval1["total_cores"],
-                    "total_memory_mb": interval1["total_memory_mb"]
+                    "executor_count": interval1["active_executor_count"]
                 },
                 "app2": {
-                    "executor_count": interval2["active_executor_count"],
-                    "total_cores": interval2["total_cores"],
-                    "total_memory_mb": interval2["total_memory_mb"]
+                    "executor_count": interval2["active_executor_count"]
                 },
                 "differences": {
-                    "executor_count_diff": executor_diff,
-                    "cores_diff": cores_diff,
-                    "memory_mb_diff": memory_diff
+                    "executor_count_diff": executor_diff
                 }
             })
 
+        # Merge consecutive intervals with same executor counts
+        merged_comparison_data = merge_consecutive_intervals(comparison_data)
+
         # Calculate summary statistics
-        total_intervals = len(comparison_data)
-        intervals_with_executor_diff = sum(1 for c in comparison_data if c["differences"]["executor_count_diff"] != 0)
-        max_executor_diff = max((abs(c["differences"]["executor_count_diff"]) for c in comparison_data), default=0)
+        original_intervals = len(comparison_data)
+        merged_intervals = len(merged_comparison_data)
+        intervals_with_executor_diff = sum(1 for c in merged_comparison_data if c["differences"]["executor_count_diff"] != 0)
+        max_executor_diff = max((abs(c["differences"]["executor_count_diff"]) for c in merged_comparison_data), default=0)
 
         return {
             "app1_info": {
@@ -5187,11 +5267,13 @@ def compare_stage_executor_timeline(
             },
             "comparison_config": {
                 "interval_minutes": interval_minutes,
-                "total_intervals_compared": total_intervals
+                "original_intervals_compared": original_intervals,
+                "merged_intervals_shown": merged_intervals
             },
-            "timeline_comparison": comparison_data,
+            "timeline_comparison": merged_comparison_data,
             "summary": {
-                "total_intervals": total_intervals,
+                "original_intervals": original_intervals,
+                "merged_intervals": merged_intervals,
                 "intervals_with_executor_differences": intervals_with_executor_diff,
                 "max_executor_count_difference": max_executor_diff,
                 "stages_overlap": timeline1["stage_info"]["completion_time"] is not None and timeline2["stage_info"]["completion_time"] is not None
@@ -5395,49 +5477,28 @@ def compare_app_executor_timeline(
         comparison_data = []
         min_length = min(len(timeline1["timeline"]), len(timeline2["timeline"]))
 
-        total_executor_diff = 0
-        total_cores_diff = 0
-        total_memory_diff = 0
-        intervals_with_differences = 0
-
         for i in range(min_length):
             interval1 = timeline1["timeline"][i]
             interval2 = timeline2["timeline"][i]
 
             executor_diff = interval2["active_executor_count"] - interval1["active_executor_count"]
-            cores_diff = interval2["total_cores"] - interval1["total_cores"]
-            memory_diff = interval2["total_memory_mb"] - interval1["total_memory_mb"]
-            stages_diff = interval2["active_stages_count"] - interval1["active_stages_count"]
-
-            if executor_diff != 0 or cores_diff != 0 or memory_diff != 0:
-                intervals_with_differences += 1
-
-            total_executor_diff += abs(executor_diff)
-            total_cores_diff += abs(cores_diff)
-            total_memory_diff += abs(memory_diff)
 
             comparison_data.append({
                 "interval": i + 1,
                 "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
                 "app1": {
-                    "executor_count": interval1["active_executor_count"],
-                    "total_cores": interval1["total_cores"],
-                    "total_memory_mb": interval1["total_memory_mb"],
-                    "active_stages": interval1["active_stages_count"]
+                    "executor_count": interval1["active_executor_count"]
                 },
                 "app2": {
-                    "executor_count": interval2["active_executor_count"],
-                    "total_cores": interval2["total_cores"],
-                    "total_memory_mb": interval2["total_memory_mb"],
-                    "active_stages": interval2["active_stages_count"]
+                    "executor_count": interval2["active_executor_count"]
                 },
                 "differences": {
-                    "executor_count_diff": executor_diff,
-                    "cores_diff": cores_diff,
-                    "memory_mb_diff": memory_diff,
-                    "stages_diff": stages_diff
+                    "executor_count_diff": executor_diff
                 }
             })
+
+        # Merge consecutive intervals with same executor counts
+        merged_comparison_data = merge_consecutive_intervals(comparison_data)
 
         # Calculate efficiency metrics
         def calculate_efficiency_metrics(timeline_data):
@@ -5499,15 +5560,23 @@ def compare_app_executor_timeline(
                 "suggestion": "Analyze App2's parallelization and resource allocation strategy"
             })
 
+        # Calculate summary statistics for merged data
+        original_intervals = len(comparison_data)
+        merged_intervals = len(merged_comparison_data)
+        intervals_with_differences = sum(1 for c in merged_comparison_data if c["differences"]["executor_count_diff"] != 0)
+        max_executor_diff = max((abs(c["differences"]["executor_count_diff"]) for c in merged_comparison_data), default=0)
+        avg_executor_diff = sum(abs(c["differences"]["executor_count_diff"]) for c in merged_comparison_data) / merged_intervals if merged_intervals > 0 else 0
+
         return {
             "app1_info": timeline1["app_info"],
             "app2_info": timeline2["app_info"],
             "comparison_config": {
                 "interval_minutes": interval_minutes,
-                "total_intervals_compared": min_length,
+                "original_intervals_compared": original_intervals,
+                "merged_intervals_shown": merged_intervals,
                 "analysis_type": "App-Level Executor Timeline Comparison"
             },
-            "timeline_comparison": comparison_data,
+            "timeline_comparison": merged_comparison_data,
             "resource_efficiency": {
                 "app1": {
                     **timeline1["summary"],
@@ -5519,10 +5588,11 @@ def compare_app_executor_timeline(
                 }
             },
             "summary": {
-                "total_intervals": min_length,
+                "original_intervals": original_intervals,
+                "merged_intervals": merged_intervals,
                 "intervals_with_differences": intervals_with_differences,
-                "avg_executor_count_difference": total_executor_diff / min_length if min_length > 0 else 0,
-                "max_executor_count_difference": max((abs(c["differences"]["executor_count_diff"]) for c in comparison_data), default=0),
+                "avg_executor_count_difference": avg_executor_diff,
+                "max_executor_count_difference": max_executor_diff,
                 "app2_more_efficient": efficiency2.get("efficiency_score", 0) > efficiency1.get("efficiency_score", 0),
                 "performance_improvement": {
                     "time_difference_seconds": timeline1["app_info"]["duration_seconds"] - timeline2["app_info"]["duration_seconds"],
