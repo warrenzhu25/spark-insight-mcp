@@ -3834,9 +3834,25 @@ def compare_app_performance(
     for diff in top_differences:
         stage1, stage2 = diff["stage1"], diff["stage2"]
 
-        # Get stage summaries
-        stage1_summary = stage1.task_metrics_distributions
-        stage2_summary = stage2.task_metrics_distributions
+        # Use compare_stages tool for detailed stage comparison
+        try:
+            detailed_stage_comparison = compare_stages(
+                app_id1=app_id1,
+                app_id2=app_id2,
+                stage_id1=stage1.stage_id,
+                stage_id2=stage2.stage_id,
+                server=server,
+                significance_threshold=0.2
+            )
+        except Exception as e:
+            # Fallback to basic comparison if compare_stages fails
+            detailed_stage_comparison = {
+                "error": f"Failed to get detailed comparison: {str(e)}",
+                "basic_info": {
+                    "stage1": {"id": stage1.stage_id, "name": stage1.name},
+                    "stage2": {"id": stage2.stage_id, "name": stage2.name}
+                }
+            }
 
         # Extract executor summaries with improved fallback logic
         def get_executor_summary_for_stage(stage, app_id):
@@ -3894,10 +3910,7 @@ def compare_app_performance(
                 "percentage": diff["time_difference_percent"],
                 "slower_application": diff["slower_app"]
             },
-            "stage_summary_comparison": {
-                "app1_summary": stage1_summary,
-                "app2_summary": stage2_summary
-            },
+            "detailed_stage_comparison": detailed_stage_comparison,
             "executor_analysis": _analyze_executor_performance_patterns(
                 executor_summary1, executor_summary2
             )
