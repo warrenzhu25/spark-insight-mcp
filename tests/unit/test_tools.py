@@ -20,6 +20,7 @@ from spark_history_mcp.tools.tools import (
     analyze_shuffle_skew,
     compare_app_performance,
     compare_stages,
+    compare_stage_executor_timeline,
     _analyze_executor_performance_patterns,
     get_application,
     get_application_insights,
@@ -2358,3 +2359,214 @@ class TestCompareAppPerformance(unittest.TestCase):
         # Should have empty significant_differences since changes are below threshold
         self.assertEqual(len(result["significant_differences"]), 0)
         self.assertEqual(result["summary"]["total_differences_found"], 0)
+
+
+class TestCompareStageExecutorTimeline(unittest.TestCase):
+    """Test cases for compare_stage_executor_timeline function"""
+
+    def _create_mock_stage(self, stage_id, name, submission_time=None, completion_time=None):
+        """Helper to create mock stage data"""
+        stage = MagicMock()
+        stage.stage_id = stage_id
+        stage.attempt_id = 0
+        stage.name = name
+        stage.submission_time = submission_time or datetime(2024, 1, 1, 10, 0, 0)
+        stage.completion_time = completion_time
+        return stage
+
+    def _create_mock_executor(self, executor_id, add_time=None, remove_time=None, cores=4, memory_mb=8192):
+        """Helper to create mock executor data"""
+        executor = MagicMock()
+        executor.id = executor_id
+        executor.host_port = f"executor-{executor_id}:7337"
+        executor.add_time = add_time
+        executor.remove_time = remove_time
+        executor.total_cores = cores
+        executor.max_memory = memory_mb * 1024 * 1024  # Convert MB to bytes
+        return executor
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stage_executor_timeline_basic_success(self, mock_get_client):
+        """Test basic successful timeline comparison"""
+        # Mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Create mock stages
+        start_time1 = datetime(2024, 1, 1, 10, 0, 0)
+        end_time1 = datetime(2024, 1, 1, 10, 5, 0)
+        start_time2 = datetime(2024, 1, 1, 11, 0, 0)
+        end_time2 = datetime(2024, 1, 1, 11, 10, 0)
+
+        stage1 = self._create_mock_stage(1, "Stage 1", start_time1, end_time1)
+        stage2 = self._create_mock_stage(2, "Stage 2", start_time2, end_time2)
+
+        # Create mock executors
+        executor1_1 = self._create_mock_executor("1", start_time1, end_time1, cores=4, memory_mb=4096)
+        executor1_2 = self._create_mock_executor("2", start_time1, end_time1, cores=4, memory_mb=4096)
+
+        executor2_1 = self._create_mock_executor("1", start_time2, end_time2, cores=2, memory_mb=2048)
+        executor2_2 = self._create_mock_executor("2", start_time2, end_time2, cores=2, memory_mb=2048)
+        executor2_3 = self._create_mock_executor("3", start_time2, end_time2, cores=2, memory_mb=2048)
+
+        # Mock client responses
+        mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        mock_client.list_all_executors.side_effect = [
+            [executor1_1, executor1_2],
+            [executor2_1, executor2_2, executor2_3]
+        ]
+
+        # Call the function
+        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2, interval_minutes=1)
+
+        # Verify basic structure
+        self.assertIn("app1_info", result)
+        self.assertIn("app2_info", result)
+        self.assertIn("timeline_comparison", result)
+        self.assertIn("summary", result)
+
+        # Verify app info
+        self.assertEqual(result["app1_info"]["app_id"], "app-123")
+        self.assertEqual(result["app2_info"]["app_id"], "app-456")
+
+        # Verify timeline comparison has data
+        self.assertGreater(len(result["timeline_comparison"]), 0)
+
+        # Verify summary statistics
+        self.assertIn("total_intervals", result["summary"])
+        self.assertIn("intervals_with_executor_differences", result["summary"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stage_executor_timeline_different_intervals(self, mock_get_client):
+        """Test timeline comparison with different interval settings"""
+        # Mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Create 10-minute stages
+        start_time = datetime(2024, 1, 1, 10, 0, 0)
+        end_time = datetime(2024, 1, 1, 10, 10, 0)
+
+        stage1 = self._create_mock_stage(1, "Stage 1", start_time, end_time)
+        stage2 = self._create_mock_stage(2, "Stage 2", start_time, end_time)
+
+        # Create mock executors
+        executor1 = self._create_mock_executor("1", start_time, end_time)
+        executor2 = self._create_mock_executor("1", start_time, end_time)
+
+        # Mock client responses
+        mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        mock_client.list_all_executors.side_effect = [[executor1], [executor2]]
+
+        # Test with 2-minute intervals
+        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2, interval_minutes=2)
+
+        # Should have 5 intervals (10 minutes / 2 minutes each)
+        self.assertEqual(result["comparison_config"]["interval_minutes"], 2)
+        expected_intervals = 5
+        self.assertEqual(len(result["timeline_comparison"]), expected_intervals)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stage_executor_timeline_no_submission_time(self, mock_get_client):
+        """Test handling of stages without submission time"""
+        # Mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Create stage without submission time
+        stage1 = self._create_mock_stage(1, "Stage 1", submission_time=None)
+        stage2 = self._create_mock_stage(2, "Stage 2", submission_time=datetime(2024, 1, 1, 10, 0, 0))
+
+        # Mock client responses
+        mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        mock_client.list_all_executors.side_effect = [[], []]
+
+        # Call the function
+        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2)
+
+        # Should handle the error gracefully
+        self.assertIn("detailed_timelines", result)
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stage_executor_timeline_executor_timing_variations(self, mock_get_client):
+        """Test executor timeline with varying add/remove times"""
+        # Mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Create 5-minute stages
+        start_time = datetime(2024, 1, 1, 10, 0, 0)
+        end_time = datetime(2024, 1, 1, 10, 5, 0)
+
+        stage1 = self._create_mock_stage(1, "Stage 1", start_time, end_time)
+        stage2 = self._create_mock_stage(2, "Stage 2", start_time, end_time)
+
+        # Create executors with different timing patterns
+        # App1: executor added/removed during stage
+        executor1_1 = self._create_mock_executor("1",
+                                                datetime(2024, 1, 1, 10, 1, 0),  # Added 1 min after stage start
+                                                datetime(2024, 1, 1, 10, 4, 0))  # Removed 1 min before stage end
+
+        # App2: executor present for entire stage
+        executor2_1 = self._create_mock_executor("1", start_time, end_time)
+
+        # Mock client responses
+        mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        mock_client.list_all_executors.side_effect = [[executor1_1], [executor2_1]]
+
+        # Call the function with 1-minute intervals
+        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2, interval_minutes=1)
+
+        # Should show differences in executor allocation over time
+        self.assertGreater(len(result["timeline_comparison"]), 0)
+
+        # Check that some intervals show executor differences
+        executor_diffs = [interval["differences"]["executor_count_diff"]
+                         for interval in result["timeline_comparison"]]
+        self.assertTrue(any(diff != 0 for diff in executor_diffs))
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stage_executor_timeline_error_handling(self, mock_get_client):
+        """Test error handling in compare_stage_executor_timeline"""
+        # Mock client that raises an exception
+        mock_client = MagicMock()
+        mock_client.get_stage_attempt.side_effect = Exception("Client error")
+        mock_get_client.return_value = mock_client
+
+        # Call the function
+        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2)
+
+        # Should return error information
+        self.assertIn("error", result)
+        self.assertIn("Client error", result["error"])
+        self.assertEqual(result["app1_id"], "app-123")
+        self.assertEqual(result["app2_id"], "app-456")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_compare_stage_executor_timeline_uncompleted_stages(self, mock_get_client):
+        """Test handling of uncompleted stages"""
+        # Mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Create stages - one completed, one not
+        start_time = datetime(2024, 1, 1, 10, 0, 0)
+        completed_time = datetime(2024, 1, 1, 10, 5, 0)
+
+        stage1 = self._create_mock_stage(1, "Completed Stage", start_time, completed_time)
+        stage2 = self._create_mock_stage(2, "Running Stage", start_time, completion_time=None)
+
+        # Create mock executors
+        executor1 = self._create_mock_executor("1", start_time, completed_time)
+        executor2 = self._create_mock_executor("1", start_time, remove_time=None)  # Still running
+
+        # Mock client responses
+        mock_client.get_stage_attempt.side_effect = [stage1, stage2]
+        mock_client.list_all_executors.side_effect = [[executor1], [executor2]]
+
+        # Call the function
+        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2)
+
+        # Should handle uncompleted stage (defaults to 24h duration)
+        self.assertIn("timeline_comparison", result)
+        self.assertFalse(result["summary"]["stages_overlap"])  # One stage incomplete

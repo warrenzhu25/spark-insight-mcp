@@ -4118,3 +4118,194 @@ def compare_stages(
     result["summary"]["total_differences_found"] = total_diffs
 
     return result
+
+
+@mcp.tool()
+def compare_stage_executor_timeline(
+    app_id1: str,
+    app_id2: str,
+    stage_id1: int,
+    stage_id2: int,
+    server: Optional[str] = None,
+    interval_minutes: int = 1
+) -> Dict[str, Any]:
+    """
+    Compare executor timeline for specific stages between two Spark applications.
+
+    Analyzes executor allocation and usage patterns during stage execution
+    at configurable time intervals to identify differences in resource utilization.
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        stage_id1: Stage ID from first application
+        stage_id2: Stage ID from second application
+        server: Optional server name to use (uses default if not specified)
+        interval_minutes: Time interval for analysis in minutes (default: 1)
+
+    Returns:
+        Dictionary containing stage executor timeline comparison
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    try:
+        # Get stage information for both applications
+        stage1 = client.get_stage_attempt(
+            app_id=app_id1,
+            stage_id=stage_id1,
+            attempt_id=0,
+            details=False,
+            with_summaries=False
+        )
+        stage2 = client.get_stage_attempt(
+            app_id=app_id2,
+            stage_id=stage_id2,
+            attempt_id=0,
+            details=False,
+            with_summaries=False
+        )
+
+        # Get executors for both applications
+        executors1 = client.list_all_executors(app_id=app_id1)
+        executors2 = client.list_all_executors(app_id=app_id2)
+
+        # Helper function to build timeline for a stage
+        def build_stage_executor_timeline(stage, executors, app_id):
+            if not stage.submission_time:
+                return {
+                    "error": f"Stage {stage.stage_id} has no submission time",
+                    "timeline": []
+                }
+
+            stage_start = stage.submission_time
+            stage_end = stage.completion_time or stage_start + timedelta(hours=24)  # Default to 24h if not completed
+
+            # Create timeline intervals
+            timeline = []
+            current_time = stage_start
+
+            while current_time <= stage_end:
+                interval_end = current_time + timedelta(minutes=interval_minutes)
+                if interval_end > stage_end:
+                    interval_end = stage_end
+
+                # Find active executors during this interval
+                active_executors = []
+                total_cores = 0
+                total_memory = 0
+
+                for executor in executors:
+                    # Check if executor was active during this interval
+                    executor_start = executor.add_time or stage_start
+                    executor_end = executor.remove_time or stage_end
+
+                    if (executor_start <= interval_end and
+                        executor_end >= current_time):
+                        active_executors.append({
+                            "id": executor.id,
+                            "host_port": executor.host_port,
+                            "cores": executor.total_cores or 0,
+                            "memory_mb": (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
+                        })
+                        total_cores += executor.total_cores or 0
+                        total_memory += (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
+
+                timeline.append({
+                    "timestamp": current_time.isoformat(),
+                    "interval_start": current_time.isoformat(),
+                    "interval_end": interval_end.isoformat(),
+                    "active_executor_count": len(active_executors),
+                    "total_cores": total_cores,
+                    "total_memory_mb": total_memory,
+                    "active_executors": active_executors
+                })
+
+                current_time = interval_end
+
+            return {
+                "stage_info": {
+                    "stage_id": stage.stage_id,
+                    "attempt_id": stage.attempt_id,
+                    "name": stage.name,
+                    "submission_time": stage_start.isoformat() if stage_start else None,
+                    "completion_time": stage_end.isoformat() if stage.completion_time else None,
+                    "duration_seconds": (stage_end - stage_start).total_seconds() if stage_start else 0
+                },
+                "timeline": timeline
+            }
+
+        # Build timelines for both stages
+        timeline1 = build_stage_executor_timeline(stage1, executors1, app_id1)
+        timeline2 = build_stage_executor_timeline(stage2, executors2, app_id2)
+
+        # Compare timelines and find significant differences
+        comparison_data = []
+        min_length = min(len(timeline1["timeline"]), len(timeline2["timeline"]))
+
+        for i in range(min_length):
+            interval1 = timeline1["timeline"][i]
+            interval2 = timeline2["timeline"][i]
+
+            executor_diff = interval2["active_executor_count"] - interval1["active_executor_count"]
+            cores_diff = interval2["total_cores"] - interval1["total_cores"]
+            memory_diff = interval2["total_memory_mb"] - interval1["total_memory_mb"]
+
+            comparison_data.append({
+                "interval": i + 1,
+                "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
+                "app1": {
+                    "executor_count": interval1["active_executor_count"],
+                    "total_cores": interval1["total_cores"],
+                    "total_memory_mb": interval1["total_memory_mb"]
+                },
+                "app2": {
+                    "executor_count": interval2["active_executor_count"],
+                    "total_cores": interval2["total_cores"],
+                    "total_memory_mb": interval2["total_memory_mb"]
+                },
+                "differences": {
+                    "executor_count_diff": executor_diff,
+                    "cores_diff": cores_diff,
+                    "memory_mb_diff": memory_diff
+                }
+            })
+
+        # Calculate summary statistics
+        total_intervals = len(comparison_data)
+        intervals_with_executor_diff = sum(1 for c in comparison_data if c["differences"]["executor_count_diff"] != 0)
+        max_executor_diff = max((abs(c["differences"]["executor_count_diff"]) for c in comparison_data), default=0)
+
+        return {
+            "app1_info": {
+                "app_id": app_id1,
+                "stage_details": timeline1["stage_info"]
+            },
+            "app2_info": {
+                "app_id": app_id2,
+                "stage_details": timeline2["stage_info"]
+            },
+            "comparison_config": {
+                "interval_minutes": interval_minutes,
+                "total_intervals_compared": total_intervals
+            },
+            "timeline_comparison": comparison_data,
+            "summary": {
+                "total_intervals": total_intervals,
+                "intervals_with_executor_differences": intervals_with_executor_diff,
+                "max_executor_count_difference": max_executor_diff,
+                "stages_overlap": timeline1["stage_info"]["completion_time"] is not None and timeline2["stage_info"]["completion_time"] is not None
+            },
+            "detailed_timelines": {
+                "app1_timeline": timeline1["timeline"],
+                "app2_timeline": timeline2["timeline"]
+            }
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to compare stage executor timelines: {str(e)}",
+            "app1_id": app_id1,
+            "app2_id": app_id2,
+            "stage_ids": [stage_id1, stage_id2]
+        }
