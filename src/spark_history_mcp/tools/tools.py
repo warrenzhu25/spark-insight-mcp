@@ -3217,6 +3217,206 @@ def _calculate_job_stats(jobs) -> Dict[str, Any]:
     }
 
 
+def _filter_significant_metrics(
+    metrics_dict: Dict[str, Any],
+    significance_threshold: float = 0.2,
+    show_only_significant: bool = False
+) -> Dict[str, Any]:
+    """
+    Filter metrics dictionary to show only those with significant differences.
+
+    Args:
+        metrics_dict: Dictionary of metric names to ratio values
+        significance_threshold: Minimum difference threshold (0.2 = 20%)
+        show_only_significant: If True, filter out non-significant metrics
+
+    Returns:
+        Dictionary with optionally filtered metrics and metadata
+    """
+    if not show_only_significant:
+        # Return original metrics with metadata
+        return {
+            "metrics": metrics_dict,
+            "filtering_applied": False,
+            "significance_threshold": significance_threshold,
+            "total_metrics": len(metrics_dict),
+            "significant_metrics": len(metrics_dict)
+        }
+
+    significant_metrics = {}
+    total_metrics = len(metrics_dict)
+
+    for metric_name, value in metrics_dict.items():
+        if isinstance(value, (int, float)):
+            # Handle infinite values (always significant)
+            if value == float('inf'):
+                significant_metrics[metric_name] = "∞ (new data)"
+                significant_metrics[f"{metric_name}_change"] = "∞"
+            elif value == 0.0:
+                # Zero ratios might be significant (complete decrease)
+                significant_metrics[metric_name] = value
+                significant_metrics[f"{metric_name}_change"] = "-100.0%"
+            else:
+                # For normal ratio values, check if significantly different from 1.0
+                diff_from_one = abs(value - 1.0)
+                if diff_from_one >= significance_threshold:
+                    # Include both the ratio and additional context
+                    significant_metrics[metric_name] = value
+                    # Add percentage change for clarity
+                    if value >= 1.0:
+                        significant_metrics[f"{metric_name}_change"] = f"+{((value - 1.0) * 100):.1f}%"
+                    else:
+                        significant_metrics[f"{metric_name}_change"] = f"{((value - 1.0) * 100):.1f}%"
+        else:
+            # For non-numeric values, always include
+            significant_metrics[metric_name] = value
+
+    return {
+        "metrics": significant_metrics,
+        "filtering_applied": True,
+        "significance_threshold": significance_threshold,
+        "total_metrics": total_metrics,
+        "significant_metrics": len(significant_metrics),
+        "filtered_out_count": total_metrics - len(significant_metrics)
+    }
+
+
+def _filter_stage_metrics_comparison(
+    stage_metric_comparison: Dict[str, Any],
+    significance_threshold: float = 0.2,
+    show_only_significant: bool = True
+) -> Dict[str, Any]:
+    """
+    Filter detailed stage metrics comparison to show only significant differences.
+
+    Args:
+        stage_metric_comparison: Nested dict containing stage metrics by category
+        significance_threshold: Minimum difference threshold (0.2 = 20%)
+        show_only_significant: If True, filter out non-significant metrics
+
+    Returns:
+        Dictionary with filtered metrics and metadata
+    """
+    if not show_only_significant:
+        return {
+            "metrics": stage_metric_comparison,
+            "filtering_applied": False,
+            "significance_threshold": significance_threshold,
+            "category_summary": {}
+        }
+
+    filtered_metrics = {}
+    category_summary = {}
+
+    for category_name, category_metrics in stage_metric_comparison.items():
+        if not isinstance(category_metrics, dict):
+            # Non-dict values (like simple differences) - always include
+            filtered_metrics[category_name] = category_metrics
+            continue
+
+        significant_metrics = {}
+        total_metrics = 0
+
+        # Handle different metric patterns within categories
+        if "app1_" in str(category_metrics) and "app2_" in str(category_metrics):
+            # This category has app1/app2 comparisons - calculate ratios
+            app1_values = {k: v for k, v in category_metrics.items() if k.startswith("app1_")}
+            app2_values = {k: v for k, v in category_metrics.items() if k.startswith("app2_")}
+            other_values = {k: v for k, v in category_metrics.items() if not (k.startswith("app1_") or k.startswith("app2_"))}
+
+            for app1_key, app1_val in app1_values.items():
+                metric_base_name = app1_key[5:]  # Remove "app1_" prefix
+                app2_key = f"app2_{metric_base_name}"
+
+                if app2_key in app2_values:
+                    app2_val = app2_values[app2_key]
+                    total_metrics += 1
+
+                    # Calculate significance
+                    if isinstance(app1_val, (int, float)) and isinstance(app2_val, (int, float)):
+                        if app1_val == 0 and app2_val == 0:
+                            # Both zero - not significant
+                            continue
+                        elif app1_val == 0 or app2_val == 0:
+                            # One is zero - always significant
+                            significant_metrics[app1_key] = app1_val
+                            significant_metrics[app2_key] = app2_val
+                            # Add ratio information
+                            if app1_val == 0 and app2_val > 0:
+                                significant_metrics[f"{metric_base_name}_ratio"] = "∞ (new data)"
+                                significant_metrics[f"{metric_base_name}_change"] = "∞"
+                            elif app2_val == 0 and app1_val > 0:
+                                significant_metrics[f"{metric_base_name}_ratio"] = 0.0
+                                significant_metrics[f"{metric_base_name}_change"] = "-100.0%"
+                        else:
+                            # Calculate ratio
+                            ratio = app2_val / app1_val if app1_val != 0 else float('inf')
+                            diff_from_one = abs(ratio - 1.0)
+
+                            if diff_from_one >= significance_threshold:
+                                significant_metrics[app1_key] = app1_val
+                                significant_metrics[app2_key] = app2_val
+                                # Add ratio and percentage change
+                                significant_metrics[f"{metric_base_name}_ratio"] = ratio
+                                if ratio >= 1.0:
+                                    significant_metrics[f"{metric_base_name}_change"] = f"+{((ratio - 1.0) * 100):.1f}%"
+                                else:
+                                    significant_metrics[f"{metric_base_name}_change"] = f"{((ratio - 1.0) * 100):.1f}%"
+                    else:
+                        # Non-numeric values - always include
+                        significant_metrics[app1_key] = app1_val
+                        significant_metrics[app2_key] = app2_val
+
+            # Always include other values (like difference_ms)
+            significant_metrics.update(other_values)
+
+        else:
+            # Category doesn't follow app1/app2 pattern - include all
+            significant_metrics = category_metrics
+            total_metrics = len(category_metrics)
+
+        if significant_metrics:
+            filtered_metrics[category_name] = significant_metrics
+
+        category_summary[category_name] = {
+            "total_metrics": total_metrics,
+            "significant_metrics": len([k for k in significant_metrics.keys() if k.startswith(("app1_", "app2_"))]) // 2,
+            "all_metrics_shown": total_metrics == 0  # True if we don't calculate ratios for this category
+        }
+
+    return {
+        "metrics": filtered_metrics,
+        "filtering_applied": True,
+        "significance_threshold": significance_threshold,
+        "category_summary": category_summary
+    }
+
+
+def _calculate_safe_ratio(value1: float, value2: float) -> float:
+    """
+    Calculate ratio between two values with proper zero handling.
+
+    Args:
+        value1: Baseline value (denominator)
+        value2: Comparison value (numerator)
+
+    Returns:
+        Ratio with proper zero handling:
+        - Both zero: 1.0 (no difference)
+        - Value1 zero, Value2 non-zero: float('inf') (infinite increase)
+        - Value1 non-zero, Value2 zero: 0.0 (complete decrease)
+        - Normal case: value2 / value1
+    """
+    if value1 == 0 and value2 == 0:
+        return 1.0  # No difference
+    elif value1 == 0:
+        return float('inf')  # Infinite increase (new data appeared)
+    elif value2 == 0:
+        return 0.0  # Complete decrease (data disappeared)
+    else:
+        return value2 / value1  # Normal ratio
+
+
 def _analyze_executor_performance_patterns(
     executor_summary1: Dict[str, Any],
     executor_summary2: Dict[str, Any]
@@ -3541,7 +3741,9 @@ def compare_app_resources(
 def compare_app_executors(
     app_id1: str,
     app_id2: str,
-    server: Optional[str] = None
+    server: Optional[str] = None,
+    significance_threshold: float = 0.2,
+    show_only_significant: bool = True
 ) -> Dict[str, Any]:
     """
     Compare executor-level performance metrics between two Spark applications.
@@ -3553,6 +3755,8 @@ def compare_app_executors(
         app_id1: First Spark application ID (baseline)
         app_id2: Second Spark application ID (comparison target)
         server: Optional Spark History Server name
+        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
+        show_only_significant: When True, filter out metrics below significance threshold (default: True)
 
     Returns:
         Dict containing executor performance comparison, efficiency ratios, and recommendations
@@ -3574,13 +3778,13 @@ def compare_app_executors(
                 }
             }
 
-        # Calculate executor performance ratios
+        # Calculate executor performance ratios with proper zero handling
         executor_comparison = {
-            "executor_count_ratio": exec_summary2.get("total_executors", 0) / max(exec_summary1.get("total_executors", 1), 1),
-            "memory_usage_ratio": exec_summary2.get("memory_used", 0) / max(exec_summary1.get("memory_used", 1), 1),
-            "task_completion_ratio": exec_summary2.get("completed_tasks", 0) / max(exec_summary1.get("completed_tasks", 1), 1),
-            "gc_time_ratio": exec_summary2.get("total_gc_time", 0) / max(exec_summary1.get("total_gc_time", 1), 1),
-            "active_tasks_ratio": exec_summary2.get("active_tasks", 0) / max(exec_summary1.get("active_tasks", 1), 1),
+            "executor_count_ratio": _calculate_safe_ratio(exec_summary1.get("total_executors", 0), exec_summary2.get("total_executors", 0)),
+            "memory_usage_ratio": _calculate_safe_ratio(exec_summary1.get("memory_used", 0), exec_summary2.get("memory_used", 0)),
+            "task_completion_ratio": _calculate_safe_ratio(exec_summary1.get("completed_tasks", 0), exec_summary2.get("completed_tasks", 0)),
+            "gc_time_ratio": _calculate_safe_ratio(exec_summary1.get("total_gc_time", 0), exec_summary2.get("total_gc_time", 0)),
+            "active_tasks_ratio": _calculate_safe_ratio(exec_summary1.get("active_tasks", 0), exec_summary2.get("active_tasks", 0)),
         }
 
         # Calculate efficiency metrics
@@ -3646,6 +3850,22 @@ def compare_app_executors(
                     "suggestion": "App2's executors may be underutilized - check for data skew or resource bottlenecks"
                 })
 
+        # Apply significance filtering to executor comparison ratios
+        filtered_executor_comparison = _filter_significant_metrics(
+            executor_comparison, significance_threshold, show_only_significant
+        )
+
+        # Apply significance filtering to efficiency metrics (those that are ratios)
+        efficiency_ratios = {}
+        if efficiency_metrics.get("app1_tasks_per_executor", 0) > 0 and efficiency_metrics.get("app2_tasks_per_executor", 0) > 0:
+            efficiency_ratios["tasks_per_executor_ratio"] = efficiency_metrics["app2_tasks_per_executor"] / efficiency_metrics["app1_tasks_per_executor"]
+        if efficiency_metrics.get("app1_tasks_per_mb", 0) > 0 and efficiency_metrics.get("app2_tasks_per_mb", 0) > 0:
+            efficiency_ratios["tasks_per_mb_ratio"] = efficiency_metrics["app2_tasks_per_mb"] / efficiency_metrics["app1_tasks_per_mb"]
+
+        filtered_efficiency_ratios = _filter_significant_metrics(
+            efficiency_ratios, significance_threshold, show_only_significant
+        )
+
         return {
             "applications": {
                 "app1": {
@@ -3657,9 +3877,23 @@ def compare_app_executors(
                     "executor_metrics": exec_summary2
                 }
             },
-            "executor_comparison": executor_comparison,
+            "executor_comparison": filtered_executor_comparison["metrics"],
             "efficiency_metrics": efficiency_metrics,
-            "recommendations": recommendations
+            "efficiency_ratios": filtered_efficiency_ratios["metrics"],
+            "recommendations": recommendations,
+            "filtering_summary": {
+                "executor_comparison": {
+                    "total_metrics": filtered_executor_comparison["total_metrics"],
+                    "significant_metrics": filtered_executor_comparison["significant_metrics"],
+                    "filtering_applied": filtered_executor_comparison["filtering_applied"]
+                },
+                "efficiency_ratios": {
+                    "total_metrics": filtered_efficiency_ratios["total_metrics"],
+                    "significant_metrics": filtered_efficiency_ratios["significant_metrics"],
+                    "filtering_applied": filtered_efficiency_ratios["filtering_applied"]
+                },
+                "significance_threshold": significance_threshold
+            }
         }
 
     except Exception as e:
@@ -3800,7 +4034,9 @@ def compare_app_jobs(
 def compare_app_stages_aggregated(
     app_id1: str,
     app_id2: str,
-    server: Optional[str] = None
+    server: Optional[str] = None,
+    significance_threshold: float = 0.2,
+    show_only_significant: bool = True
 ) -> Dict[str, Any]:
     """
     Compare aggregated stage-level metrics between two Spark applications.
@@ -3812,6 +4048,8 @@ def compare_app_stages_aggregated(
         app_id1: First Spark application ID (baseline)
         app_id2: Second Spark application ID (comparison target)
         server: Optional Spark History Server name
+        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
+        show_only_significant: When True, filter out metrics below significance threshold (default: True)
 
     Returns:
         Dict containing aggregated stage comparison, I/O analysis, and recommendations
@@ -3844,17 +4082,17 @@ def compare_app_stages_aggregated(
         stage_metrics1 = _calculate_aggregated_stage_metrics(stages1)
         stage_metrics2 = _calculate_aggregated_stage_metrics(stages2)
 
-        # Calculate stage performance ratios
+        # Calculate stage performance ratios with proper zero handling
         stage_comparison = {
-            "stage_count_ratio": stage_metrics2["total_stages"] / max(stage_metrics1["total_stages"], 1),
-            "duration_ratio": stage_metrics2["total_stage_duration"] / max(stage_metrics1["total_stage_duration"], 1),
-            "executor_runtime_ratio": stage_metrics2["total_executor_run_time"] / max(stage_metrics1["total_executor_run_time"], 1),
-            "memory_spill_ratio": stage_metrics2["total_memory_spilled"] / max(stage_metrics1["total_memory_spilled"], 1) if stage_metrics1["total_memory_spilled"] > 0 else 0,
-            "shuffle_read_ratio": stage_metrics2["total_shuffle_read_bytes"] / max(stage_metrics1["total_shuffle_read_bytes"], 1) if stage_metrics1["total_shuffle_read_bytes"] > 0 else 0,
-            "shuffle_write_ratio": stage_metrics2["total_shuffle_write_bytes"] / max(stage_metrics1["total_shuffle_write_bytes"], 1) if stage_metrics1["total_shuffle_write_bytes"] > 0 else 0,
-            "input_ratio": stage_metrics2["total_input_bytes"] / max(stage_metrics1["total_input_bytes"], 1) if stage_metrics1["total_input_bytes"] > 0 else 0,
-            "output_ratio": stage_metrics2["total_output_bytes"] / max(stage_metrics1["total_output_bytes"], 1) if stage_metrics1["total_output_bytes"] > 0 else 0,
-            "task_failure_ratio": stage_metrics2["total_failed_tasks"] / max(stage_metrics1["total_failed_tasks"], 1) if stage_metrics1["total_failed_tasks"] > 0 else 0,
+            "stage_count_ratio": _calculate_safe_ratio(stage_metrics1["total_stages"], stage_metrics2["total_stages"]),
+            "duration_ratio": _calculate_safe_ratio(stage_metrics1["total_stage_duration"], stage_metrics2["total_stage_duration"]),
+            "executor_runtime_ratio": _calculate_safe_ratio(stage_metrics1["total_executor_run_time"], stage_metrics2["total_executor_run_time"]),
+            "memory_spill_ratio": _calculate_safe_ratio(stage_metrics1["total_memory_spilled"], stage_metrics2["total_memory_spilled"]),
+            "shuffle_read_ratio": _calculate_safe_ratio(stage_metrics1["total_shuffle_read_bytes"], stage_metrics2["total_shuffle_read_bytes"]),
+            "shuffle_write_ratio": _calculate_safe_ratio(stage_metrics1["total_shuffle_write_bytes"], stage_metrics2["total_shuffle_write_bytes"]),
+            "input_ratio": _calculate_safe_ratio(stage_metrics1["total_input_bytes"], stage_metrics2["total_input_bytes"]),
+            "output_ratio": _calculate_safe_ratio(stage_metrics1["total_output_bytes"], stage_metrics2["total_output_bytes"]),
+            "task_failure_ratio": _calculate_safe_ratio(stage_metrics1["total_failed_tasks"], stage_metrics2["total_failed_tasks"]),
         }
 
         # Data processing efficiency analysis
@@ -3935,6 +4173,24 @@ def compare_app_stages_aggregated(
                     "suggestion": "App2's data processing efficiency is lower - check for I/O bottlenecks or resource constraints"
                 })
 
+        # Apply significance filtering to stage comparison ratios
+        filtered_stage_comparison = _filter_significant_metrics(
+            stage_comparison, significance_threshold, show_only_significant
+        )
+
+        # Calculate throughput efficiency ratios for filtering
+        efficiency_ratios = {}
+        if efficiency_analysis.get("app1_input_throughput_bps", 0) > 0 and efficiency_analysis.get("app2_input_throughput_bps", 0) > 0:
+            efficiency_ratios["input_throughput_ratio"] = efficiency_analysis["app2_input_throughput_bps"] / efficiency_analysis["app1_input_throughput_bps"]
+        if efficiency_analysis.get("app1_output_throughput_bps", 0) > 0 and efficiency_analysis.get("app2_output_throughput_bps", 0) > 0:
+            efficiency_ratios["output_throughput_ratio"] = efficiency_analysis["app2_output_throughput_bps"] / efficiency_analysis["app1_output_throughput_bps"]
+        if efficiency_analysis.get("app1_avg_tasks_per_stage", 0) > 0 and efficiency_analysis.get("app2_avg_tasks_per_stage", 0) > 0:
+            efficiency_ratios["tasks_per_stage_ratio"] = efficiency_analysis["app2_avg_tasks_per_stage"] / efficiency_analysis["app1_avg_tasks_per_stage"]
+
+        filtered_efficiency_ratios = _filter_significant_metrics(
+            efficiency_ratios, significance_threshold, show_only_significant
+        )
+
         return {
             "applications": {
                 "app1": {
@@ -3946,9 +4202,23 @@ def compare_app_stages_aggregated(
                     "stage_metrics": stage_metrics2
                 }
             },
-            "stage_comparison": stage_comparison,
+            "stage_comparison": filtered_stage_comparison["metrics"],
             "efficiency_analysis": efficiency_analysis,
-            "recommendations": recommendations
+            "efficiency_ratios": filtered_efficiency_ratios["metrics"],
+            "recommendations": recommendations,
+            "filtering_summary": {
+                "stage_comparison": {
+                    "total_metrics": filtered_stage_comparison["total_metrics"],
+                    "significant_metrics": filtered_stage_comparison["significant_metrics"],
+                    "filtering_applied": filtered_stage_comparison["filtering_applied"]
+                },
+                "efficiency_ratios": {
+                    "total_metrics": filtered_efficiency_ratios["total_metrics"],
+                    "significant_metrics": filtered_efficiency_ratios["significant_metrics"],
+                    "filtering_applied": filtered_efficiency_ratios["filtering_applied"]
+                },
+                "significance_threshold": significance_threshold
+            }
         }
 
     except Exception as e:
@@ -3969,7 +4239,9 @@ def compare_app_performance(
     top_n: int = 3,
     similarity_threshold: float = 0.6,
     include_raw_data: bool = False,
-    filter_auto_generated: bool = True
+    filter_auto_generated: bool = True,
+    significance_threshold: float = 0.2,
+    show_only_significant: bool = True
 ) -> Dict[str, Any]:
     """
     Comprehensive performance comparison between two Spark applications.
@@ -3989,6 +4261,8 @@ def compare_app_performance(
         similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
         include_raw_data: Include full raw metrics in output for debugging (default: False)
         filter_auto_generated: Whether to filter out auto-generated configurations (default: True)
+        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
+        show_only_significant: When True, filter out metrics below significance threshold (default: True)
 
     Returns:
         Dictionary containing:
@@ -4021,12 +4295,12 @@ def compare_app_performance(
     # PHASE 1: AGGREGATED APPLICATION OVERVIEW
     # Use specialized comparison tools for aggregated overview
     try:
-        executor_comparison = compare_app_executors(app_id1, app_id2, server)
+        executor_comparison = compare_app_executors(app_id1, app_id2, server, significance_threshold, show_only_significant)
     except Exception as e:
         executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
 
     try:
-        stage_comparison = compare_app_stages_aggregated(app_id1, app_id2, server)
+        stage_comparison = compare_app_stages_aggregated(app_id1, app_id2, server, significance_threshold, show_only_significant)
     except Exception as e:
         stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
 
@@ -4136,6 +4410,11 @@ def compare_app_performance(
         }
 
 
+        # Apply significance filtering to stage metrics comparison
+        filtered_stage_metrics = _filter_stage_metrics_comparison(
+            stage_metric_comparison, significance_threshold, show_only_significant
+        )
+
         # Build stage comparison with stage-level metrics only
         stage_comparison = {
             "stage_name": stage1.name,
@@ -4157,7 +4436,12 @@ def compare_app_performance(
                 "percentage": diff["time_difference_percent"],
                 "slower_application": diff["slower_app"]
             },
-            "stage_metrics_comparison": stage_metric_comparison
+            "stage_metrics_comparison": filtered_stage_metrics["metrics"],
+            "metrics_filtering_summary": {
+                "filtering_applied": filtered_stage_metrics["filtering_applied"],
+                "significance_threshold": filtered_stage_metrics["significance_threshold"],
+                "category_summary": filtered_stage_metrics["category_summary"]
+            }
         }
 
         # Conditionally add raw data for debugging/investigation
@@ -4252,7 +4536,7 @@ def compare_app_performance(
     spill_diff_stages = []
     for comp in detailed_comparisons:
         if "stage_metrics_comparison" in comp:
-            memory_metrics = comp["stage_metrics_comparison"]["memory_metrics"]
+            memory_metrics = comp["stage_metrics_comparison"].get("memory_metrics", {})
             app1_spill = memory_metrics.get("app1_spill_bytes", 0) or 0
             app2_spill = memory_metrics.get("app2_spill_bytes", 0) or 0
 
@@ -4293,6 +4577,8 @@ def compare_app_performance(
             "analysis_parameters": {
                 "top_n": top_n,
                 "similarity_threshold": similarity_threshold,
+                "significance_threshold": significance_threshold,
+                "show_only_significant": show_only_significant,
                 "total_stages_app1": len(stages1),
                 "total_stages_app2": len(stages2),
                 "matched_stages": len(stage_matches)
@@ -4305,7 +4591,12 @@ def compare_app_performance(
                 "stages_analyzed": len(top_differences)
             }
         },
-        "recommendations": recommendations
+        "recommendations": recommendations,
+        "filtering_summary": {
+            "enabled": show_only_significant,
+            "threshold": significance_threshold,
+            "description": f"{'Filtering applied' if show_only_significant else 'No filtering applied'} - showing metrics with ≥{significance_threshold*100:.0f}% difference from baseline" if show_only_significant else "All metrics shown regardless of significance"
+        }
     }
 
 
