@@ -2081,6 +2081,569 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
     return metrics
 
 
+def _compare_environments(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
+    """
+    Compare Spark environment configurations between two applications.
+    Extracted from compare_job_environments with performance impact analysis added.
+    """
+    env1 = client.get_environment(app_id=app_id1)
+    env2 = client.get_environment(app_id=app_id2)
+
+    def props_to_dict(props):
+        return {k: v for k, v in props} if props else {}
+
+    spark_props1 = props_to_dict(env1.spark_properties)
+    spark_props2 = props_to_dict(env2.spark_properties)
+    system_props1 = props_to_dict(env1.system_properties)
+    system_props2 = props_to_dict(env2.system_properties)
+
+    # Performance-critical configuration analysis
+    performance_impact_analysis = []
+
+    # Memory-related configs
+    memory_configs = [
+        "spark.executor.memory", "spark.executor.memoryFraction", "spark.storage.memoryFraction",
+        "spark.shuffle.memoryFraction", "spark.driver.memory", "spark.driver.maxResultSize"
+    ]
+
+    # Resource allocation configs
+    resource_configs = [
+        "spark.executor.cores", "spark.executor.instances", "spark.dynamicAllocation.enabled",
+        "spark.dynamicAllocation.minExecutors", "spark.dynamicAllocation.maxExecutors"
+    ]
+
+    # Performance tuning configs
+    performance_configs = [
+        "spark.serializer", "spark.sql.adaptive.enabled", "spark.sql.adaptive.coalescePartitions.enabled",
+        "spark.shuffle.compress", "spark.io.compression.codec", "spark.sql.execution.arrow.pyspark.enabled"
+    ]
+
+    all_perf_configs = memory_configs + resource_configs + performance_configs
+
+    for config in all_perf_configs:
+        val1 = spark_props1.get(config)
+        val2 = spark_props2.get(config)
+
+        if val1 != val2:
+            impact = _analyze_config_performance_impact(config, val1, val2)
+            if impact:
+                performance_impact_analysis.append({
+                    "property": config,
+                    "app1_value": val1 or "NOT_SET",
+                    "app2_value": val2 or "NOT_SET",
+                    "category": impact["category"],
+                    "likely_impact": impact["description"],
+                    "severity": impact["severity"]
+                })
+
+    return {
+        "spark_properties": {
+            "common": {
+                k: {"app1": v, "app2": spark_props2.get(k)}
+                for k, v in spark_props1.items()
+                if k in spark_props2 and v == spark_props2[k]
+            },
+            "different": {
+                k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
+                for k, v in spark_props1.items()
+                if k in spark_props2 and v != spark_props2[k]
+            },
+            "app1_only": {
+                k: v for k, v in spark_props1.items() if k not in spark_props2
+            },
+            "app2_only": {
+                k: v for k, v in spark_props2.items() if k not in spark_props1
+            },
+            "performance_impact_analysis": performance_impact_analysis
+        },
+        "runtime_environment": {
+            "app1": {
+                "java_version": env1.runtime.java_version,
+                "java_home": env1.runtime.java_home,
+                "scala_version": env1.runtime.scala_version,
+            },
+            "app2": {
+                "java_version": env2.runtime.java_version,
+                "java_home": env2.runtime.java_home,
+                "scala_version": env2.runtime.scala_version,
+            },
+            "differences": [
+                {"property": "java_version", "app1": env1.runtime.java_version, "app2": env2.runtime.java_version}
+                for prop in ["java_version", "scala_version"]
+                if getattr(env1.runtime, prop, None) != getattr(env2.runtime, prop, None)
+            ]
+        },
+        "system_properties": {
+            "key_differences": {
+                k: {
+                    "app1": system_props1.get(k, "NOT_SET"),
+                    "app2": system_props2.get(k, "NOT_SET"),
+                }
+                for k in [
+                    "java.version", "java.runtime.version", "os.name",
+                    "os.version", "user.timezone", "file.encoding"
+                ]
+                if system_props1.get(k) != system_props2.get(k)
+            }
+        }
+    }
+
+
+def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict[str, str]]:
+    """Analyze the potential performance impact of configuration differences"""
+    if val1 == val2:
+        return None
+
+    # Memory-related configurations
+    if "memory" in config.lower():
+        if config == "spark.executor.memory":
+            return {
+                "category": "memory_allocation",
+                "description": f"Different executor memory allocation may affect task performance and spill behavior",
+                "severity": "high" if abs(hash(str(val1)) - hash(str(val2))) > 1000000 else "medium"
+            }
+        elif "fraction" in config.lower():
+            return {
+                "category": "memory_management",
+                "description": f"Memory fraction differences can impact caching and shuffle performance",
+                "severity": "medium"
+            }
+
+    # Resource allocation configurations
+    elif config in ["spark.executor.cores", "spark.executor.instances"]:
+        return {
+            "category": "resource_allocation",
+            "description": f"Different {config.split('.')[-1]} allocation affects parallelism and resource utilization",
+            "severity": "high"
+        }
+
+    elif "dynamicAllocation" in config:
+        return {
+            "category": "auto_scaling",
+            "description": f"Dynamic allocation settings impact resource scaling behavior",
+            "severity": "medium"
+        }
+
+    # Performance tuning configurations
+    elif config == "spark.serializer":
+        return {
+            "category": "serialization",
+            "description": f"Different serializers ({val1} vs {val2}) can significantly impact performance",
+            "severity": "high" if "kryo" in str(val1).lower() or "kryo" in str(val2).lower() else "medium"
+        }
+
+    elif "adaptive" in config.lower():
+        return {
+            "category": "query_optimization",
+            "description": f"Adaptive query execution settings affect SQL optimization",
+            "severity": "medium"
+        }
+
+    elif "compress" in config.lower() or "codec" in config.lower():
+        return {
+            "category": "compression",
+            "description": f"Compression settings impact I/O performance and storage efficiency",
+            "severity": "low"
+        }
+
+    return None
+
+
+def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
+    """Compare SQL execution plans between two Spark applications."""
+    try:
+        # Get SQL queries for both applications (check if method exists)
+        if not hasattr(client, 'list_sql_queries'):
+            return {
+                "sql_analysis": "not_supported",
+                "message": "SQL query listing not supported by client"
+            }
+
+        sql_queries1 = client.list_sql_queries(app_id1)
+        sql_queries2 = client.list_sql_queries(app_id2)
+
+        if not sql_queries1 and not sql_queries2:
+            return {
+                "sql_analysis": "no_sql_queries",
+                "message": "No SQL queries found in either application"
+            }
+
+        # SQL query analysis
+        sql_comparison = {
+            "app1": {
+                "query_count": len(sql_queries1),
+                "total_duration_ms": sum(q.duration_ms or 0 for q in sql_queries1),
+                "avg_duration_ms": sum(q.duration_ms or 0 for q in sql_queries1) / max(len(sql_queries1), 1),
+                "failed_queries": sum(1 for q in sql_queries1 if q.status == "FAILED"),
+            },
+            "app2": {
+                "query_count": len(sql_queries2),
+                "total_duration_ms": sum(q.duration_ms or 0 for q in sql_queries2),
+                "avg_duration_ms": sum(q.duration_ms or 0 for q in sql_queries2) / max(len(sql_queries2), 1),
+                "failed_queries": sum(1 for q in sql_queries2 if q.status == "FAILED"),
+            }
+        }
+
+        # Calculate comparison ratios
+        comparison_ratios = {}
+        if sql_comparison["app1"]["query_count"] > 0 and sql_comparison["app2"]["query_count"] > 0:
+            comparison_ratios = {
+                "query_count_ratio": sql_comparison["app2"]["query_count"] / sql_comparison["app1"]["query_count"],
+                "avg_duration_ratio": sql_comparison["app2"]["avg_duration_ms"] / max(sql_comparison["app1"]["avg_duration_ms"], 1),
+                "total_duration_ratio": sql_comparison["app2"]["total_duration_ms"] / max(sql_comparison["app1"]["total_duration_ms"], 1),
+            }
+
+        # Execution plan analysis (simplified)
+        plan_analysis = {
+            "app1_plan_count": 0,
+            "app2_plan_count": 0,
+            "common_plan_patterns": [],
+            "plan_differences": []
+        }
+
+        # Try to get detailed execution plans for top queries
+        top_queries1 = sorted(sql_queries1, key=lambda x: x.duration_ms or 0, reverse=True)[:3]
+        top_queries2 = sorted(sql_queries2, key=lambda x: x.duration_ms or 0, reverse=True)[:3]
+
+        plan_details1 = []
+        plan_details2 = []
+
+        for query in top_queries1:
+            try:
+                plan = client.get_sql_query_execution_plan(app_id1, query.execution_id)
+                if plan:
+                    plan_details1.append({
+                        "execution_id": query.execution_id,
+                        "duration_ms": query.duration_ms,
+                        "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
+                    })
+            except:
+                pass
+
+        for query in top_queries2:
+            try:
+                plan = client.get_sql_query_execution_plan(app_id2, query.execution_id)
+                if plan:
+                    plan_details2.append({
+                        "execution_id": query.execution_id,
+                        "duration_ms": query.duration_ms,
+                        "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
+                    })
+            except:
+                pass
+
+        plan_analysis["app1_plan_count"] = len(plan_details1)
+        plan_analysis["app2_plan_count"] = len(plan_details2)
+
+        # SQL performance recommendations
+        sql_recommendations = []
+
+        if sql_comparison["app1"]["query_count"] > 0 or sql_comparison["app2"]["query_count"] > 0:
+            # Query performance analysis
+            if comparison_ratios.get("avg_duration_ratio", 1) > 1.5:
+                sql_recommendations.append({
+                    "type": "sql_performance",
+                    "priority": "high",
+                    "issue": f"App2 SQL queries are {comparison_ratios['avg_duration_ratio']:.1f}x slower on average",
+                    "suggestion": "Review SQL query optimization, indexing strategies, and adaptive query execution settings"
+                })
+
+            # Query failure analysis
+            if sql_comparison["app1"]["failed_queries"] > 0 or sql_comparison["app2"]["failed_queries"] > 0:
+                sql_recommendations.append({
+                    "type": "sql_reliability",
+                    "priority": "medium",
+                    "issue": f"SQL query failures detected (App1: {sql_comparison['app1']['failed_queries']}, App2: {sql_comparison['app2']['failed_queries']})",
+                    "suggestion": "Investigate failed SQL queries and review data quality or schema issues"
+                })
+
+        return {
+            "sql_query_comparison": sql_comparison,
+            "comparison_ratios": comparison_ratios,
+            "execution_plan_analysis": plan_analysis,
+            "sql_recommendations": sql_recommendations,
+            "top_queries_analyzed": {
+                "app1_count": len(plan_details1),
+                "app2_count": len(plan_details2)
+            }
+        }
+
+    except Exception as e:
+        return {
+            "sql_analysis": "error",
+            "error_message": f"Error analyzing SQL execution plans: {str(e)}",
+            "sql_recommendations": []
+        }
+
+
+def _gather_basic_insights(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
+    """Gather basic insights using simplified analysis (avoiding MCP tool calls)."""
+    insights = {
+        "shuffle_analysis": {},
+        "failure_analysis": {},
+        "utilization_analysis": {}
+    }
+
+    try:
+        # Get stages for both applications for basic shuffle analysis
+        try:
+            stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
+            stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
+        except Exception:
+            try:
+                stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
+                stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
+            except Exception as e:
+                insights["shuffle_analysis"]["error"] = f"Could not get stages: {str(e)}"
+                stages1 = stages2 = []
+
+        if stages1 and stages2:
+            # Simple shuffle analysis
+            total_shuffle_read1 = sum(getattr(s, 'shuffle_read_bytes', 0) for s in stages1)
+            total_shuffle_read2 = sum(getattr(s, 'shuffle_read_bytes', 0) for s in stages2)
+            total_shuffle_write1 = sum(getattr(s, 'shuffle_write_bytes', 0) for s in stages1)
+            total_shuffle_write2 = sum(getattr(s, 'shuffle_write_bytes', 0) for s in stages2)
+
+            insights["shuffle_analysis"] = {
+                "app1": {
+                    "total_shuffle_read_gb": total_shuffle_read1 / (1024**3),
+                    "total_shuffle_write_gb": total_shuffle_write1 / (1024**3),
+                    "shuffle_stages_count": sum(1 for s in stages1 if getattr(s, 'shuffle_read_bytes', 0) > 0 or getattr(s, 'shuffle_write_bytes', 0) > 0)
+                },
+                "app2": {
+                    "total_shuffle_read_gb": total_shuffle_read2 / (1024**3),
+                    "total_shuffle_write_gb": total_shuffle_write2 / (1024**3),
+                    "shuffle_stages_count": sum(1 for s in stages2 if getattr(s, 'shuffle_read_bytes', 0) > 0 or getattr(s, 'shuffle_write_bytes', 0) > 0)
+                },
+                "comparison": {
+                    "shuffle_read_ratio": total_shuffle_read2 / max(total_shuffle_read1, 1),
+                    "shuffle_write_ratio": total_shuffle_write2 / max(total_shuffle_write1, 1),
+                    "shuffle_volume_ratio": (total_shuffle_read2 + total_shuffle_write2) / max(total_shuffle_read1 + total_shuffle_write1, 1)
+                }
+            }
+
+        # Simple failure analysis using stage data
+        try:
+            failed_tasks1 = sum(getattr(s, 'num_failed_tasks', 0) for s in stages1)
+            failed_tasks2 = sum(getattr(s, 'num_failed_tasks', 0) for s in stages2)
+            total_tasks1 = sum(getattr(s, 'num_complete_tasks', 0) + getattr(s, 'num_failed_tasks', 0) for s in stages1)
+            total_tasks2 = sum(getattr(s, 'num_complete_tasks', 0) + getattr(s, 'num_failed_tasks', 0) for s in stages2)
+
+            failure_rate1 = (failed_tasks1 / max(total_tasks1, 1)) * 100
+            failure_rate2 = (failed_tasks2 / max(total_tasks2, 1)) * 100
+
+            insights["failure_analysis"] = {
+                "app1": {
+                    "total_failed_tasks": failed_tasks1,
+                    "failure_rate": failure_rate1,
+                    "failed_stages_count": sum(1 for s in stages1 if getattr(s, 'num_failed_tasks', 0) > 0)
+                },
+                "app2": {
+                    "total_failed_tasks": failed_tasks2,
+                    "failure_rate": failure_rate2,
+                    "failed_stages_count": sum(1 for s in stages2 if getattr(s, 'num_failed_tasks', 0) > 0)
+                },
+                "comparison": {
+                    "failure_rate_improvement": failure_rate1 - failure_rate2,
+                    "reliability_change": "improved" if failure_rate2 < failure_rate1 else
+                                         "degraded" if failure_rate2 > failure_rate1 else "unchanged"
+                }
+            }
+        except Exception as e:
+            insights["failure_analysis"]["error"] = f"Error analyzing failures: {str(e)}"
+
+        # Simple utilization analysis using executor data
+        try:
+            executors1 = client.list_executors(app_id1, include_inactive=True)
+            executors2 = client.list_executors(app_id2, include_inactive=True)
+
+            # Calculate basic utilization metrics
+            active_executors1 = sum(1 for e in executors1 if e.is_active)
+            active_executors2 = sum(1 for e in executors2 if e.is_active)
+
+            insights["utilization_analysis"] = {
+                "app1": {
+                    "total_executors": len(executors1),
+                    "active_executors": active_executors1,
+                    "executor_efficiency": active_executors1 / max(len(executors1), 1) * 100
+                },
+                "app2": {
+                    "total_executors": len(executors2),
+                    "active_executors": active_executors2,
+                    "executor_efficiency": active_executors2 / max(len(executors2), 1) * 100
+                },
+                "comparison": {
+                    "executor_count_ratio": len(executors2) / max(len(executors1), 1),
+                    "efficiency_change": (active_executors2 / max(len(executors2), 1) * 100) - (active_executors1 / max(len(executors1), 1) * 100)
+                }
+            }
+        except Exception as e:
+            insights["utilization_analysis"]["error"] = f"Error analyzing utilization: {str(e)}"
+
+    except Exception as e:
+        return {"error": f"Error gathering basic insights: {str(e)}"}
+
+    # Generate insights-based recommendations
+    insights_recommendations = []
+
+    # Shuffle-based recommendations
+    shuffle_data = insights.get("shuffle_analysis", {})
+    if not shuffle_data.get("error"):
+        shuffle_volume_ratio = shuffle_data.get("comparison", {}).get("shuffle_volume_ratio", 1)
+        if shuffle_volume_ratio > 2:
+            insights_recommendations.append({
+                "type": "shuffle_volume",
+                "priority": "medium",
+                "issue": f"App2 has {shuffle_volume_ratio:.1f}x more shuffle data than App1",
+                "suggestion": "Consider broadcast joins, pre-aggregation, or data layout optimizations"
+            })
+
+    # Failure-based recommendations
+    failure_data = insights.get("failure_analysis", {})
+    if not failure_data.get("error"):
+        reliability_change = failure_data.get("comparison", {}).get("reliability_change")
+        if reliability_change == "degraded":
+            insights_recommendations.append({
+                "type": "reliability",
+                "priority": "high",
+                "issue": "App2 has higher task failure rate than App1",
+                "suggestion": "Investigate resource allocation, memory settings, and error patterns"
+            })
+
+    # Utilization-based recommendations
+    util_data = insights.get("utilization_analysis", {})
+    if not util_data.get("error"):
+        efficiency_change = util_data.get("comparison", {}).get("efficiency_change", 0)
+        if efficiency_change < -10:  # Efficiency decreased by more than 10%
+            insights_recommendations.append({
+                "type": "resource_efficiency",
+                "priority": "medium",
+                "issue": f"App2 resource efficiency decreased by {abs(efficiency_change):.1f}%",
+                "suggestion": "Review executor allocation, memory settings, and parallelism configuration"
+            })
+
+    insights["recommendations"] = insights_recommendations
+    return insights
+
+
+def _generate_cross_dimensional_recommendations(
+    environment_comparison: Dict[str, Any],
+    sql_plans_comparison: Dict[str, Any],
+    basic_insights: Dict[str, Any],
+    aggregated_overview: Dict[str, Any]
+) -> List[Dict[str, str]]:
+    """Generate enhanced recommendations by analyzing patterns across all dimensions."""
+    cross_recommendations = []
+
+    # Analyze cross-dimensional patterns
+    config_differences = environment_comparison.get("configuration_differences", {})
+    performance_impacts = environment_comparison.get("performance_impact_analysis", {})
+    sql_metrics = sql_plans_comparison.get("sql_query_comparison", {})
+    shuffle_analysis = basic_insights.get("shuffle_analysis", {})
+    failure_analysis = basic_insights.get("failure_analysis", {})
+    utilization_analysis = basic_insights.get("utilization_analysis", {})
+
+    # Pattern 1: Memory configuration + Memory spill + Utilization
+    memory_configs = [k for k in config_differences.keys() if "memory" in k.lower()]
+    stage_metrics = aggregated_overview.get("aggregated_stage_comparison", {})
+    memory_spill_ratio = stage_metrics.get("comparison", {}).get("memory_spill_ratio", 1)
+
+    if memory_configs and memory_spill_ratio > 2:
+        memory_util_change = utilization_analysis.get("comparison", {}).get("memory_utilization_improvement", 0)
+        if memory_util_change < 0:
+            cross_recommendations.append({
+                "type": "cross_dimensional_memory",
+                "priority": "critical",
+                "issue": "Memory configuration differences correlate with increased memory spill and decreased utilization",
+                "suggestion": f"Memory configs changed: {', '.join(memory_configs[:3])}. Increase executor memory or optimize memory fractions to reduce {memory_spill_ratio:.1f}x spill increase"
+            })
+
+    # Pattern 2: Serializer + Shuffle performance + Network utilization
+    serializer_changed = any("serializer" in k.lower() for k in config_differences.keys())
+    shuffle_volume_ratio = shuffle_analysis.get("comparison", {}).get("shuffle_volume_ratio", 1)
+
+    if serializer_changed and shuffle_volume_ratio > 1.5:
+        cross_recommendations.append({
+            "type": "cross_dimensional_serialization",
+            "priority": "high",
+            "issue": f"Serializer configuration change coincides with {shuffle_volume_ratio:.1f}x increase in shuffle data",
+            "suggestion": "Review serializer efficiency (e.g., Kryo vs Java) and its impact on shuffle operations and network utilization"
+        })
+
+    # Pattern 3: SQL query performance + Stage performance correlation
+    sql_avg_duration_ratio = sql_plans_comparison.get("comparison_ratios", {}).get("avg_duration_ratio", 1)
+    stage_duration_ratio = stage_metrics.get("comparison", {}).get("duration_ratio", 1)
+
+    if sql_avg_duration_ratio > 1.3 and stage_duration_ratio > 1.3:
+        cross_recommendations.append({
+            "type": "cross_dimensional_performance",
+            "priority": "high",
+            "issue": f"Both SQL queries ({sql_avg_duration_ratio:.1f}x) and stages ({stage_duration_ratio:.1f}x) are significantly slower in App2",
+            "suggestion": "Performance degradation spans both SQL optimization and stage execution. Check adaptive query execution settings and review overall resource allocation"
+        })
+
+    # Pattern 4: Dynamic allocation + Executor utilization patterns
+    dynamic_allocation_configs = [k for k in config_differences.keys() if "dynamic" in k.lower()]
+    efficiency_change = utilization_analysis.get("comparison", {}).get("efficiency_change", 0)
+    underutil_diff = (utilization_analysis.get("app2", {}).get("underutilized_executors", 0) -
+                     utilization_analysis.get("app1", {}).get("underutilized_executors", 0))
+
+    if dynamic_allocation_configs and efficiency_change < -5 and underutil_diff > 0:
+        cross_recommendations.append({
+            "type": "cross_dimensional_scaling",
+            "priority": "medium",
+            "issue": f"Dynamic allocation changes led to {abs(efficiency_change):.1f}% efficiency decrease and {underutil_diff} more underutilized executors",
+            "suggestion": f"Review dynamic allocation parameters: {', '.join(dynamic_allocation_configs)}. Consider adjusting min/max executors and scaling thresholds"
+        })
+
+    # Pattern 5: Resource allocation + Failure rate correlation
+    core_configs = [k for k in config_differences.keys() if "cores" in k.lower() or "executor" in k.lower()]
+    reliability_change = failure_analysis.get("comparison", {}).get("reliability_change")
+
+    if core_configs and reliability_change == "degraded":
+        failure_rate_change = failure_analysis.get("comparison", {}).get("failure_rate_improvement", 0)
+        cross_recommendations.append({
+            "type": "cross_dimensional_reliability",
+            "priority": "high",
+            "issue": f"Resource allocation changes coincide with reliability degradation (failure rate increased by {abs(failure_rate_change):.2f}%)",
+            "suggestion": f"Resource configs changed: {', '.join(core_configs[:2])}. Ensure adequate resources per executor and review task timeout settings"
+        })
+
+    # Pattern 6: Compression + I/O patterns + Disk utilization
+    compression_configs = [k for k in config_differences.keys() if "compress" in k.lower() or "codec" in k.lower()]
+    input_output_changes = (
+        stage_metrics.get("comparison", {}).get("input_ratio", 1) +
+        stage_metrics.get("comparison", {}).get("output_ratio", 1)
+    ) / 2
+
+    if compression_configs and input_output_changes > 1.3:
+        cross_recommendations.append({
+            "type": "cross_dimensional_io",
+            "priority": "low",
+            "issue": f"Compression configuration changes with {input_output_changes:.1f}x increase in I/O operations",
+            "suggestion": "Review compression codec efficiency and its impact on I/O performance. Consider codec benchmarking for your data patterns"
+        })
+
+    # Pattern 7: Holistic performance degradation pattern
+    total_degradation_indicators = sum([
+        1 if sql_avg_duration_ratio > 1.2 else 0,
+        1 if stage_duration_ratio > 1.2 else 0,
+        1 if efficiency_change < -5 else 0,
+        1 if reliability_change == "degraded" else 0,
+        1 if memory_spill_ratio > 1.5 else 0
+    ])
+
+    if total_degradation_indicators >= 3:
+        cross_recommendations.append({
+            "type": "holistic_performance_review",
+            "priority": "critical",
+            "issue": f"Multiple performance dimensions degraded ({total_degradation_indicators}/5 indicators)",
+            "suggestion": "Comprehensive performance review needed. Consider reverting to App1 configuration as baseline and making incremental changes with performance validation"
+        })
+
+    return cross_recommendations
+
+
 def _get_basic_app_info(app) -> Dict[str, Any]:
     """Extract basic application information for comparison"""
     return {
@@ -2168,23 +2731,62 @@ def _analyze_executor_performance_patterns(
         executors_with_failures = 0
         executors_with_spill = 0
 
+        # Check if this is already aggregated data from get_executor_summary
+        if isinstance(executors, dict) and "total_executors" in executors:
+            # This is aggregated summary data
+            return {
+                "total_executors": executors.get("total_executors", 0),
+                "avg_task_time": executors.get("total_duration", 0) / max(executors.get("completed_tasks", 1), 1),
+                "avg_failed_tasks": executors.get("failed_tasks", 0) / max(executors.get("total_executors", 1), 1),
+                "avg_succeeded_tasks": executors.get("completed_tasks", 0) / max(executors.get("total_executors", 1), 1),
+                "total_memory_spilled": executors.get("memory_used", 0),
+                "total_shuffle_read": executors.get("total_shuffle_read", 0),
+                "total_shuffle_write": executors.get("total_shuffle_write", 0),
+                "executors_with_failures": 1 if executors.get("failed_tasks", 0) > 0 else 0,
+                "executors_with_spill": 1 if executors.get("memory_used", 0) > 0 else 0,
+                "task_efficiency": executors.get("completed_tasks", 0) / max(executors.get("completed_tasks", 0) + executors.get("failed_tasks", 0), 1)
+            }
+
+        # This is individual executor data (original format)
         for executor_id, metrics in executors.items():
-            if metrics.task_time:
+            # Safely access attributes with getattr or direct dict access
+            if hasattr(metrics, 'task_time') and metrics.task_time:
                 task_times.append(metrics.task_time)
-            if metrics.failed_tasks:
+            elif isinstance(metrics, dict) and metrics.get('task_time'):
+                task_times.append(metrics['task_time'])
+
+            if hasattr(metrics, 'failed_tasks') and metrics.failed_tasks:
                 failed_tasks.append(metrics.failed_tasks)
                 if metrics.failed_tasks > 0:
                     executors_with_failures += 1
-            if metrics.succeeded_tasks:
+            elif isinstance(metrics, dict) and metrics.get('failed_tasks'):
+                failed_tasks.append(metrics['failed_tasks'])
+                if metrics['failed_tasks'] > 0:
+                    executors_with_failures += 1
+
+            if hasattr(metrics, 'succeeded_tasks') and metrics.succeeded_tasks:
                 succeeded_tasks.append(metrics.succeeded_tasks)
-            if metrics.memory_bytes_spilled:
+            elif isinstance(metrics, dict) and metrics.get('succeeded_tasks'):
+                succeeded_tasks.append(metrics['succeeded_tasks'])
+
+            if hasattr(metrics, 'memory_bytes_spilled') and metrics.memory_bytes_spilled:
                 memory_spilled.append(metrics.memory_bytes_spilled)
                 if metrics.memory_bytes_spilled > 0:
                     executors_with_spill += 1
-            if metrics.shuffle_read:
+            elif isinstance(metrics, dict) and metrics.get('memory_bytes_spilled'):
+                memory_spilled.append(metrics['memory_bytes_spilled'])
+                if metrics['memory_bytes_spilled'] > 0:
+                    executors_with_spill += 1
+
+            if hasattr(metrics, 'shuffle_read') and metrics.shuffle_read:
                 shuffle_reads.append(metrics.shuffle_read)
-            if metrics.shuffle_write:
+            elif isinstance(metrics, dict) and metrics.get('shuffle_read'):
+                shuffle_reads.append(metrics['shuffle_read'])
+
+            if hasattr(metrics, 'shuffle_write') and metrics.shuffle_write:
                 shuffle_writes.append(metrics.shuffle_write)
+            elif isinstance(metrics, dict) and metrics.get('shuffle_write'):
+                shuffle_writes.append(metrics['shuffle_write'])
 
         return {
             "total_executors": len(executors),
@@ -3203,6 +3805,29 @@ def compare_app_performance(
             "suggestion": "Check memory allocation and partitioning strategies for specific stages"
         })
 
+    # Environment and configuration comparison
+    environment_comparison = _compare_environments(client, app_id1, app_id2)
+
+    # SQL execution plans comparison
+    sql_plans_comparison = _compare_sql_execution_plans(client, app_id1, app_id2)
+
+    # Gather basic insights (shuffle, failures, utilization)
+    basic_insights = _gather_basic_insights(client, app_id1, app_id2)
+
+    # Merge SQL recommendations with existing recommendations
+    if sql_plans_comparison.get("sql_recommendations"):
+        recommendations.extend(sql_plans_comparison["sql_recommendations"])
+
+    # Merge insights recommendations with existing recommendations
+    if basic_insights.get("recommendations"):
+        recommendations.extend(basic_insights["recommendations"])
+
+    # Generate cross-dimensional recommendations
+    cross_dimensional_recs = _generate_cross_dimensional_recommendations(
+        environment_comparison, sql_plans_comparison, basic_insights, aggregated_overview
+    )
+    recommendations.extend(cross_dimensional_recs)
+
     # Sort recommendations by priority
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
@@ -3213,6 +3838,9 @@ def compare_app_performance(
             "app2": {"id": app_id2, "name": app2.name}
         },
         "aggregated_overview": aggregated_overview,
+        "environment_comparison": environment_comparison,
+        "sql_execution_plans": sql_plans_comparison,
+        "basic_insights": basic_insights,
         "stage_deep_dive": {
             "analysis_parameters": {
                 "top_n": top_n,
