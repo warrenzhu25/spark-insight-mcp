@@ -1134,7 +1134,8 @@ def get_stage_dependency_from_sql_plan(
     Get stage dependency information from SQL execution plan.
 
     Analyzes SQL execution data to extract stage dependencies and relationships
-    by examining job-to-stage mappings and stage execution patterns.
+    by examining execution plan DAG data (when available) or falling back to
+    timing-based inference from job-to-stage mappings.
 
     Args:
         app_id: The Spark application ID
@@ -1142,11 +1143,13 @@ def get_stage_dependency_from_sql_plan(
         server: Optional server name to use (uses default if not specified)
 
     Returns:
-        Dictionary containing stage dependency analysis including:
-        - stage_dependencies: Graph of stage parent/child relationships
-        - execution_timeline: Chronological stage execution order
-        - critical_path: Stages on the critical execution path
-        - stage_job_mapping: Mapping between stages and jobs
+        Dictionary containing stage dependency graph where each key is a stage_id
+        and each value contains:
+        - parents: List of parent stages with stage_id, stage_name, relationship_type
+        - children: List of child stages with stage_id, stage_name, relationship_type
+        - stage_info: Stage metadata including timing, status, and task counts
+
+        Returns empty dict {} if no dependencies can be determined or on error.
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -1157,14 +1160,7 @@ def get_stage_dependency_from_sql_plan(
             # Get the longest running SQL query if no execution_id specified
             sql_executions = client.get_sql_list(app_id, details=True, plan_description=True)
             if not sql_executions:
-                return {
-                    "error": "No SQL executions found for application",
-                    "app_id": app_id,
-                    "stage_dependencies": {},
-                    "execution_timeline": [],
-                    "critical_path": [],
-                    "stage_job_mapping": {}
-                }
+                return {}
 
             # Find the longest duration execution
             execution = max(sql_executions, key=lambda x: x.duration or 0)
@@ -1208,15 +1204,7 @@ def get_stage_dependency_from_sql_plan(
         all_job_ids.update(execution.failed_job_ids or [])
 
         if not all_job_ids:
-            return {
-                "error": "No jobs found for SQL execution",
-                "app_id": app_id,
-                "execution_id": execution_id,
-                "stage_dependencies": {},
-                "execution_timeline": [],
-                "critical_path": [],
-                "stage_job_mapping": {}
-            }
+            return {}
 
         # Get job details and collect stage IDs
         jobs = client.list_jobs(app_id)
@@ -1395,30 +1383,10 @@ def get_stage_dependency_from_sql_plan(
         if html_dag_data:
             analysis_metadata["html_data_keys"] = list(html_dag_data.keys())
 
-        return {
-            "app_id": app_id,
-            "execution_id": execution_id,
-            "sql_description": execution.description,
-            "execution_status": execution.status,
-            "total_jobs": len(relevant_jobs),
-            "total_stages": len(relevant_stages),
-            "stage_dependencies": stage_dependencies,
-            "execution_timeline": execution_timeline,
-            "critical_path": critical_path,
-            "stage_job_mapping": stage_job_mapping,
-            "analysis_metadata": analysis_metadata
-        }
+        return stage_dependencies
 
     except Exception as e:
-        return {
-            "error": f"Failed to analyze stage dependencies: {str(e)}",
-            "app_id": app_id,
-            "execution_id": execution_id,
-            "stage_dependencies": {},
-            "execution_timeline": [],
-            "critical_path": [],
-            "stage_job_mapping": {}
-        }
+        return {}
 
 
 @mcp.tool()
