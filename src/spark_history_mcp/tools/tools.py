@@ -4012,22 +4012,9 @@ def compare_app_performance(
     # SQL execution plans comparison
     sql_plans_comparison = _compare_sql_execution_plans(client, app_id1, app_id2)
 
-    # Gather basic insights (shuffle, failures, utilization)
-    basic_insights = _gather_basic_insights(client, app_id1, app_id2)
-
     # Merge SQL recommendations with existing recommendations
     if sql_plans_comparison.get("sql_recommendations"):
         recommendations.extend(sql_plans_comparison["sql_recommendations"])
-
-    # Merge insights recommendations with existing recommendations
-    if basic_insights.get("recommendations"):
-        recommendations.extend(basic_insights["recommendations"])
-
-    # Generate cross-dimensional recommendations
-    cross_dimensional_recs = _generate_cross_dimensional_recommendations(
-        environment_comparison, sql_plans_comparison, basic_insights, aggregated_overview
-    )
-    recommendations.extend(cross_dimensional_recs)
 
     # Sort recommendations by priority
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -4041,7 +4028,6 @@ def compare_app_performance(
         "aggregated_overview": aggregated_overview,
         "environment_comparison": environment_comparison,
         "sql_execution_plans": sql_plans_comparison,
-        "basic_insights": basic_insights,
         "stage_deep_dive": {
             "analysis_parameters": {
                 "top_n": top_n,
