@@ -13,8 +13,6 @@ try:
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich.table import Table
-    from rich.text import Text
-    from rich.tree import Tree
     from tabulate import tabulate
 
     RICH_AVAILABLE = True
@@ -121,7 +119,10 @@ class OutputFormatter:
         elif isinstance(data, StageData):
             self._format_stage(data)
         elif isinstance(data, dict):
-            self._format_dict(data)
+            if self._is_comparison_result(data):
+                self._format_comparison_result(data, title)
+            else:
+                self._format_dict(data)
         else:
             console.print(str(data))
 
@@ -298,16 +299,325 @@ class OutputFormatter:
 
         console.print(table)
 
+    def _is_comparison_result(self, data: Dict[str, Any]) -> bool:
+        """Detect if data is a comparison result structure."""
+        # Look for key patterns that indicate this is a comparison result
+        comparison_keys = {
+            "applications",
+            "aggregated_overview",
+            "stage_deep_dive",
+            "recommendations",
+            "environment_comparison",
+            "sql_execution_plans",
+        }
+        return len(comparison_keys.intersection(data.keys())) >= 3
+
+    def _format_comparison_result(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
+        """Format comparison result data in a structured, readable way."""
+        if title:
+            console.print(f"\n[bold blue]{title}[/bold blue]")
+
+        # 1. Applications Header
+        if "applications" in data:
+            self._format_comparison_header(data["applications"])
+
+        # 2. Executive Summary
+        self._format_executive_summary(data)
+
+        # 3. Top Stage Differences
+        if "stage_deep_dive" in data:
+            self._format_stage_differences(data["stage_deep_dive"])
+
+        # 4. Performance Metrics
+        if "aggregated_overview" in data:
+            self._format_performance_metrics(data["aggregated_overview"])
+
+        # 5. Recommendations
+        if "recommendations" in data:
+            self._format_recommendations(data["recommendations"])
+
+    def _format_comparison_header(self, applications: Dict[str, Any]) -> None:
+        """Format the applications being compared."""
+        if "app1" in applications and "app2" in applications:
+            app1 = applications["app1"]
+            app2 = applications["app2"]
+
+            content = (
+                f"[bold]App1:[/bold] {app1.get('name', app1.get('id', 'Unknown'))}\n"
+            )
+            content += (
+                f"[bold]App2:[/bold] {app2.get('name', app2.get('id', 'Unknown'))}"
+            )
+
+            console.print(
+                Panel(content, title="Performance Comparison", border_style="blue")
+            )
+
+    def _format_executive_summary(self, data: Dict[str, Any]) -> None:
+        """Format key insights and summary."""
+        summary_items = []
+
+        # Extract key metrics from aggregated overview
+        if "aggregated_overview" in data:
+            overview = data["aggregated_overview"]
+
+            # Task completion ratio
+            if "executor_comparison" in overview:
+                exec_comp = overview["executor_comparison"]
+                if "task_completion_ratio_change" in exec_comp:
+                    change = exec_comp["task_completion_ratio_change"]
+                    summary_items.append(f"• Task completion efficiency: {change}")
+
+        # Stage performance issues
+        if "stage_deep_dive" in data:
+            stage_dive = data["stage_deep_dive"]
+            if "top_stage_differences" in stage_dive:
+                differences = stage_dive["top_stage_differences"]
+                if differences:
+                    max_diff = max(
+                        (
+                            diff.get("time_difference", {}).get("absolute_seconds", 0)
+                            for diff in differences
+                        ),
+                        default=0,
+                    )
+                    if max_diff > 60:  # More than 1 minute difference
+                        count = sum(
+                            1
+                            for diff in differences
+                            if diff.get("time_difference", {}).get(
+                                "absolute_seconds", 0
+                            )
+                            > 60
+                        )
+                        summary_items.append(
+                            f"• Found {count} stages with >60s time difference"
+                        )
+
+        # Add recommendations summary
+        if "recommendations" in data:
+            rec_count = len(data["recommendations"])
+            if rec_count > 0:
+                summary_items.append(
+                    f"• {rec_count} optimization recommendations available"
+                )
+
+        if summary_items:
+            content = "\n".join(summary_items)
+            console.print(
+                Panel(content, title="Executive Summary", border_style="green")
+            )
+
+    def _format_stage_differences(self, stage_deep_dive: Dict[str, Any]) -> None:
+        """Format top stage differences in a readable way."""
+        if "top_stage_differences" not in stage_deep_dive:
+            return
+
+        differences = stage_deep_dive["top_stage_differences"][:3]  # Show top 3
+
+        for i, diff in enumerate(differences, 1):
+            stage_name = diff.get("stage_name", "Unknown Stage")[
+                :50
+            ]  # Truncate long names
+            time_diff = diff.get("time_difference", {})
+
+            app1_stage = diff.get("app1_stage", {})
+            app2_stage = diff.get("app2_stage", {})
+
+            app1_duration = app1_stage.get("duration_seconds", 0)
+            app2_duration = app2_stage.get("duration_seconds", 0)
+
+            absolute_diff = time_diff.get("absolute_seconds", 0)
+            percentage = time_diff.get("percentage", 0)
+            slower_app = time_diff.get("slower_application", "unknown")
+
+            content = f"[bold]Stage:[/bold] {stage_name}\n"
+            content += f"[bold]App1:[/bold] {app1_duration:.1f}s\n"
+            content += f"[bold]App2:[/bold] {app2_duration:.1f}s\n"
+
+            if slower_app == "app1":
+                content += f"[bold red]Difference:[/bold red] +{absolute_diff:.1f}s ({percentage:.1f}% slower)"
+            else:
+                content += f"[bold green]Difference:[/bold green] -{absolute_diff:.1f}s ({percentage:.1f}% faster)"
+
+            title = f"Stage Difference #{i}"
+            console.print(Panel(content, title=title, border_style="yellow"))
+
+    def _format_performance_metrics(self, overview: Dict[str, Any]) -> None:
+        """Format key performance metrics in a table."""
+        if "executor_comparison" not in overview and "stage_comparison" not in overview:
+            return
+
+        table = Table(title="Performance Metrics Comparison")
+        table.add_column("Metric", style="cyan")
+        table.add_column("App1", style="blue")
+        table.add_column("App2", style="blue")
+        table.add_column("Change", style="magenta")
+
+        # Executor metrics
+        if "executor_comparison" in overview:
+            exec_data = overview["executor_comparison"]
+            if "applications" in exec_data:
+                apps = exec_data["applications"]
+                app1_metrics = apps.get("app1", {}).get("executor_metrics", {})
+                app2_metrics = apps.get("app2", {}).get("executor_metrics", {})
+
+                # Total tasks
+                if (
+                    "completed_tasks" in app1_metrics
+                    and "completed_tasks" in app2_metrics
+                ):
+                    app1_tasks = app1_metrics["completed_tasks"]
+                    app2_tasks = app2_metrics["completed_tasks"]
+                    change = exec_data.get("task_completion_ratio_change", "N/A")
+                    table.add_row(
+                        "Total Tasks", str(app1_tasks), str(app2_tasks), change
+                    )
+
+        # Stage metrics
+        if "stage_comparison" in overview:
+            stage_data = overview["stage_comparison"]
+            if "applications" in stage_data:
+                apps = stage_data["applications"]
+                app1_metrics = apps.get("app1", {}).get("stage_metrics", {})
+                app2_metrics = apps.get("app2", {}).get("stage_metrics", {})
+
+                # Input bytes
+                if (
+                    "total_input_bytes" in app1_metrics
+                    and "total_input_bytes" in app2_metrics
+                ):
+                    app1_input = self._format_bytes(app1_metrics["total_input_bytes"])
+                    app2_input = self._format_bytes(app2_metrics["total_input_bytes"])
+                    change = stage_data.get("stage_comparison", {}).get(
+                        "input_ratio_change", "N/A"
+                    )
+                    table.add_row("Input Data", app1_input, app2_input, change)
+
+                # Duration
+                if (
+                    "total_stage_duration" in app1_metrics
+                    and "total_stage_duration" in app2_metrics
+                ):
+                    app1_duration = f"{app1_metrics['total_stage_duration']:.1f}s"
+                    app2_duration = f"{app2_metrics['total_stage_duration']:.1f}s"
+                    change = stage_data.get("stage_comparison", {}).get(
+                        "duration_ratio_change", "N/A"
+                    )
+                    table.add_row(
+                        "Total Duration", app1_duration, app2_duration, change
+                    )
+
+        if table.rows:
+            console.print(table)
+
+    def _format_recommendations(self, recommendations: List[Dict[str, Any]]) -> None:
+        """Format recommendations as a bulleted list."""
+        if not recommendations:
+            return
+
+        content = []
+        for rec in recommendations:
+            priority = rec.get("priority", "medium").upper()
+            issue = rec.get("issue", "No description")
+            suggestion = rec.get("suggestion", "No suggestion")
+
+            priority_color = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "green"}.get(
+                priority, "white"
+            )
+
+            content.append(
+                f"[bold {priority_color}]{priority}:[/bold {priority_color}] {issue}"
+            )
+            content.append(f"  → {suggestion}")
+            content.append("")  # Empty line between recommendations
+
+        if content:
+            console.print(
+                Panel(
+                    "\n".join(content[:-1]), title="Recommendations", border_style="red"
+                )
+            )
+
+    def _format_bytes(self, bytes_value: int) -> str:
+        """Format bytes in human readable format."""
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if bytes_value < 1024.0:
+                return f"{bytes_value:.1f}{unit}"
+            bytes_value /= 1024.0
+        return f"{bytes_value:.1f}PB"
+
     def _format_dict(self, data: Dict[str, Any]) -> None:
         """Format dictionary data."""
-        table = Table(title="Details")
-        table.add_column("Property", style="cyan")
-        table.add_column("Value", style="green")
+        # For complex nested dictionaries, use a more sophisticated approach
+        if self._is_complex_dict(data):
+            self._format_complex_dict(data)
+        else:
+            # Simple key-value table for basic dictionaries
+            table = Table(title="Details")
+            table.add_column("Property", style="cyan")
+            table.add_column("Value", style="green")
+
+            for key, value in data.items():
+                # Truncate very long values
+                str_value = str(value)
+                if len(str_value) > 100:
+                    str_value = str_value[:97] + "..."
+                table.add_row(key, str_value)
+
+            console.print(table)
+
+    def _is_complex_dict(self, data: Dict[str, Any]) -> bool:
+        """Check if dictionary has nested complex structures."""
+        for value in data.values():
+            if isinstance(value, (dict, list)) and len(str(value)) > 200:
+                return True
+        return False
+
+    def _format_complex_dict(self, data: Dict[str, Any]) -> None:
+        """Format complex nested dictionary using Tree structure."""
+        from rich.tree import Tree
+
+        tree = Tree("Data Structure")
 
         for key, value in data.items():
-            table.add_row(key, str(value))
+            if isinstance(value, dict):
+                branch = tree.add(f"[bold blue]{key}[/bold blue]")
+                self._add_dict_to_tree(branch, value, depth=0, max_depth=2)
+            elif isinstance(value, list):
+                branch = tree.add(f"[bold green]{key}[/bold green] (list)")
+                if value and len(value) <= 5:  # Show small lists
+                    for i, item in enumerate(value):
+                        branch.add(f"{i}: {str(item)[:50]}")
+                elif value:
+                    branch.add(f"[dim]{len(value)} items...[/dim]")
+            else:
+                str_value = str(value)
+                if len(str_value) > 50:
+                    str_value = str_value[:47] + "..."
+                tree.add(f"[cyan]{key}[/cyan]: {str_value}")
 
-        console.print(table)
+        console.print(tree)
+
+    def _add_dict_to_tree(
+        self, parent, data: Dict[str, Any], depth: int, max_depth: int
+    ) -> None:
+        """Recursively add dictionary items to tree."""
+        if depth >= max_depth:
+            parent.add("[dim]...[/dim]")
+            return
+
+        for key, value in list(data.items())[:10]:  # Limit to 10 items per level
+            if isinstance(value, dict):
+                branch = parent.add(f"[blue]{key}[/blue]")
+                self._add_dict_to_tree(branch, value, depth + 1, max_depth)
+            else:
+                str_value = str(value)
+                if len(str_value) > 40:
+                    str_value = str_value[:37] + "..."
+                parent.add(f"{key}: {str_value}")
 
 
 def create_progress(description: str = "Processing...") -> Progress:
