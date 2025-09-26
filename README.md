@@ -130,18 +130,54 @@ mcp:
 ![Job Comparison](screenshots/job-compare.png)
 
 
+## 🚀 Major Enhancements Beyond Original Fork
+
+This MCP server has been significantly enhanced with advanced capabilities far beyond the original forked functionality:
+
+### 📈 **Massive Tool Expansion**
+- **18 original tools** → **50+ current tools** (3x growth)
+- **Comprehensive comparison suite** with 8 advanced tools for cross-application analysis
+- **Timeline-based analysis** with intelligent interval merging and executor-focused comparisons
+
+### 🧠 **SparkInsight Intelligence Integration**
+- **5 AI-powered analysis tools** inspired by SparkInsight for intelligent performance optimization
+- **Auto-scaling recommendations** based on workload pattern analysis
+- **Data skew detection** with actionable optimization suggestions
+- **Failure analysis** with root cause identification
+- **Executor utilization tracking** for resource optimization
+
+### 💬 **Intelligent Prompts System**
+- **16 structured prompts** for systematic Spark analysis
+- **Domain expertise** encoded into reusable templates
+- **Tailored analysis** for different audiences (technical vs executive)
+- **Consistent methodology** across performance investigations
+
+### ⏰ **Advanced Timeline Analysis**
+- **Executor timeline comparisons** at both application and stage levels
+- **Simplified output focus** removing noise from memory/CPU metrics
+- **Intelligent interval merging** for cleaner analysis
+- **Resource allocation pattern** tracking over time
+
+### 🎯 **Enhanced Comparative Analysis**
+- **Multi-dimensional comparisons**: resources, executors, jobs, stages
+- **Comprehensive performance analysis** with stage-level deep dives
+- **Significance filtering** to highlight meaningful differences
+- **Actionable recommendations** for optimization
+
+Tools marked with 🆕 represent major additions beyond the original fork functionality.
+
 ## 🛠️ Available Tools
 
 > **Note**: These tools are subject to change as we scale and improve the performance of the MCP server.
 
-The MCP server provides **22 specialized tools** and **16 intelligent prompts** organized by analysis patterns. LLMs can intelligently select and combine these tools and prompts based on user queries:
+The MCP server provides **50+ specialized tools** and **16 intelligent prompts** organized by analysis patterns. LLMs can intelligently select and combine these tools and prompts based on user queries:
 
 ### 📊 Application Information
 *Basic application metadata and overview*
 | 🔧 Tool | 📝 Description |
 |---------|----------------|
 | `get_application` | 📊 Get detailed information about a specific Spark application including status, resource usage, duration, and attempt details |
-| `list_applications` | 📋 Get a list of all Spark applications with optional filtering by status, dates, limits, and name patterns (exact, contains, regex) |
+| `list_applications` 🆕 | 📋 **Enhanced application discovery** - Advanced filtering by status, dates, limits, and flexible name matching (exact, contains, regex patterns) |
 
 ### 🔗 Job Analysis
 *Job-level performance analysis and identification*
@@ -189,22 +225,41 @@ The MCP server provides **22 specialized tools** and **16 intelligent prompts** 
 
 ### 🔄 Comparative Analysis
 *Cross-application comparison for regression detection and optimization*
+
+#### 🏗️ Application-Level Comparison
 | 🔧 Tool | 📝 Description |
 |---------|----------------|
 | `compare_job_environments` | ⚙️ Compare Spark environment configurations between two jobs to identify differences in properties and settings |
 | `compare_job_performance` | 📈 Compare performance metrics between two Spark jobs including execution times, resource usage, and task distribution |
+| `compare_app_resources` 🆕 | 💰 Compare resource allocation and configuration patterns between applications focusing on executor setup and utilization efficiency |
+| `compare_app_executors` 🆕 | 🖥️ Compare executor-level performance metrics including memory usage, GC performance, and task completion patterns |
+| `compare_app_jobs` 🆕 | 🔗 Compare job-level performance metrics focusing on job counts, durations, success rates, and parallelism patterns |
+| `compare_app_stages_aggregated` 🆕 | ⚡ Compare overall stage performance patterns, I/O volumes, and shuffle operations without individual stage details |
+| `compare_app_performance` 🆕 | 🎯 **Ultimate performance comparison** - Multi-dimensional analysis covering resources, jobs, executors, and stages with intelligent filtering and actionable recommendations |
 
-### 🧠 SparkInsight Intelligence
+#### ⏰ Timeline-Based Comparison 🆕
+*Advanced timeline analysis with simplified executor-focused output and interval merging*
+| 🔧 Tool | 📝 Description |
+|---------|----------------|
+| `compare_app_executor_timeline` 🆕 | 📅 **Advanced timeline comparison** - Analyze executor allocation patterns across entire application lifecycle with intelligent interval merging and noise reduction |
+| `compare_stage_executor_timeline` 🆕 | 🕐 **Stage-level timeline analysis** - Compare executor patterns during specific stages with consolidated intervals and simplified executor-focused output |
+
+#### 🎯 Granular Component Comparison
+| 🔧 Tool | 📝 Description |
+|---------|----------------|
+| `compare_stages` 🆕 | ⚡ Compare specific stages between two applications focusing on significant performance differences only |
+
+### 🧠 SparkInsight Intelligence 🆕
 *AI-powered analysis tools inspired by SparkInsight for intelligent performance optimization*
 | 🔧 Tool | 📝 Description |
 |---------|----------------|
-| `analyze_auto_scaling` | 🚀 Analyze workload patterns and provide intelligent auto-scaling recommendations for dynamic allocation |
-| `analyze_shuffle_skew` | 📊 Detect and analyze data skew in shuffle operations with actionable optimization suggestions |
-| `analyze_failed_tasks` | 🚨 Investigate task failures to identify patterns, problematic executors, and root causes |
-| `analyze_executor_utilization` | 📈 Track executor utilization over time to identify over/under-provisioning and optimization opportunities |
-| `get_application_insights` | 🧠 **Comprehensive SparkInsight analysis** - Runs all analyzers to provide complete performance overview and recommendations |
+| `analyze_auto_scaling` 🆕 | 🚀 Analyze workload patterns and provide intelligent auto-scaling recommendations for dynamic allocation |
+| `analyze_shuffle_skew` 🆕 | 📊 Detect and analyze data skew in shuffle operations with actionable optimization suggestions |
+| `analyze_failed_tasks` 🆕 | 🚨 Investigate task failures to identify patterns, problematic executors, and root causes |
+| `analyze_executor_utilization` 🆕 | 📈 Track executor utilization over time to identify over/under-provisioning and optimization opportunities |
+| `get_application_insights` 🆕 | 🧠 **Comprehensive SparkInsight analysis** - Runs all analyzers to provide complete performance overview and recommendations |
 
-### 💬 Intelligent Prompts
+### 💬 Intelligent Prompts 🆕
 *Reusable templates that guide AI agents in structured Spark analysis*
 
 The MCP server provides **16 intelligent prompts** organized by analysis type. These prompts help AI agents ask better questions and generate more structured, comprehensive analyses:
@@ -252,6 +307,12 @@ The MCP server provides **16 intelligent prompts** organized by analysis type. T
 - *"Show me resource usage over time"* → `get_resource_usage_timeline` + `get_executor_summary`
 - *"Find my slowest SQL queries"* → `list_slowest_sql_queries` + `compare_sql_execution_plans`
 
+**Timeline & Resource Analysis:**
+- *"How do executor patterns differ between apps?"* → `compare_app_executor_timeline` (simplified executor-focused comparison)
+- *"Compare stage resource allocation over time"* → `compare_stage_executor_timeline` (merged interval analysis)
+- *"Analyze resource allocation efficiency"* → `compare_app_resources` + `compare_app_executors`
+- *"Track executor scaling differences"* → `compare_app_executor_timeline` + `analyze_auto_scaling`
+
 **Comprehensive Analysis with Prompts:**
 - *"Thoroughly analyze my slow application"* → `analyze_slow_application` prompt → structured analysis using multiple tools
 - *"Generate a performance report for executives"* → `generate_performance_report` prompt → comprehensive business-focused analysis
@@ -285,6 +346,31 @@ Result: Structured investigation covering:
   • Data skew detection with analyze_shuffle_skew
   • Configuration review and optimization recommendations
 ```
+
+## 🆕 Recent Improvements: Timeline Comparison Tools
+
+The timeline comparison tools have been enhanced with major improvements for cleaner analysis:
+
+### ✨ **Simplified Output Focus**
+- **Executor-Only Metrics**: Timeline comparisons now focus exclusively on executor count differences, removing memory and CPU noise
+- **Streamlined Data**: Cleaner output makes it easier to identify meaningful resource allocation patterns
+- **Reduced Complexity**: Simplified comparison data structure improves readability and analysis speed
+
+### 🔄 **Intelligent Interval Merging**
+- **Consecutive Consolidation**: Adjacent time intervals with identical executor counts are automatically merged
+- **Duration Tracking**: Merged intervals include `duration_intervals` showing how many original intervals were consolidated
+- **Noise Reduction**: Significantly reduces output size while preserving all critical information
+
+### 📊 **Enhanced Summary Statistics**
+- **Dual Metrics**: Shows both `original_intervals` and `merged_intervals` counts for transparency
+- **Improved Insights**: Summary statistics calculated on merged data provide more meaningful analysis
+- **Better Tracking**: Clear visibility into the effectiveness of interval consolidation
+
+### 🛠️ **Affected Tools**
+- `compare_stage_executor_timeline` - Stage-level timeline comparison with merged intervals
+- `compare_app_executor_timeline` - Application-level timeline comparison with simplified output
+
+These improvements make timeline analysis more focused and actionable while maintaining full backward compatibility.
 
 ## 🧠 SparkInsight Integration
 
