@@ -87,6 +87,158 @@ def get_app_context(
     return stored_app1, stored_app2, final_server
 
 
+def is_app_id(identifier: str) -> bool:
+    """Detect if identifier looks like an app ID vs app name."""
+    # Common app ID patterns: app-YYYYMMDD-*, application_*, etc.
+    import re
+
+    app_id_patterns = [
+        r"^app-\d{8}-\w+$",  # app-20231201-123456
+        r"^application_\d+_\d+$",  # application_1234567890_001
+        r"^app-\w{8,}$",  # app-abcd1234
+        r"^\w+-\d{4}\d{2}\d{2}-\w+$",  # any-20231201-something
+    ]
+
+    return any(
+        re.match(pattern, identifier, re.IGNORECASE) for pattern in app_id_patterns
+    )
+
+
+def resolve_app_name_to_recent_apps(
+    app_name: str, client, server: Optional[str] = None, limit: int = 2
+) -> Tuple[str, str, list]:
+    """
+    Resolve app name to the most recent matching applications.
+
+    Returns:
+        Tuple of (app_id1, app_id2, app_list) where app_list contains the full app objects
+    """
+    import spark_history_mcp.tools.tools as tools_module
+    from spark_history_mcp.tools.tools import list_applications
+
+    original_get_context = getattr(tools_module.mcp, "get_context", None)
+
+    class MockContext:
+        def __init__(self, client):
+            self.request_context = MockRequestContext(client)
+
+    class MockRequestContext:
+        def __init__(self, client):
+            self.lifespan_context = MockLifespanContext(client)
+
+    class MockLifespanContext:
+        def __init__(self, client):
+            self.default_client = client
+            self.clients = {"default": client}
+
+    tools_module.mcp.get_context = lambda: MockContext(client)
+
+    try:
+        # Search for applications by name
+        apps = list_applications(
+            server=server,
+            app_name=app_name,
+            search_type="contains",
+            limit=limit,
+        )
+
+        if len(apps) < 2:
+            if len(apps) == 0:
+                raise click.ClickException(
+                    f"No applications found matching '{app_name}'. "
+                    f"Try a different name or use exact app IDs."
+                )
+            else:
+                raise click.ClickException(
+                    f"Only found 1 application matching '{app_name}'. "
+                    f"Need at least 2 applications to compare. "
+                    f"Found: {apps[0].id} - {apps[0].name}"
+                )
+
+        if len(apps) > limit:
+            # Show available options
+            app_list = "\n".join([f"  {app.id} - {app.name}" for app in apps[:10]])
+            raise click.ClickException(
+                f"Found {len(apps)} applications matching '{app_name}'. "
+                f"Please be more specific or use exact app IDs.\n"
+                f"Recent matches:\n{app_list}"
+            )
+
+        # Return the two most recent (first two in the list)
+        return apps[0].id, apps[1].id, apps
+
+    finally:
+        if original_get_context:
+            tools_module.mcp.get_context = original_get_context
+
+
+def resolve_app_identifiers(
+    identifier1: str, identifier2: Optional[str], client, server: Optional[str] = None
+) -> Tuple[str, str, Optional[str]]:
+    """
+    Resolve app identifiers to app IDs and return user feedback message.
+
+    Returns:
+        Tuple of (app_id1, app_id2, feedback_message)
+    """
+    if identifier2 is None:
+        # Single identifier - treat as name and find 2 recent matching apps
+        if is_app_id(identifier1):
+            raise click.ClickException(
+                f"When providing a single argument, it should be an application name, "
+                f"not an app ID. Provided: '{identifier1}'\n"
+                f"Usage: compare apps 'App Name' (auto-compare 2 recent) or "
+                f"compare apps app1 app2 (compare specific IDs)"
+            )
+
+        app_id1, app_id2, apps = resolve_app_name_to_recent_apps(
+            identifier1, client, server
+        )
+
+        feedback = (
+            f"Found 2 recent applications matching '{identifier1}':\n"
+            f"  1. {app_id1} - {apps[0].name} ({apps[0].attempts[0].startTime if apps[0].attempts else 'Unknown time'}) ← Latest\n"
+            f"  2. {app_id2} - {apps[1].name} ({apps[1].attempts[0].startTime if apps[1].attempts else 'Unknown time'}) ← Previous"
+        )
+
+        return app_id1, app_id2, feedback
+
+    else:
+        # Two identifiers - resolve each one
+        resolved_id1 = identifier1
+        resolved_id2 = identifier2
+        feedback_parts = []
+
+        # Resolve first identifier if it looks like a name
+        if not is_app_id(identifier1):
+            try:
+                resolved_id1, _, apps1 = resolve_app_name_to_recent_apps(
+                    identifier1, client, server, 1
+                )
+                feedback_parts.append(
+                    f"Resolved '{identifier1}' to: {resolved_id1} - {apps1[0].name}"
+                )
+            except click.ClickException:
+                # If name resolution fails, treat as literal ID
+                pass
+
+        # Resolve second identifier if it looks like a name
+        if not is_app_id(identifier2):
+            try:
+                resolved_id2, _, apps2 = resolve_app_name_to_recent_apps(
+                    identifier2, client, server, 1
+                )
+                feedback_parts.append(
+                    f"Resolved '{identifier2}' to: {resolved_id2} - {apps2[0].name}"
+                )
+            except click.ClickException:
+                # If name resolution fails, treat as literal ID
+                pass
+
+        feedback = "\n".join(feedback_parts) if feedback_parts else None
+        return resolved_id1, resolved_id2, feedback
+
+
 def create_mock_context(client):
     """Create mock context for MCP tool functions."""
 
@@ -114,8 +266,8 @@ if CLI_AVAILABLE:
         pass
 
     @compare.command("apps")
-    @click.argument("app_id1")
-    @click.argument("app_id2")
+    @click.argument("app_identifier1")
+    @click.argument("app_identifier2", required=False)
     @click.option("--server", "-s", help="Server name to use")
     @click.option(
         "--top-n",
@@ -134,21 +286,43 @@ if CLI_AVAILABLE:
     @click.pass_context
     def apps(
         ctx,
-        app_id1: str,
-        app_id2: str,
+        app_identifier1: str,
+        app_identifier2: Optional[str],
         server: Optional[str],
         top_n: int,
         format: str,
     ):
-        """Compare performance between two applications and set comparison context."""
+        """
+        Compare performance between two applications and set comparison context.
+
+        APP_IDENTIFIER1: Application ID or name
+        APP_IDENTIFIER2: (Optional) Second application ID or name. If not provided,
+                        the first argument is treated as a name and the 2 most recent
+                        matching applications are compared.
+
+        Examples:
+            compare apps app-123 app-456                    # Compare by IDs
+            compare apps "ETL Pipeline"                     # Auto-compare last 2 matching
+            compare apps "Daily Job" "Weekly Job"           # Compare by names
+        """
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
-        # Save comparison context
-        save_comparison_context(app_id1, app_id2, server)
-
         try:
             client = get_spark_client(config_path, server)
+
+            # Resolve app identifiers to actual app IDs
+            app_id1, app_id2, feedback = resolve_app_identifiers(
+                app_identifier1, app_identifier2, client, server
+            )
+
+            # Show user feedback about resolution
+            if feedback and not ctx.obj.get("quiet", False):
+                click.echo(feedback)
+                click.echo()
+
+            # Save comparison context
+            save_comparison_context(app_id1, app_id2, server)
 
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools.tools import compare_app_performance
@@ -176,9 +350,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(
-                f"Error comparing applications {app_id1} and {app_id2}: {e}"
-            )
+            raise click.ClickException(f"Error comparing applications: {e}")
 
     @compare.command("stages")
     @click.argument("stage_id1", type=int)
