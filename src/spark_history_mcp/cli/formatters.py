@@ -316,9 +316,6 @@ class OutputFormatter:
         self, data: Dict[str, Any], title: Optional[str] = None
     ) -> None:
         """Format comparison result data in a structured, readable way."""
-        if title:
-            console.print(f"\n[bold blue]{title}[/bold blue]")
-
         # 1. Applications Header
         if "applications" in data:
             self._format_comparison_header(data["applications"])
