@@ -206,8 +206,8 @@ def resolve_app_identifiers(
 
         feedback = (
             f"Found 2 recent applications matching '{identifier1}':\n"
-            f"  1. {app_id1} - {apps[0].name} ({apps[0].attempts[0].startTime if apps[0].attempts else 'Unknown time'}) ← Latest\n"
-            f"  2. {app_id2} - {apps[1].name} ({apps[1].attempts[0].startTime if apps[1].attempts else 'Unknown time'}) ← Previous"
+            f"  1. {app_id1} - {apps[0].name} ({apps[0].attempts[0].start_time if apps[0].attempts else 'Unknown time'}) ← Latest\n"
+            f"  2. {app_id2} - {apps[1].name} ({apps[1].attempts[0].start_time if apps[1].attempts else 'Unknown time'}) ← Previous"
         )
 
         return app_id1, app_id2, feedback
