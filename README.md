@@ -109,8 +109,8 @@ uv run spark-mcp --cli apps list --limit 10 --format table
 # Get comprehensive insights
 uv run spark-mcp --cli analyze insights app-20231201-123456
 
-# Compare two applications
-uv run spark-mcp --cli analyze compare app1 app2
+# Compare two applications (new stateful approach)
+uv run spark-mcp --cli compare apps app1 app2
 
 # Interactive configuration
 uv run spark-mcp --cli config init --interactive

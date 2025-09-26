@@ -41,7 +41,8 @@ uv run spark-mcp --cli <command> <subcommand> [options]
 | Command | Description |
 |---------|-------------|
 | `apps` | Application management (list, show, details) |
-| `analyze` | Performance analysis and insights |
+| `analyze` | Single-app performance analysis and insights |
+| `compare` | Multi-app comparisons with stateful context |
 | `server` | MCP server management |
 | `config` | Configuration management |
 
@@ -159,16 +160,109 @@ uv run spark-mcp --cli analyze slowest app-20240315-123456 --type sql
 uv run spark-mcp --cli analyze slowest app-20240315-123456 --type stages --top-n 10
 ```
 
-### Application Comparison
+### Application Comparison (MOVED TO COMPARE COMMAND)
 ```bash
-# Compare two applications
+# ⚠️ DEPRECATED - Use 'compare' command instead
 uv run spark-mcp --cli analyze compare app1 app2
 
-# Focus on top differences
-uv run spark-mcp --cli analyze compare app1 app2 --top-n 5
+# ✅ NEW: Use compare command with stateful context
+uv run spark-mcp --cli compare apps app1 app2
+```
 
-# Use specific server
-uv run spark-mcp --cli analyze compare app1 app2 --server production
+## 🔄 Comparisons (`compare`)
+
+The `compare` command group provides **stateful multi-app comparisons** with session context management. Set your comparison context once, then drill down into granular analysis without repeating app IDs.
+
+### 🎯 Stateful Workflow
+
+```bash
+# Step 1: Set comparison context (compares apps and saves context)
+uv run spark-mcp --cli compare apps prod-etl-today prod-etl-yesterday
+
+# Step 2: Use saved context for detailed analysis
+uv run spark-mcp --cli compare stages 1 1        # Compare stage 1 in both apps
+uv run spark-mcp --cli compare timeline          # Timeline comparison
+uv run spark-mcp --cli compare resources         # Resource comparison
+uv run spark-mcp --cli compare executors         # Executor performance
+
+# Step 3: Override context when needed
+uv run spark-mcp --cli compare jobs --apps different-app1 different-app2
+```
+
+### 🏗️ Application-Level Comparisons
+
+```bash
+# Basic app performance comparison (sets context)
+uv run spark-mcp --cli compare apps app1 app2
+
+# Focus on top differences
+uv run spark-mcp --cli compare apps app1 app2 --top-n 5
+
+# Resource allocation comparison
+uv run spark-mcp --cli compare resources
+
+# Executor performance comparison
+uv run spark-mcp --cli compare executors
+
+# Job-level performance comparison
+uv run spark-mcp --cli compare jobs
+
+# Aggregated stage metrics comparison
+uv run spark-mcp --cli compare stages-aggregated
+```
+
+### ⚡ Stage-Level Comparisons
+
+```bash
+# Compare specific stages (uses saved app context)
+uv run spark-mcp --cli compare stages stage1 stage2
+
+# Override app context for specific comparison
+uv run spark-mcp --cli compare stages 1 2 --apps app3 app4
+
+# Adjust significance threshold
+uv run spark-mcp --cli compare stages 1 1 --significance-threshold 0.1
+```
+
+### ⏰ Timeline Comparisons
+
+```bash
+# Application-level executor timeline comparison
+uv run spark-mcp --cli compare timeline
+
+# Stage-level executor timeline comparison
+uv run spark-mcp --cli compare stage-timeline stage1 stage2
+
+# Custom time intervals
+uv run spark-mcp --cli compare timeline --interval-minutes 5
+uv run spark-mcp --cli compare stage-timeline 1 1 --interval-minutes 2
+```
+
+### 📊 Context Management
+
+```bash
+# Show current comparison context
+uv run spark-mcp --cli compare status
+
+# Clear comparison context
+uv run spark-mcp --cli compare clear
+
+# Check status in JSON format
+uv run spark-mcp --cli compare status --format json
+```
+
+### 🔧 Advanced Usage
+
+```bash
+# Override context for specific command
+uv run spark-mcp --cli compare timeline --apps different-app1 different-app2
+
+# Filter by significance in executor comparison
+uv run spark-mcp --cli compare executors --significance-threshold 0.3 --show-all
+
+# Combine with different servers
+uv run spark-mcp --cli compare apps prod-app staging-app --server production
+uv run spark-mcp --cli compare stages 1 1 --server staging
 ```
 
 ## ⚙️ Configuration (`config`)

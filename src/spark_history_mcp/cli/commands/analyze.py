@@ -345,7 +345,7 @@ if CLI_AVAILABLE:
                 f"Error analyzing slowest {analysis_type} for {app_id}: {e}"
             )
 
-    @analyze.command("compare")
+    @analyze.command("compare", deprecated=True)
     @click.argument("app_id1")
     @click.argument("app_id2")
     @click.option("--server", "-s", help="Server name to use")
@@ -367,7 +367,23 @@ if CLI_AVAILABLE:
     def compare(
         ctx, app_id1: str, app_id2: str, server: Optional[str], top_n: int, format: str
     ):
-        """Compare performance between two applications."""
+        """
+        Compare performance between two applications.
+
+        ⚠️  DEPRECATED: Use 'compare apps' instead.
+        This command will be removed in a future version.
+        """
+        # Show deprecation warning
+        click.echo(
+            "⚠️  WARNING: 'analyze compare' is deprecated. Use 'compare apps' instead.",
+            err=True,
+        )
+        click.echo(
+            f"   New command: spark-mcp --cli compare apps {app_id1} {app_id2}",
+            err=True,
+        )
+        click.echo()
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
