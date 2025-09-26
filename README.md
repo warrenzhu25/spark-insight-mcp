@@ -54,6 +54,10 @@ graph TB
 
 ## ⚡ Quick Start
 
+The server supports **dual-mode operation**:
+- 🤖 **MCP Server Mode** (default) - For AI agents and LLM integration
+- 🖥️ **CLI Mode** (new!) - Direct command-line interface for human users
+
 ### 📋 Prerequisites
 - 🔥 Existing Spark History Server (running and accessible)
 - 🐍 Python 3.12+
@@ -80,6 +84,49 @@ task start-inspector-bg       # Start MCP Inspector
 
 # When done, run `task stop-all`
 ```
+
+## 🖥️ CLI Mode (New!)
+
+**Direct command-line interface** for human users - no MCP client required!
+
+### 🚀 Quick CLI Setup
+```bash
+# Clone and install
+git clone https://github.com/DeepDiagnostix-AI/mcp-apache-spark-history-server.git
+cd mcp-apache-spark-history-server
+uv sync
+
+# Try CLI commands immediately
+uv run spark-mcp --cli apps list --limit 5
+uv run spark-mcp --cli --help
+```
+
+### 🎯 CLI Examples
+```bash
+# List applications with beautiful formatting
+uv run spark-mcp --cli apps list --limit 10 --format table
+
+# Get comprehensive insights
+uv run spark-mcp --cli analyze insights app-20231201-123456
+
+# Compare two applications
+uv run spark-mcp --cli analyze compare app1 app2
+
+# Interactive configuration
+uv run spark-mcp --cli config init --interactive
+
+# Test server connectivity
+uv run spark-mcp --cli server test
+```
+
+### 📊 Rich Output Formats
+- **Human** (default): Beautiful tables and panels with colors
+- **JSON**: Machine-readable for scripting
+- **Table**: Simple tabular format
+
+📚 **[See CLI-README.md](CLI-README.md) for complete CLI documentation**
+
+---
 
 If you just want to run the MCP server without cloning the repository:
 
@@ -377,7 +424,7 @@ These improvements make timeline analysis more focused and actionable while main
 The MCP server now includes intelligent analysis capabilities inspired by SparkInsight! See the **[SparkInsight Integration Guide](examples/sparkinsight/README.md)** for:
 
 - 🚀 **Auto-scaling optimization** recommendations
-- 📊 **Data skew detection** and mitigation strategies  
+- 📊 **Data skew detection** and mitigation strategies
 - 🚨 **Failure analysis** with root cause identification
 - 📈 **Executor utilization** optimization insights
 - 🧠 **Comprehensive analysis** combining all insights
