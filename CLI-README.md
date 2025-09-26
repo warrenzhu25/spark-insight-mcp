@@ -173,11 +173,36 @@ uv run spark-mcp --cli compare apps app1 app2
 
 The `compare` command group provides **stateful multi-app comparisons** with session context management. Set your comparison context once, then drill down into granular analysis without repeating app IDs.
 
+### 📝 Quoting Application Names
+
+**When quotes are REQUIRED:**
+- Names with spaces: `"ETL Pipeline"`, `"Daily Job"`
+- Special characters: `"My-App@Production"`, `"Job(v2)"`
+- Names starting with hyphens: `"-debug-job"`
+
+**When quotes are OPTIONAL:**
+- Single words: `ETLPipeline` or `"ETLPipeline"` (both work)
+- Underscores/hyphens: `ETL_Pipeline` or `"ETL_Pipeline"`
+
+**Common Mistakes:**
+```bash
+# ❌ Wrong - shell splits into multiple arguments
+uv run spark-mcp --cli compare apps ETL Pipeline
+
+# ✅ Correct - quotes keep it as one argument
+uv run spark-mcp --cli compare apps "ETL Pipeline"
+
+# ✅ Also correct - single word, no spaces
+uv run spark-mcp --cli compare apps ETLPipeline
+```
+
 ### 🎯 Stateful Workflow
 
 ```bash
 # Step 1: Set comparison context (compares apps and saves context)
-uv run spark-mcp --cli compare apps prod-etl-today prod-etl-yesterday
+uv run spark-mcp --cli compare apps "ETL Pipeline"                    # Auto-compare last 2
+# Or with specific app IDs:
+uv run spark-mcp --cli compare apps app-20231201-123 app-20231202-456
 
 # Step 2: Use saved context for detailed analysis
 uv run spark-mcp --cli compare stages 1 1        # Compare stage 1 in both apps
@@ -186,28 +211,29 @@ uv run spark-mcp --cli compare resources         # Resource comparison
 uv run spark-mcp --cli compare executors         # Executor performance
 
 # Step 3: Override context when needed
-uv run spark-mcp --cli compare jobs --apps different-app1 different-app2
+uv run spark-mcp --cli compare jobs --apps "Daily ETL" "Weekly ETL"
 ```
 
 ### 🏗️ Application-Level Comparisons
 
 ```bash
 # Basic app performance comparison (sets context)
-uv run spark-mcp --cli compare apps app1 app2
+uv run spark-mcp --cli compare apps "ETL Pipeline"            # Auto-compare last 2
+uv run spark-mcp --cli compare apps app1 app2                 # Compare specific IDs
 
 # Focus on top differences
-uv run spark-mcp --cli compare apps app1 app2 --top-n 5
+uv run spark-mcp --cli compare apps "Data Processing" --top-n 5
 
-# Resource allocation comparison
+# Resource allocation comparison (uses saved context)
 uv run spark-mcp --cli compare resources
 
-# Executor performance comparison
+# Executor performance comparison (uses saved context)
 uv run spark-mcp --cli compare executors
 
-# Job-level performance comparison
+# Job-level performance comparison (uses saved context)
 uv run spark-mcp --cli compare jobs
 
-# Aggregated stage metrics comparison
+# Aggregated stage metrics comparison (uses saved context)
 uv run spark-mcp --cli compare stages-aggregated
 ```
 

@@ -145,14 +145,21 @@ def resolve_app_name_to_recent_apps(
         if len(apps) < 2:
             if len(apps) == 0:
                 raise click.ClickException(
-                    f"No applications found matching '{app_name}'. "
-                    f"Try a different name or use exact app IDs."
+                    f"No applications found matching '{app_name}'.\n\n"
+                    f"Tips:\n"
+                    f"  • Try a partial name: 'ETL' instead of 'ETL Pipeline Job'\n"
+                    f"  • Check spelling and capitalization\n"
+                    f"  • Use exact app IDs if known: compare apps app1 app2\n"
+                    f"  • List available apps: apps list --name '{app_name}'"
                 )
             else:
                 raise click.ClickException(
                     f"Only found 1 application matching '{app_name}'. "
-                    f"Need at least 2 applications to compare. "
-                    f"Found: {apps[0].id} - {apps[0].name}"
+                    f"Need at least 2 applications to compare.\n\n"
+                    f"Found: {apps[0].id} - {apps[0].name}\n\n"
+                    f"Tips:\n"
+                    f"  • Try a broader search term\n"
+                    f"  • Use specific app IDs: compare apps {apps[0].id} <other-app-id>"
                 )
 
         if len(apps) > limit:
@@ -186,9 +193,11 @@ def resolve_app_identifiers(
         if is_app_id(identifier1):
             raise click.ClickException(
                 f"When providing a single argument, it should be an application name, "
-                f"not an app ID. Provided: '{identifier1}'\n"
-                f"Usage: compare apps 'App Name' (auto-compare 2 recent) or "
-                f"compare apps app1 app2 (compare specific IDs)"
+                f"not an app ID. Provided: '{identifier1}'\n\n"
+                f"Usage:\n"
+                f"  compare apps 'App Name'    # Auto-compare 2 recent matching apps\n"
+                f"  compare apps app1 app2     # Compare specific app IDs\n\n"
+                f'Note: Use quotes around names with spaces: "ETL Pipeline"'
             )
 
         app_id1, app_id2, apps = resolve_app_name_to_recent_apps(
@@ -300,10 +309,17 @@ if CLI_AVAILABLE:
                         the first argument is treated as a name and the 2 most recent
                         matching applications are compared.
 
+        Quoting Rules:
+            • Single words: quotes optional (ETLPipeline or "ETLPipeline")
+            • Names with spaces: quotes required ("ETL Pipeline")
+            • Special characters: quotes recommended ("My-App@Production")
+
         Examples:
             compare apps app-123 app-456                    # Compare by IDs
             compare apps "ETL Pipeline"                     # Auto-compare last 2 matching
-            compare apps "Daily Job" "Weekly Job"           # Compare by names
+            compare apps ETLPipeline                        # Single word, no quotes needed
+            compare apps "Daily Job" "Weekly Job"           # Compare by names with spaces
+            compare apps MyJob "Production ETL"             # Mixed: single word + quoted
         """
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
