@@ -12,9 +12,7 @@ from spark_history_mcp.core.app import mcp
 
 @mcp.prompt()
 def analyze_slow_application(
-    app_id: str,
-    baseline_duration_minutes: int = 60,
-    server: Optional[str] = None
+    app_id: str, baseline_duration_minutes: int = 60, server: Optional[str] = None
 ) -> str:
     """Generate a structured analysis prompt for slow-running Spark applications.
 
@@ -81,9 +79,7 @@ Focus on providing **concrete, measurable recommendations** that can directly im
 
 @mcp.prompt()
 def investigate_stage_bottlenecks(
-    app_id: str,
-    stage_id: Optional[int] = None,
-    server: Optional[str] = None
+    app_id: str, stage_id: Optional[int] = None, server: Optional[str] = None
 ) -> str:
     """Generate a detailed prompt for investigating stage-level performance bottlenecks.
 
@@ -155,9 +151,7 @@ get_executor_summary("{app_id}"{server_param})
 
 @mcp.prompt()
 def diagnose_resource_issues(
-    app_id: str,
-    focus_area: str = "all",
-    server: Optional[str] = None
+    app_id: str, focus_area: str = "all", server: Optional[str] = None
 ) -> str:
     """Generate a prompt for diagnosing resource utilization issues in Spark applications.
 
@@ -173,7 +167,7 @@ def diagnose_resource_issues(
         "cpu": "Focus on executor utilization, task parallelism, and compute efficiency",
         "disk": "Examine disk usage, spill operations, and I/O patterns",
         "network": "Analyze shuffle operations, data transfer patterns, and network utilization",
-        "all": "Provide comprehensive analysis across all resource dimensions"
+        "all": "Provide comprehensive analysis across all resource dimensions",
     }.get(focus_area, "Provide comprehensive analysis across all resource dimensions")
 
     return f"""Diagnose resource utilization issues for Spark application {app_id}.
@@ -257,7 +251,7 @@ def compare_job_performance(
     app_id1: str,
     app_id2: str,
     comparison_focus: str = "comprehensive",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate a structured prompt for comparing performance between two Spark applications.
 
@@ -273,7 +267,7 @@ def compare_job_performance(
         "performance": "Focus primarily on execution times, throughput, and performance metrics",
         "resources": "Emphasize resource utilization, allocation, and efficiency comparisons",
         "configuration": "Concentrate on configuration differences and their performance impact",
-        "comprehensive": "Provide detailed comparison across all dimensions"
+        "comprehensive": "Provide detailed comparison across all dimensions",
     }.get(comparison_focus, "Provide detailed comparison across all dimensions")
 
     return f"""Compare performance between Spark applications {app_id1} (baseline) and {app_id2} (target).

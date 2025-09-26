@@ -15,7 +15,7 @@ def generate_performance_report(
     app_id: str,
     report_type: str = "comprehensive",
     audience: str = "technical",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate a comprehensive performance report for a Spark application.
 
@@ -30,14 +30,16 @@ def generate_performance_report(
     report_guidance = {
         "executive": "Focus on high-level metrics, business impact, and strategic recommendations",
         "technical": "Provide detailed technical analysis with specific metrics and configurations",
-        "comprehensive": "Include both executive summary and detailed technical analysis"
+        "comprehensive": "Include both executive summary and detailed technical analysis",
     }.get(report_type, "Include both executive summary and detailed technical analysis")
 
     audience_guidance = {
         "executive": "Use business-friendly language, focus on cost and efficiency impacts",
         "technical": "Include technical details, configuration specifics, and implementation guidance",
-        "mixed": "Balance technical depth with business context and clear explanations"
-    }.get(audience, "Balance technical depth with business context and clear explanations")
+        "mixed": "Balance technical depth with business context and clear explanations",
+    }.get(
+        audience, "Balance technical depth with business context and clear explanations"
+    )
 
     return f"""Generate a comprehensive performance report for Spark application {app_id}.
 
@@ -165,7 +167,7 @@ def create_executive_summary(
     app_id: str,
     focus_metric: str = "cost_efficiency",
     time_context: str = "current",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate a high-level executive summary for Spark application performance.
 
@@ -180,14 +182,17 @@ def create_executive_summary(
     metric_focus = {
         "performance": "Emphasize execution time, throughput, and performance optimization opportunities",
         "cost_efficiency": "Focus on cost per unit processed, resource utilization, and cost optimization",
-        "reliability": "Highlight failure rates, stability, and reliability improvement opportunities"
+        "reliability": "Highlight failure rates, stability, and reliability improvement opportunities",
     }.get(focus_metric, "Balance performance, cost, and reliability metrics")
 
     time_guidance = {
         "current": "Focus on current state analysis and immediate actionable insights",
         "trend": "Analyze performance trends over time and trajectory assessment",
-        "comparative": "Compare against benchmarks, SLAs, or previous versions"
-    }.get(time_context, "Focus on current state analysis and immediate actionable insights")
+        "comparative": "Compare against benchmarks, SLAs, or previous versions",
+    }.get(
+        time_context,
+        "Focus on current state analysis and immediate actionable insights",
+    )
 
     return f"""Generate an executive summary for Spark application {app_id} performance.
 
@@ -316,7 +321,7 @@ def summarize_trends(
     app_ids: list[str],
     trend_period: str = "weekly",
     trend_focus: str = "performance",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate trend analysis and pattern recognition across multiple Spark applications.
 
@@ -327,14 +332,17 @@ def summarize_trends(
         server: Optional server name to use
     """
     server_param = f', server="{server}"' if server else ""
-    app_list = ', '.join([f'"{app_id}"' for app_id in app_ids])
+    app_list = ", ".join([f'"{app_id}"' for app_id in app_ids])
 
     trend_guidance = {
         "performance": "Focus on execution time trends, throughput patterns, and performance degradation/improvement",
         "resources": "Analyze resource utilization trends, cost patterns, and allocation efficiency evolution",
         "reliability": "Track failure rate trends, stability patterns, and reliability improvement/degradation",
-        "all": "Comprehensive trend analysis across performance, resources, and reliability dimensions"
-    }.get(trend_focus, "Comprehensive trend analysis across performance, resources, and reliability dimensions")
+        "all": "Comprehensive trend analysis across performance, resources, and reliability dimensions",
+    }.get(
+        trend_focus,
+        "Comprehensive trend analysis across performance, resources, and reliability dimensions",
+    )
 
     return f"""Analyze trends and patterns across multiple Spark applications over {trend_period} periods.
 
@@ -370,10 +378,10 @@ def summarize_trends(
 {chr(10).join([f'get_application_insights("{app_id}"{server_param})' for app_id in app_ids])}
 
 # Performance Comparison Between Applications
-{chr(10).join([f'compare_job_performance("{app_ids[i]}", "{app_ids[j]}"{server_param})' for i in range(len(app_ids)) for j in range(i+1, min(i+3, len(app_ids)))])}
+{chr(10).join([f'compare_job_performance("{app_ids[i]}", "{app_ids[j]}"{server_param})' for i in range(len(app_ids)) for j in range(i + 1, min(i + 3, len(app_ids)))])}
 
 # Configuration Comparison for Trend Correlation
-{chr(10).join([f'compare_job_environments("{app_ids[i]}", "{app_ids[j]}"{server_param})' for i in range(len(app_ids)) for j in range(i+1, min(i+3, len(app_ids)))])}
+{chr(10).join([f'compare_job_environments("{app_ids[i]}", "{app_ids[j]}"{server_param})' for i in range(len(app_ids)) for j in range(i + 1, min(i + 3, len(app_ids)))])}
 
 # Detailed Analysis for Outliers
 {chr(10).join([f'get_job_bottlenecks("{app_id}"{server_param})' for app_id in app_ids[:3]])}
@@ -473,7 +481,7 @@ def benchmark_comparison(
     app_id: str,
     benchmark_type: str = "internal",
     comparison_dimension: str = "comprehensive",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate benchmark comparison analysis for Spark applications.
 
@@ -489,15 +497,21 @@ def benchmark_comparison(
         "internal": "Compare against other applications in your environment and historical performance",
         "industry": "Compare against industry standards and best practices for similar workloads",
         "historical": "Compare against historical performance of the same application over time",
-        "target": "Compare against established performance targets and SLA requirements"
-    }.get(benchmark_type, "Compare against multiple benchmark types for comprehensive assessment")
+        "target": "Compare against established performance targets and SLA requirements",
+    }.get(
+        benchmark_type,
+        "Compare against multiple benchmark types for comprehensive assessment",
+    )
 
     dimension_focus = {
         "performance": "Focus on execution time, throughput, and processing efficiency benchmarks",
         "cost": "Emphasize cost per unit processed and resource cost efficiency comparisons",
         "efficiency": "Concentrate on resource utilization efficiency and waste reduction metrics",
-        "comprehensive": "Provide benchmarking across all performance, cost, and efficiency dimensions"
-    }.get(comparison_dimension, "Provide benchmarking across all performance, cost, and efficiency dimensions")
+        "comprehensive": "Provide benchmarking across all performance, cost, and efficiency dimensions",
+    }.get(
+        comparison_dimension,
+        "Provide benchmarking across all performance, cost, and efficiency dimensions",
+    )
 
     return f"""Generate comprehensive benchmark comparison analysis for Spark application {app_id}.
 

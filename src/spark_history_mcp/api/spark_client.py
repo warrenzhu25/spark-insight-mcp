@@ -327,7 +327,10 @@ class SparkRestClient:
         try:
             return self._parse_model_list(data, StageData)
         except Exception as e:
-            if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e) and with_summaries:
+            if (
+                "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e)
+                and with_summaries
+            ):
                 # Fallback: retry without summaries due to known validation issue
                 params["withSummaries"] = "false"
                 data = self._get(f"applications/{app_id}/stages", params)
@@ -695,7 +698,9 @@ class SparkRestClient:
         params = {"id": execution_id}
 
         # Make HTML request (not JSON)
-        headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
 
         # Add token to headers if provided
         if self.config.auth and self.config.auth.token:
@@ -750,36 +755,36 @@ class SparkRestClient:
 
             # Extract dagVizData
             dag_viz_match = re.search(
-                r'var\s+dagVizData\s*=\s*({.*?});',
+                r"var\s+dagVizData\s*=\s*({.*?});",
                 html_content,
-                re.DOTALL | re.MULTILINE
+                re.DOTALL | re.MULTILINE,
             )
             if dag_viz_match:
-                dag_data['dagVizData'] = json.loads(dag_viz_match.group(1))
+                dag_data["dagVizData"] = json.loads(dag_viz_match.group(1))
 
             # Extract executionPlanData
             plan_match = re.search(
-                r'var\s+executionPlanData\s*=\s*({.*?});',
+                r"var\s+executionPlanData\s*=\s*({.*?});",
                 html_content,
-                re.DOTALL | re.MULTILINE
+                re.DOTALL | re.MULTILINE,
             )
             if plan_match:
-                dag_data['executionPlanData'] = json.loads(plan_match.group(1))
+                dag_data["executionPlanData"] = json.loads(plan_match.group(1))
 
             # Extract stage information from timeline data
             timeline_match = re.search(
-                r'var\s+timelineData\s*=\s*(\[.*?\]);',
+                r"var\s+timelineData\s*=\s*(\[.*?\]);",
                 html_content,
-                re.DOTALL | re.MULTILINE
+                re.DOTALL | re.MULTILINE,
             )
             if timeline_match:
-                dag_data['timelineData'] = json.loads(timeline_match.group(1))
+                dag_data["timelineData"] = json.loads(timeline_match.group(1))
 
             # Extract any stage-related data
             stage_matches = re.findall(
-                r'var\s+(\w*[Ss]tage\w*)\s*=\s*({.*?});',
+                r"var\s+(\w*[Ss]tage\w*)\s*=\s*({.*?});",
                 html_content,
-                re.DOTALL | re.MULTILINE
+                re.DOTALL | re.MULTILINE,
             )
             for var_name, var_data in stage_matches:
                 try:
@@ -791,18 +796,20 @@ class SparkRestClient:
             # Extract node-to-stage mappings from any embedded data
             # Look for patterns like: stage 5.0: task 61
             stage_references = re.findall(
-                r'stage\s+(\d+)\.(\d+):\s*task\s+(\d+)',
-                html_content,
-                re.IGNORECASE
+                r"stage\s+(\d+)\.(\d+):\s*task\s+(\d+)", html_content, re.IGNORECASE
             )
             if stage_references:
-                dag_data['stage_task_references'] = [
-                    {'stage_id': int(stage), 'attempt_id': int(attempt), 'task_id': int(task)}
+                dag_data["stage_task_references"] = [
+                    {
+                        "stage_id": int(stage),
+                        "attempt_id": int(attempt),
+                        "task_id": int(task),
+                    }
                     for stage, attempt, task in stage_references
                 ]
 
         except (json.JSONDecodeError, AttributeError) as e:
             # Return partial data with error information
-            dag_data['parsing_error'] = str(e)
+            dag_data["parsing_error"] = str(e)
 
         return dag_data

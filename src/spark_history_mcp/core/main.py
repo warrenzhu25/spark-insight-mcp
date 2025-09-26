@@ -14,8 +14,58 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def detect_cli_command():
+    """Detect if CLI command is being used."""
+    cli_commands = [
+        "apps",
+        "analyze",
+        "server",
+        "config",
+        "list",
+        "show",
+        "jobs",
+        "stages",
+        "insights",
+        "bottlenecks",
+        "auto-scaling",
+        "shuffle-skew",
+        "slowest",
+        "compare",
+        "start",
+        "test",
+        "status",
+        "init",
+        "validate",
+        "edit",
+    ]
+    return any(cmd in sys.argv for cmd in cli_commands)
+
+
 def main():
-    """Main entry point."""
+    """Main entry point with CLI/MCP detection."""
+
+    # CLI mode detection
+    if "--cli" in sys.argv or detect_cli_command():
+        try:
+            from spark_history_mcp.cli.main import cli
+
+            # Remove --cli flag if present
+            if "--cli" in sys.argv:
+                sys.argv.remove("--cli")
+
+            # Run CLI
+            cli()
+            return
+
+        except ImportError as e:
+            print("CLI dependencies not installed. Install with:")
+            print("  uv add click rich tabulate")
+            print("  # or")
+            print("  pip install click rich tabulate")
+            print(f"\nError: {e}")
+            sys.exit(1)
+
+    # Default: MCP server mode (PRESERVED)
     try:
         logger.info("Starting Spark History Server MCP...")
         config = Config.from_file("config.yaml")

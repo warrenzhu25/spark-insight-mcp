@@ -1041,10 +1041,7 @@ class TestTools(unittest.TestCase):
 
         # Call with existing filters
         result = list_applications(
-            status=["COMPLETED"],
-            min_date="2023-01-01",
-            limit=10,
-            server="production"
+            status=["COMPLETED"], min_date="2023-01-01", limit=10, server="production"
         )
 
         # Verify results and that all parameters are passed through
@@ -1200,9 +1197,7 @@ class TestTools(unittest.TestCase):
 
         # Call with both status and name filters
         result = list_applications(
-            status=["COMPLETED"],
-            app_name="ETL",
-            search_type="contains"
+            status=["COMPLETED"], app_name="ETL", search_type="contains"
         )
 
         # Verify that server-side filtering is applied first
@@ -1316,15 +1311,24 @@ class TestSparkInsightTools(unittest.TestCase):
         if spark_props is None:
             spark_props = {
                 "spark.dynamicAllocation.initialExecutors": "2",
-                "spark.dynamicAllocation.maxExecutors": "10"
+                "spark.dynamicAllocation.maxExecutors": "10",
             }
         mock_env.spark_properties = [(k, v) for k, v in spark_props.items()]
         return mock_env
 
-    def _create_mock_stage(self, stage_id, name="Test Stage", status="COMPLETE",
-                          executor_run_time=None, num_tasks=10, num_failed_tasks=0,
-                          shuffle_write_bytes=0, submission_time=None, completion_time=None,
-                          executor_metrics_distributions=None):
+    def _create_mock_stage(
+        self,
+        stage_id,
+        name="Test Stage",
+        status="COMPLETE",
+        executor_run_time=None,
+        num_tasks=10,
+        num_failed_tasks=0,
+        shuffle_write_bytes=0,
+        submission_time=None,
+        completion_time=None,
+        executor_metrics_distributions=None,
+    ):
         """Helper to create mock stage"""
         mock_stage = MagicMock(spec=StageData)
         mock_stage.stage_id = stage_id
@@ -1336,13 +1340,24 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_stage.num_failed_tasks = num_failed_tasks
         mock_stage.shuffle_write_bytes = shuffle_write_bytes
         mock_stage.submission_time = submission_time or self.mock_now
-        mock_stage.completion_time = completion_time or (self.mock_now + timedelta(minutes=5))
+        mock_stage.completion_time = completion_time or (
+            self.mock_now + timedelta(minutes=5)
+        )
         mock_stage.executor_metrics_distributions = executor_metrics_distributions
         return mock_stage
 
-    def _create_mock_executor(self, exec_id="1", host="worker1", failed_tasks=0,
-                             completed_tasks=10, is_active=True, total_cores=4,
-                             max_memory=1024*1024*1024, add_time=None, remove_time=None):
+    def _create_mock_executor(
+        self,
+        exec_id="1",
+        host="worker1",
+        failed_tasks=0,
+        completed_tasks=10,
+        is_active=True,
+        total_cores=4,
+        max_memory=1024 * 1024 * 1024,
+        add_time=None,
+        remove_time=None,
+    ):
         """Helper to create mock executor"""
         mock_executor = MagicMock(spec=ExecutorSummary)
         mock_executor.id = exec_id
@@ -1368,8 +1383,12 @@ class TestSparkInsightTools(unittest.TestCase):
 
         # Create stages with different patterns
         stages = [
-            self._create_mock_stage(1, "Stage 1", executor_run_time=120000, num_tasks=20),
-            self._create_mock_stage(2, "Stage 2", executor_run_time=180000, num_tasks=30),
+            self._create_mock_stage(
+                1, "Stage 1", executor_run_time=120000, num_tasks=20
+            ),
+            self._create_mock_stage(
+                2, "Stage 2", executor_run_time=180000, num_tasks=30
+            ),
         ]
 
         self.mock_client.get_application.return_value = mock_app
@@ -1413,18 +1432,19 @@ class TestSparkInsightTools(unittest.TestCase):
 
         # Create stage with significant shuffle write
         mock_stage = self._create_mock_stage(
-            1, "Shuffle Stage",
-            shuffle_write_bytes=15 * 1024 * 1024 * 1024  # 15 GB
+            1,
+            "Shuffle Stage",
+            shuffle_write_bytes=15 * 1024 * 1024 * 1024,  # 15 GB
         )
 
         # Create mock task summary with skew
         mock_task_summary = MagicMock(spec=TaskMetricDistributions)
         mock_task_summary.shuffle_write_bytes = [
-            100 * 1024 * 1024,      # min: 100 MB
-            500 * 1024 * 1024,      # 25th: 500 MB
-            1024 * 1024 * 1024,     # median: 1 GB
-            2048 * 1024 * 1024,     # 75th: 2 GB
-            5120 * 1024 * 1024      # max: 5 GB (5x median = high skew)
+            100 * 1024 * 1024,  # min: 100 MB
+            500 * 1024 * 1024,  # 25th: 500 MB
+            1024 * 1024 * 1024,  # median: 1 GB
+            2048 * 1024 * 1024,  # 75th: 2 GB
+            5120 * 1024 * 1024,  # max: 5 GB (5x median = high skew)
         ]
 
         self.mock_client.list_stages.return_value = [mock_stage]
@@ -1452,8 +1472,9 @@ class TestSparkInsightTools(unittest.TestCase):
 
         # Create stage with small shuffle write (below threshold)
         mock_stage = self._create_mock_stage(
-            1, "Small Shuffle Stage",
-            shuffle_write_bytes=5 * 1024 * 1024 * 1024  # 5 GB (below 10 GB threshold)
+            1,
+            "Small Shuffle Stage",
+            shuffle_write_bytes=5 * 1024 * 1024 * 1024,  # 5 GB (below 10 GB threshold)
         )
 
         self.mock_client.list_stages.return_value = [mock_stage]
@@ -1471,15 +1492,26 @@ class TestSparkInsightTools(unittest.TestCase):
         mock_get_client.return_value = self.mock_client
 
         # Create stages with failures
-        failed_stage = self._create_mock_stage(1, "Failed Stage", num_failed_tasks=5, num_tasks=20)
-        good_stage = self._create_mock_stage(2, "Good Stage", num_failed_tasks=0, num_tasks=10)
+        failed_stage = self._create_mock_stage(
+            1, "Failed Stage", num_failed_tasks=5, num_tasks=20
+        )
+        good_stage = self._create_mock_stage(
+            2, "Good Stage", num_failed_tasks=0, num_tasks=10
+        )
 
         # Create executors with failures
-        failed_executor = self._create_mock_executor("1", "worker1", failed_tasks=3, completed_tasks=7)
-        good_executor = self._create_mock_executor("2", "worker2", failed_tasks=0, completed_tasks=10)
+        failed_executor = self._create_mock_executor(
+            "1", "worker1", failed_tasks=3, completed_tasks=7
+        )
+        good_executor = self._create_mock_executor(
+            "2", "worker2", failed_tasks=0, completed_tasks=10
+        )
 
         self.mock_client.list_stages.return_value = [failed_stage, good_stage]
-        self.mock_client.list_all_executors.return_value = [failed_executor, good_executor]
+        self.mock_client.list_all_executors.return_value = [
+            failed_executor,
+            good_executor,
+        ]
 
         # Call the function
         result = analyze_failed_tasks("app-123")
@@ -1529,14 +1561,16 @@ class TestSparkInsightTools(unittest.TestCase):
 
         # Create executors with different lifecycles
         executor1 = self._create_mock_executor(
-            "1", "worker1",
+            "1",
+            "worker1",
             add_time=self.mock_now,
-            remove_time=self.mock_now + timedelta(minutes=20)
+            remove_time=self.mock_now + timedelta(minutes=20),
         )
         executor2 = self._create_mock_executor(
-            "2", "worker2",
+            "2",
+            "worker2",
             add_time=self.mock_now + timedelta(minutes=10),
-            remove_time=None  # Still active
+            remove_time=None,  # Still active
         )
 
         self.mock_client.get_application.return_value = mock_app
@@ -1596,7 +1630,12 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertIn("recommendations", result)
 
         # Should include all analyses by default
-        expected_analyses = ["auto_scaling", "shuffle_skew", "failed_tasks", "executor_utilization"]
+        expected_analyses = [
+            "auto_scaling",
+            "shuffle_skew",
+            "failed_tasks",
+            "executor_utilization",
+        ]
         for analysis in expected_analyses:
             self.assertIn(analysis, result["analyses"])
 
@@ -1616,7 +1655,7 @@ class TestSparkInsightTools(unittest.TestCase):
             include_auto_scaling=True,
             include_shuffle_skew=False,
             include_failed_tasks=True,
-            include_executor_utilization=False
+            include_executor_utilization=False,
         )
 
         # Should only include requested analyses
@@ -1632,13 +1671,16 @@ class TestSparkInsightTools(unittest.TestCase):
 
         # Create stage with shuffle write
         mock_stage = self._create_mock_stage(
-            1, "Shuffle Stage",
-            shuffle_write_bytes=15 * 1024 * 1024 * 1024  # 15 GB
+            1,
+            "Shuffle Stage",
+            shuffle_write_bytes=15 * 1024 * 1024 * 1024,  # 15 GB
         )
 
         self.mock_client.list_stages.return_value = [mock_stage]
         # Make task summary fetch fail
-        self.mock_client.get_stage_task_summary.side_effect = Exception("Task summary not available")
+        self.mock_client.get_stage_task_summary.side_effect = Exception(
+            "Task summary not available"
+        )
 
         # Call the function
         result = analyze_shuffle_skew("app-123")
@@ -1654,28 +1696,29 @@ class TestSparkInsightTools(unittest.TestCase):
         # Create mock executor metrics distributions with skew
         mock_exec_metrics = MagicMock()
         mock_exec_metrics.shuffle_write = [
-            500 * 1024 * 1024,      # min: 500 MB
-            800 * 1024 * 1024,      # 25th: 800 MB
-            1024 * 1024 * 1024,     # median: 1 GB
-            1536 * 1024 * 1024,     # 75th: 1.5 GB
-            4096 * 1024 * 1024      # max: 4 GB (4x median = high skew)
+            500 * 1024 * 1024,  # min: 500 MB
+            800 * 1024 * 1024,  # 25th: 800 MB
+            1024 * 1024 * 1024,  # median: 1 GB
+            1536 * 1024 * 1024,  # 75th: 1.5 GB
+            4096 * 1024 * 1024,  # max: 4 GB (4x median = high skew)
         ]
 
         # Create stage with significant shuffle write and executor skew
         mock_stage = self._create_mock_stage(
-            1, "Executor Skew Stage",
+            1,
+            "Executor Skew Stage",
             shuffle_write_bytes=15 * 1024 * 1024 * 1024,  # 15 GB
-            executor_metrics_distributions=mock_exec_metrics
+            executor_metrics_distributions=mock_exec_metrics,
         )
 
         # Create mock task summary with no skew (to test executor-only skew)
         mock_task_summary = MagicMock(spec=TaskMetricDistributions)
         mock_task_summary.shuffle_write_bytes = [
-            1000 * 1024 * 1024,     # min: 1000 MB
-            1100 * 1024 * 1024,     # 25th: 1100 MB
-            1200 * 1024 * 1024,     # median: 1200 MB
-            1300 * 1024 * 1024,     # 75th: 1300 MB
-            1400 * 1024 * 1024      # max: 1400 MB (1.17 ratio < 2.0 threshold)
+            1000 * 1024 * 1024,  # min: 1000 MB
+            1100 * 1024 * 1024,  # 25th: 1100 MB
+            1200 * 1024 * 1024,  # median: 1200 MB
+            1300 * 1024 * 1024,  # 75th: 1300 MB
+            1400 * 1024 * 1024,  # max: 1400 MB (1.17 ratio < 2.0 threshold)
         ]
 
         self.mock_client.list_stages.return_value = [mock_stage]
@@ -1702,8 +1745,7 @@ class TestSparkInsightTools(unittest.TestCase):
         # Should have resource allocation recommendation
         recommendations = result["recommendations"]
         resource_rec_found = any(
-            rec.get("type") == "resource_allocation"
-            for rec in recommendations
+            rec.get("type") == "resource_allocation" for rec in recommendations
         )
         self.assertTrue(resource_rec_found)
 
@@ -1716,12 +1758,22 @@ class TestSparkInsightTools(unittest.TestCase):
         failed_stage = self._create_mock_stage(1, "Failed Stage", num_failed_tasks=10)
 
         # Create executors where most failures are on one host
-        executor1 = self._create_mock_executor("1", "problematic-host", failed_tasks=8, completed_tasks=2)
-        executor2 = self._create_mock_executor("2", "good-host", failed_tasks=1, completed_tasks=9)
-        executor3 = self._create_mock_executor("3", "another-good-host", failed_tasks=1, completed_tasks=9)
+        executor1 = self._create_mock_executor(
+            "1", "problematic-host", failed_tasks=8, completed_tasks=2
+        )
+        executor2 = self._create_mock_executor(
+            "2", "good-host", failed_tasks=1, completed_tasks=9
+        )
+        executor3 = self._create_mock_executor(
+            "3", "another-good-host", failed_tasks=1, completed_tasks=9
+        )
 
         self.mock_client.list_stages.return_value = [failed_stage]
-        self.mock_client.list_all_executors.return_value = [executor1, executor2, executor3]
+        self.mock_client.list_all_executors.return_value = [
+            executor1,
+            executor2,
+            executor3,
+        ]
 
         # Call the function
         result = analyze_failed_tasks("app-123")
@@ -1730,7 +1782,8 @@ class TestSparkInsightTools(unittest.TestCase):
         # 8 failures on problematic-host > 50% of total 10 failures
         recommendations = result["recommendations"]
         host_issue_found = any(
-            rec.get("type") == "infrastructure" and "concentration" in rec.get("issue", "")
+            rec.get("type") == "infrastructure"
+            and "concentration" in rec.get("issue", "")
             for rec in recommendations
         )
         self.assertTrue(host_issue_found)
@@ -1745,25 +1798,29 @@ class TestSparkInsightTools(unittest.TestCase):
         # Create scenario with low utilization efficiency (high peak, low average)
         # Executor 1: Active for 5 minutes
         executor1 = self._create_mock_executor(
-            "1", "worker1",
+            "1",
+            "worker1",
             add_time=self.mock_now,
-            remove_time=self.mock_now + timedelta(minutes=5)
+            remove_time=self.mock_now + timedelta(minutes=5),
         )
         # Executor 2: Active for full 30 minutes
         executor2 = self._create_mock_executor(
-            "2", "worker2",
-            add_time=self.mock_now,
-            remove_time=None
+            "2", "worker2", add_time=self.mock_now, remove_time=None
         )
         # Executor 3: Active for only 2 minutes (short burst)
         executor3 = self._create_mock_executor(
-            "3", "worker3",
+            "3",
+            "worker3",
             add_time=self.mock_now + timedelta(minutes=10),
-            remove_time=self.mock_now + timedelta(minutes=12)
+            remove_time=self.mock_now + timedelta(minutes=12),
         )
 
         self.mock_client.get_application.return_value = mock_app
-        self.mock_client.list_all_executors.return_value = [executor1, executor2, executor3]
+        self.mock_client.list_all_executors.return_value = [
+            executor1,
+            executor2,
+            executor3,
+        ]
 
         # Call the function
         result = analyze_executor_utilization("app-123")
@@ -1771,7 +1828,8 @@ class TestSparkInsightTools(unittest.TestCase):
         # Should detect low efficiency and recommend optimization
         recommendations = result["recommendations"]
         efficiency_issue_found = any(
-            rec.get("type") == "resource_efficiency" and "Low executor utilization" in rec.get("issue", "")
+            rec.get("type") == "resource_efficiency"
+            and "Low executor utilization" in rec.get("issue", "")
             for rec in recommendations
         )
 
@@ -1783,9 +1841,16 @@ class TestSparkInsightTools(unittest.TestCase):
 class TestExecutorPerformanceAnalysis(unittest.TestCase):
     """Test suite for executor performance analysis functionality"""
 
-    def _create_mock_executor_summary(self, exec_id, task_time=5000, failed_tasks=0,
-                                     succeeded_tasks=10, memory_spilled=0,
-                                     shuffle_read=0, shuffle_write=0):
+    def _create_mock_executor_summary(
+        self,
+        exec_id,
+        task_time=5000,
+        failed_tasks=0,
+        succeeded_tasks=10,
+        memory_spilled=0,
+        shuffle_read=0,
+        shuffle_write=0,
+    ):
         """Helper to create mock executor summary data"""
         mock_executor = MagicMock()
         mock_executor.task_time = task_time
@@ -1800,12 +1865,20 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         """Test basic executor performance pattern analysis"""
         # Create mock executor summaries
         exec_summary1 = {
-            "1": self._create_mock_executor_summary("1", task_time=5000, succeeded_tasks=10),
-            "2": self._create_mock_executor_summary("2", task_time=6000, succeeded_tasks=12)
+            "1": self._create_mock_executor_summary(
+                "1", task_time=5000, succeeded_tasks=10
+            ),
+            "2": self._create_mock_executor_summary(
+                "2", task_time=6000, succeeded_tasks=12
+            ),
         }
         exec_summary2 = {
-            "1": self._create_mock_executor_summary("1", task_time=8000, succeeded_tasks=8),
-            "2": self._create_mock_executor_summary("2", task_time=10000, succeeded_tasks=15)
+            "1": self._create_mock_executor_summary(
+                "1", task_time=8000, succeeded_tasks=8
+            ),
+            "2": self._create_mock_executor_summary(
+                "2", task_time=10000, succeeded_tasks=15
+            ),
         }
 
         # Call the function
@@ -1832,16 +1905,24 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
 
         # Verify comparative analysis
         comparison = result["comparative_analysis"]
-        self.assertEqual(comparison["executor_count_ratio"], 1.0)  # Same number of executors
-        self.assertAlmostEqual(comparison["task_time_ratio"], 9000/5500, places=1)  # App2 is slower
+        self.assertEqual(
+            comparison["executor_count_ratio"], 1.0
+        )  # Same number of executors
+        self.assertAlmostEqual(
+            comparison["task_time_ratio"], 9000 / 5500, places=1
+        )  # App2 is slower
 
     def test_analyze_executor_performance_patterns_with_failures(self):
         """Test executor performance analysis with task failures"""
         exec_summary1 = {
-            "1": self._create_mock_executor_summary("1", failed_tasks=2, succeeded_tasks=8)
+            "1": self._create_mock_executor_summary(
+                "1", failed_tasks=2, succeeded_tasks=8
+            )
         }
         exec_summary2 = {
-            "1": self._create_mock_executor_summary("1", failed_tasks=6, succeeded_tasks=4)
+            "1": self._create_mock_executor_summary(
+                "1", failed_tasks=6, succeeded_tasks=4
+            )
         }
 
         result = _analyze_executor_performance_patterns(exec_summary1, exec_summary2)
@@ -1857,17 +1938,25 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
 
         # Should generate insights about failure differences
         comparison = result["comparative_analysis"]
-        self.assertEqual(comparison["failure_rate_ratio"], 3.0)  # App2 has 3x more failures
+        self.assertEqual(
+            comparison["failure_rate_ratio"], 3.0
+        )  # App2 has 3x more failures
 
     def test_analyze_executor_performance_patterns_memory_spill(self):
         """Test executor performance analysis with memory spill"""
         exec_summary1 = {
-            "1": self._create_mock_executor_summary("1", memory_spilled=100*1024*1024),  # 100 MB
-            "2": self._create_mock_executor_summary("2", memory_spilled=0)
+            "1": self._create_mock_executor_summary(
+                "1", memory_spilled=100 * 1024 * 1024
+            ),  # 100 MB
+            "2": self._create_mock_executor_summary("2", memory_spilled=0),
         }
         exec_summary2 = {
-            "1": self._create_mock_executor_summary("1", memory_spilled=500*1024*1024),  # 500 MB
-            "2": self._create_mock_executor_summary("2", memory_spilled=300*1024*1024)   # 300 MB
+            "1": self._create_mock_executor_summary(
+                "1", memory_spilled=500 * 1024 * 1024
+            ),  # 500 MB
+            "2": self._create_mock_executor_summary(
+                "2", memory_spilled=300 * 1024 * 1024
+            ),  # 300 MB
         }
 
         result = _analyze_executor_performance_patterns(exec_summary1, exec_summary2)
@@ -1878,8 +1967,10 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
 
         self.assertEqual(app1_metrics["executors_with_spill"], 1)
         self.assertEqual(app2_metrics["executors_with_spill"], 2)
-        self.assertEqual(app1_metrics["total_memory_spilled"], 100*1024*1024)
-        self.assertEqual(app2_metrics["total_memory_spilled"], 800*1024*1024)  # 500 + 300
+        self.assertEqual(app1_metrics["total_memory_spilled"], 100 * 1024 * 1024)
+        self.assertEqual(
+            app2_metrics["total_memory_spilled"], 800 * 1024 * 1024
+        )  # 500 + 300
 
         # Should detect high memory spill ratio
         comparison = result["comparative_analysis"]
@@ -1889,7 +1980,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         insights = result["insights"]
         recommendations = result["recommendations"]
 
-        memory_insight_found = any("memory spill" in insight.lower() for insight in insights)
+        memory_insight_found = any(
+            "memory spill" in insight.lower() for insight in insights
+        )
         memory_rec_found = any("memory" in rec.lower() for rec in recommendations)
 
         self.assertTrue(memory_insight_found)
@@ -1900,13 +1993,13 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         result = _analyze_executor_performance_patterns({}, {})
 
         # Should handle empty data gracefully
-        self.assertEqual(result["analysis"], "No executor data available for comparison")
+        self.assertEqual(
+            result["analysis"], "No executor data available for comparison"
+        )
 
     def test_analyze_executor_performance_patterns_one_empty(self):
         """Test executor performance analysis with one empty dataset"""
-        exec_summary1 = {
-            "1": self._create_mock_executor_summary("1", task_time=5000)
-        }
+        exec_summary1 = {"1": self._create_mock_executor_summary("1", task_time=5000)}
         exec_summary2 = {}
 
         result = _analyze_executor_performance_patterns(exec_summary1, exec_summary2)
@@ -1925,16 +2018,32 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         """Test reliability insights generation"""
         # Create scenario where app2 has > 2x more executor failures than app1
         exec_summary1 = {
-            "1": self._create_mock_executor_summary("1", failed_tasks=1, succeeded_tasks=9),
-            "2": self._create_mock_executor_summary("2", failed_tasks=0, succeeded_tasks=10),
-            "3": self._create_mock_executor_summary("3", failed_tasks=0, succeeded_tasks=10),
-            "4": self._create_mock_executor_summary("4", failed_tasks=0, succeeded_tasks=10)
+            "1": self._create_mock_executor_summary(
+                "1", failed_tasks=1, succeeded_tasks=9
+            ),
+            "2": self._create_mock_executor_summary(
+                "2", failed_tasks=0, succeeded_tasks=10
+            ),
+            "3": self._create_mock_executor_summary(
+                "3", failed_tasks=0, succeeded_tasks=10
+            ),
+            "4": self._create_mock_executor_summary(
+                "4", failed_tasks=0, succeeded_tasks=10
+            ),
         }
         exec_summary2 = {
-            "1": self._create_mock_executor_summary("1", failed_tasks=5, succeeded_tasks=5),
-            "2": self._create_mock_executor_summary("2", failed_tasks=4, succeeded_tasks=6),
-            "3": self._create_mock_executor_summary("3", failed_tasks=3, succeeded_tasks=7),
-            "4": self._create_mock_executor_summary("4", failed_tasks=0, succeeded_tasks=10)
+            "1": self._create_mock_executor_summary(
+                "1", failed_tasks=5, succeeded_tasks=5
+            ),
+            "2": self._create_mock_executor_summary(
+                "2", failed_tasks=4, succeeded_tasks=6
+            ),
+            "3": self._create_mock_executor_summary(
+                "3", failed_tasks=3, succeeded_tasks=7
+            ),
+            "4": self._create_mock_executor_summary(
+                "4", failed_tasks=0, succeeded_tasks=10
+            ),
         }
 
         result = _analyze_executor_performance_patterns(exec_summary1, exec_summary2)
@@ -1950,7 +2059,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
 
         # Should generate infrastructure recommendation since 75% > 50%
         recommendations = result["recommendations"]
-        infra_rec_found = any("infrastructure" in rec.lower() for rec in recommendations)
+        infra_rec_found = any(
+            "infrastructure" in rec.lower() for rec in recommendations
+        )
         self.assertTrue(infra_rec_found)
 
 
@@ -1988,9 +2099,17 @@ class TestCompareAppPerformance(unittest.TestCase):
 
         return mock_app
 
-    def _create_mock_stage(self, stage_id, name="Test Stage", duration_ms=60000,
-                          num_tasks=10, num_failed_tasks=0, memory_spilled_bytes=0,
-                          shuffle_write_bytes=0, executor_summary=None):
+    def _create_mock_stage(
+        self,
+        stage_id,
+        name="Test Stage",
+        duration_ms=60000,
+        num_tasks=10,
+        num_failed_tasks=0,
+        memory_spilled_bytes=0,
+        shuffle_write_bytes=0,
+        executor_summary=None,
+    ):
         """Helper to create mock stage"""
         mock_stage = MagicMock(spec=StageData)
         mock_stage.stage_id = stage_id
@@ -2016,20 +2135,30 @@ class TestCompareAppPerformance(unittest.TestCase):
         mock_stage.first_task_launched_time = self.mock_now
 
         # Add attributes for compare_stages function
-        mock_stage.task_metrics_distributions = None  # Will be set by client.get_stage_task_summary
+        mock_stage.task_metrics_distributions = (
+            None  # Will be set by client.get_stage_task_summary
+        )
         mock_stage.executor_metrics_distributions = None  # Mock executor distributions
 
         return mock_stage
 
-    def _create_mock_job(self, job_id, name="Test Job", status="SUCCEEDED",
-                        submission_time=None, completion_time=None):
+    def _create_mock_job(
+        self,
+        job_id,
+        name="Test Job",
+        status="SUCCEEDED",
+        submission_time=None,
+        completion_time=None,
+    ):
         """Helper to create mock job"""
         mock_job = MagicMock(spec=JobData)
         mock_job.job_id = job_id
         mock_job.name = name
         mock_job.status = status
         mock_job.submission_time = submission_time or self.mock_now
-        mock_job.completion_time = completion_time or (self.mock_now + timedelta(minutes=5))
+        mock_job.completion_time = completion_time or (
+            self.mock_now + timedelta(minutes=5)
+        )
         return mock_job
 
     def _create_mock_executor_summary_data(self):
@@ -2038,14 +2167,16 @@ class TestCompareAppPerformance(unittest.TestCase):
         mock_executor.task_time = 5000
         mock_executor.failed_tasks = 1
         mock_executor.succeeded_tasks = 9
-        mock_executor.memory_bytes_spilled = 100*1024*1024  # 100 MB
-        mock_executor.shuffle_read = 50*1024*1024  # 50 MB
-        mock_executor.shuffle_write = 75*1024*1024  # 75 MB
+        mock_executor.memory_bytes_spilled = 100 * 1024 * 1024  # 100 MB
+        mock_executor.shuffle_read = 50 * 1024 * 1024  # 50 MB
+        mock_executor.shuffle_write = 75 * 1024 * 1024  # 75 MB
         return {"1": mock_executor}
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     @patch("spark_history_mcp.tools.tools.get_executor_summary")
-    def test_compare_app_performance_basic_success(self, mock_executor_summary, mock_get_client):
+    def test_compare_app_performance_basic_success(
+        self, mock_executor_summary, mock_get_client
+    ):
         """Test basic successful application performance comparison"""
         mock_get_client.return_value = self.mock_client
 
@@ -2054,16 +2185,28 @@ class TestCompareAppPerformance(unittest.TestCase):
         app2 = self._create_mock_application("app-456", "App Two")
 
         # Setup mock jobs
-        jobs1 = [self._create_mock_job(1, "Job 1", completion_time=self.mock_now + timedelta(minutes=3))]
-        jobs2 = [self._create_mock_job(1, "Job 1", completion_time=self.mock_now + timedelta(minutes=5))]
+        jobs1 = [
+            self._create_mock_job(
+                1, "Job 1", completion_time=self.mock_now + timedelta(minutes=3)
+            )
+        ]
+        jobs2 = [
+            self._create_mock_job(
+                1, "Job 1", completion_time=self.mock_now + timedelta(minutes=5)
+            )
+        ]
 
         # Setup mock stages with different performance characteristics
         executor_summary1 = self._create_mock_executor_summary_data()
         executor_summary2 = self._create_mock_executor_summary_data()
         executor_summary2["1"].task_time = 8000  # Slower in app2
 
-        stage1 = self._create_mock_stage(1, "Stage 1", duration_ms=180000, executor_summary=executor_summary1)  # 3 min
-        stage2 = self._create_mock_stage(1, "Stage 1", duration_ms=300000, executor_summary=executor_summary2)  # 5 min
+        stage1 = self._create_mock_stage(
+            1, "Stage 1", duration_ms=180000, executor_summary=executor_summary1
+        )  # 3 min
+        stage2 = self._create_mock_stage(
+            1, "Stage 1", duration_ms=300000, executor_summary=executor_summary2
+        )  # 5 min
 
         stages1 = [stage1]
         stages2 = [stage2]
@@ -2120,7 +2263,9 @@ class TestCompareAppPerformance(unittest.TestCase):
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     @patch("spark_history_mcp.tools.tools.get_executor_summary")
-    def test_compare_app_performance_stage_matching(self, mock_executor_summary, mock_get_client):
+    def test_compare_app_performance_stage_matching(
+        self, mock_executor_summary, mock_get_client
+    ):
         """Test stage matching logic in compare_app_performance"""
         mock_get_client.return_value = self.mock_client
 
@@ -2134,11 +2279,25 @@ class TestCompareAppPerformance(unittest.TestCase):
 
         # Setup stages with similar names but different performance
         executor_summary = self._create_mock_executor_summary_data()
-        stage1_fast = self._create_mock_stage(1, "Data Loading Stage", duration_ms=120000, executor_summary=executor_summary)
-        stage1_slow = self._create_mock_stage(2, "Processing Stage", duration_ms=60000, executor_summary=executor_summary)
+        stage1_fast = self._create_mock_stage(
+            1,
+            "Data Loading Stage",
+            duration_ms=120000,
+            executor_summary=executor_summary,
+        )
+        stage1_slow = self._create_mock_stage(
+            2, "Processing Stage", duration_ms=60000, executor_summary=executor_summary
+        )
 
-        stage2_fast = self._create_mock_stage(1, "Data Loading Step", duration_ms=180000, executor_summary=executor_summary)  # Similar name, slower
-        stage2_slow = self._create_mock_stage(2, "Processing Step", duration_ms=90000, executor_summary=executor_summary)   # Similar name, slower
+        stage2_fast = self._create_mock_stage(
+            1,
+            "Data Loading Step",
+            duration_ms=180000,
+            executor_summary=executor_summary,
+        )  # Similar name, slower
+        stage2_slow = self._create_mock_stage(
+            2, "Processing Step", duration_ms=90000, executor_summary=executor_summary
+        )  # Similar name, slower
 
         stages1 = [stage1_fast, stage1_slow]
         stages2 = [stage2_fast, stage2_slow]
@@ -2170,7 +2329,9 @@ class TestCompareAppPerformance(unittest.TestCase):
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     @patch("spark_history_mcp.tools.tools.get_executor_summary")
-    def test_compare_app_performance_recommendations_generation(self, mock_executor_summary, mock_get_client):
+    def test_compare_app_performance_recommendations_generation(
+        self, mock_executor_summary, mock_get_client
+    ):
         """Test that compare_app_performance generates appropriate recommendations"""
         mock_get_client.return_value = self.mock_client
 
@@ -2179,17 +2340,29 @@ class TestCompareAppPerformance(unittest.TestCase):
         app2 = self._create_mock_application("app-456", "Slow App")
 
         # Setup jobs with significant time difference
-        jobs1 = [self._create_mock_job(1, completion_time=self.mock_now + timedelta(minutes=2))]  # Fast
-        jobs2 = [self._create_mock_job(1, completion_time=self.mock_now + timedelta(minutes=10))]  # Slow
+        jobs1 = [
+            self._create_mock_job(
+                1, completion_time=self.mock_now + timedelta(minutes=2)
+            )
+        ]  # Fast
+        jobs2 = [
+            self._create_mock_job(
+                1, completion_time=self.mock_now + timedelta(minutes=10)
+            )
+        ]  # Slow
 
         # Setup stages with large time difference (should trigger recommendations)
         executor_summary1 = self._create_mock_executor_summary_data()
         executor_summary2 = self._create_mock_executor_summary_data()
         executor_summary2["1"].task_time = 15000  # 3x slower
-        executor_summary2["1"].memory_bytes_spilled = 500*1024*1024  # 5x more spill
+        executor_summary2["1"].memory_bytes_spilled = 500 * 1024 * 1024  # 5x more spill
 
-        stage1 = self._create_mock_stage(1, "Critical Stage", duration_ms=60000, executor_summary=executor_summary1)   # 1 min
-        stage2 = self._create_mock_stage(1, "Critical Stage", duration_ms=300000, executor_summary=executor_summary2)  # 5 min (4 min difference > 60s threshold)
+        stage1 = self._create_mock_stage(
+            1, "Critical Stage", duration_ms=60000, executor_summary=executor_summary1
+        )  # 1 min
+        stage2 = self._create_mock_stage(
+            1, "Critical Stage", duration_ms=300000, executor_summary=executor_summary2
+        )  # 5 min (4 min difference > 60s threshold)
 
         stages1 = [stage1]
         stages2 = [stage2]
@@ -2209,8 +2382,7 @@ class TestCompareAppPerformance(unittest.TestCase):
 
         # Should have stage performance recommendation due to large time difference
         stage_perf_rec = any(
-            rec.get("type") == "stage_performance"
-            for rec in recommendations
+            rec.get("type") == "stage_performance" for rec in recommendations
         )
         self.assertTrue(stage_perf_rec)
 
@@ -2227,7 +2399,10 @@ class TestCompareAppPerformance(unittest.TestCase):
 
         # Setup mock client to raise exception for second app
         app1 = self._create_mock_application("app-123", "App One")
-        self.mock_client.get_application.side_effect = [app1, Exception("App not found")]
+        self.mock_client.get_application.side_effect = [
+            app1,
+            Exception("App not found"),
+        ]
 
         # Call function
         result = compare_app_performance("app-123", "nonexistent-app")
@@ -2240,7 +2415,9 @@ class TestCompareAppPerformance(unittest.TestCase):
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     @patch("spark_history_mcp.tools.tools.get_executor_summary")
-    def test_compare_app_performance_no_matching_stages(self, mock_executor_summary, mock_get_client):
+    def test_compare_app_performance_no_matching_stages(
+        self, mock_executor_summary, mock_get_client
+    ):
         """Test compare_app_performance when no stages can be matched"""
         mock_get_client.return_value = self.mock_client
 
@@ -2254,8 +2431,16 @@ class TestCompareAppPerformance(unittest.TestCase):
 
         # Setup stages with completely different names
         executor_summary = self._create_mock_executor_summary_data()
-        stages1 = [self._create_mock_stage(1, "Data Ingestion Pipeline", executor_summary=executor_summary)]
-        stages2 = [self._create_mock_stage(1, "Machine Learning Training", executor_summary=executor_summary)]
+        stages1 = [
+            self._create_mock_stage(
+                1, "Data Ingestion Pipeline", executor_summary=executor_summary
+            )
+        ]
+        stages2 = [
+            self._create_mock_stage(
+                1, "Machine Learning Training", executor_summary=executor_summary
+            )
+        ]
 
         # Setup mock returns
         self.mock_client.get_application.side_effect = [app1, app2]
@@ -2282,21 +2467,21 @@ class TestCompareAppPerformance(unittest.TestCase):
             name="Stage 1",
             num_tasks=100,
             memory_spilled_bytes=1000,
-            duration_ms=10000  # 10 seconds in ms
+            duration_ms=10000,  # 10 seconds in ms
         )
         stage2 = self._create_mock_stage(
             stage_id=2,
             name="Stage 2",
             num_tasks=150,  # 50% increase
             memory_spilled_bytes=2000,  # 100% increase
-            duration_ms=15000  # 15 seconds in ms
+            duration_ms=15000,  # 15 seconds in ms
         )
 
         # Mock the client method calls
         self.mock_client.get_stage_attempt.side_effect = [stage1, stage2]
         self.mock_client.get_stage_task_summary.side_effect = [
             MagicMock(),  # Mock task distributions for stage1
-            MagicMock()   # Mock task distributions for stage2
+            MagicMock(),  # Mock task distributions for stage2
         ]
 
         # Call the function
@@ -2341,24 +2526,18 @@ class TestCompareAppPerformance(unittest.TestCase):
 
         # Create mock stages with very similar metrics (below default 0.2 threshold)
         stage1 = self._create_mock_stage(
-            stage_id=1,
-            name="Stage 1",
-            num_tasks=100,
-            memory_spilled_bytes=1000
+            stage_id=1, name="Stage 1", num_tasks=100, memory_spilled_bytes=1000
         )
         stage2 = self._create_mock_stage(
             stage_id=2,
             name="Stage 2",
             num_tasks=105,  # Only 5% increase (below 20% threshold)
-            memory_spilled_bytes=1050  # Only 5% increase
+            memory_spilled_bytes=1050,  # Only 5% increase
         )
 
         # Mock the client method calls
         self.mock_client.get_stage_attempt.side_effect = [stage1, stage2]
-        self.mock_client.get_stage_task_summary.side_effect = [
-            MagicMock(),
-            MagicMock()
-        ]
+        self.mock_client.get_stage_task_summary.side_effect = [MagicMock(), MagicMock()]
 
         # Call the function
         result = compare_stages("app-123", "app-456", 1, 2)
@@ -2371,7 +2550,9 @@ class TestCompareAppPerformance(unittest.TestCase):
 class TestCompareStageExecutorTimeline(unittest.TestCase):
     """Test cases for compare_stage_executor_timeline function"""
 
-    def _create_mock_stage(self, stage_id, name, submission_time=None, completion_time=None):
+    def _create_mock_stage(
+        self, stage_id, name, submission_time=None, completion_time=None
+    ):
         """Helper to create mock stage data"""
         stage = MagicMock()
         stage.stage_id = stage_id
@@ -2381,7 +2562,9 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         stage.completion_time = completion_time
         return stage
 
-    def _create_mock_executor(self, executor_id, add_time=None, remove_time=None, cores=4, memory_mb=8192):
+    def _create_mock_executor(
+        self, executor_id, add_time=None, remove_time=None, cores=4, memory_mb=8192
+    ):
         """Helper to create mock executor data"""
         executor = MagicMock()
         executor.id = executor_id
@@ -2409,22 +2592,34 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         stage2 = self._create_mock_stage(2, "Stage 2", start_time2, end_time2)
 
         # Create mock executors
-        executor1_1 = self._create_mock_executor("1", start_time1, end_time1, cores=4, memory_mb=4096)
-        executor1_2 = self._create_mock_executor("2", start_time1, end_time1, cores=4, memory_mb=4096)
+        executor1_1 = self._create_mock_executor(
+            "1", start_time1, end_time1, cores=4, memory_mb=4096
+        )
+        executor1_2 = self._create_mock_executor(
+            "2", start_time1, end_time1, cores=4, memory_mb=4096
+        )
 
-        executor2_1 = self._create_mock_executor("1", start_time2, end_time2, cores=2, memory_mb=2048)
-        executor2_2 = self._create_mock_executor("2", start_time2, end_time2, cores=2, memory_mb=2048)
-        executor2_3 = self._create_mock_executor("3", start_time2, end_time2, cores=2, memory_mb=2048)
+        executor2_1 = self._create_mock_executor(
+            "1", start_time2, end_time2, cores=2, memory_mb=2048
+        )
+        executor2_2 = self._create_mock_executor(
+            "2", start_time2, end_time2, cores=2, memory_mb=2048
+        )
+        executor2_3 = self._create_mock_executor(
+            "3", start_time2, end_time2, cores=2, memory_mb=2048
+        )
 
         # Mock client responses
         mock_client.get_stage_attempt.side_effect = [stage1, stage2]
         mock_client.list_all_executors.side_effect = [
             [executor1_1, executor1_2],
-            [executor2_1, executor2_2, executor2_3]
+            [executor2_1, executor2_2, executor2_3],
         ]
 
         # Call the function
-        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2, interval_minutes=1)
+        result = compare_stage_executor_timeline(
+            "app-123", "app-456", 1, 2, interval_minutes=1
+        )
 
         # Verify basic structure
         self.assertIn("app1_info", result)
@@ -2466,7 +2661,9 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         mock_client.list_all_executors.side_effect = [[executor1], [executor2]]
 
         # Test with 2-minute intervals
-        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2, interval_minutes=2)
+        result = compare_stage_executor_timeline(
+            "app-123", "app-456", 1, 2, interval_minutes=2
+        )
 
         # Should have 5 intervals (10 minutes / 2 minutes each)
         self.assertEqual(result["comparison_config"]["interval_minutes"], 2)
@@ -2482,7 +2679,9 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
 
         # Create stage without submission time
         stage1 = self._create_mock_stage(1, "Stage 1", submission_time=None)
-        stage2 = self._create_mock_stage(2, "Stage 2", submission_time=datetime(2024, 1, 1, 10, 0, 0))
+        stage2 = self._create_mock_stage(
+            2, "Stage 2", submission_time=datetime(2024, 1, 1, 10, 0, 0)
+        )
 
         # Mock client responses
         mock_client.get_stage_attempt.side_effect = [stage1, stage2]
@@ -2495,7 +2694,9 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         self.assertIn("summary", result)
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
-    def test_compare_stage_executor_timeline_executor_timing_variations(self, mock_get_client):
+    def test_compare_stage_executor_timeline_executor_timing_variations(
+        self, mock_get_client
+    ):
         """Test executor timeline with varying add/remove times"""
         # Mock client
         mock_client = MagicMock()
@@ -2510,9 +2711,11 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
 
         # Create executors with different timing patterns
         # App1: executor added/removed during stage
-        executor1_1 = self._create_mock_executor("1",
-                                                datetime(2024, 1, 1, 10, 1, 0),  # Added 1 min after stage start
-                                                datetime(2024, 1, 1, 10, 4, 0))  # Removed 1 min before stage end
+        executor1_1 = self._create_mock_executor(
+            "1",
+            datetime(2024, 1, 1, 10, 1, 0),  # Added 1 min after stage start
+            datetime(2024, 1, 1, 10, 4, 0),
+        )  # Removed 1 min before stage end
 
         # App2: executor present for entire stage
         executor2_1 = self._create_mock_executor("1", start_time, end_time)
@@ -2522,14 +2725,18 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         mock_client.list_all_executors.side_effect = [[executor1_1], [executor2_1]]
 
         # Call the function with 1-minute intervals
-        result = compare_stage_executor_timeline("app-123", "app-456", 1, 2, interval_minutes=1)
+        result = compare_stage_executor_timeline(
+            "app-123", "app-456", 1, 2, interval_minutes=1
+        )
 
         # Should show differences in executor allocation over time
         self.assertGreater(len(result["timeline_comparison"]), 0)
 
         # Check that some intervals show executor differences
-        executor_diffs = [interval["differences"]["executor_count_diff"]
-                         for interval in result["timeline_comparison"]]
+        executor_diffs = [
+            interval["differences"]["executor_count_diff"]
+            for interval in result["timeline_comparison"]
+        ]
         self.assertTrue(any(diff != 0 for diff in executor_diffs))
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
@@ -2560,12 +2767,18 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         start_time = datetime(2024, 1, 1, 10, 0, 0)
         completed_time = datetime(2024, 1, 1, 10, 5, 0)
 
-        stage1 = self._create_mock_stage(1, "Completed Stage", start_time, completed_time)
-        stage2 = self._create_mock_stage(2, "Running Stage", start_time, completion_time=None)
+        stage1 = self._create_mock_stage(
+            1, "Completed Stage", start_time, completed_time
+        )
+        stage2 = self._create_mock_stage(
+            2, "Running Stage", start_time, completion_time=None
+        )
 
         # Create mock executors
         executor1 = self._create_mock_executor("1", start_time, completed_time)
-        executor2 = self._create_mock_executor("1", start_time, remove_time=None)  # Still running
+        executor2 = self._create_mock_executor(
+            "1", start_time, remove_time=None
+        )  # Still running
 
         # Mock client responses
         mock_client.get_stage_attempt.side_effect = [stage1, stage2]
@@ -2600,7 +2813,14 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         return app
 
-    def _create_mock_executor(self, executor_id, add_time, remove_time=None, cores=4, memory_bytes=4096*1024*1024):
+    def _create_mock_executor(
+        self,
+        executor_id,
+        add_time,
+        remove_time=None,
+        cores=4,
+        memory_bytes=4096 * 1024 * 1024,
+    ):
         """Create a mock executor"""
         executor = MagicMock()
         executor.id = executor_id
@@ -2630,33 +2850,55 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         start_time2 = datetime(2024, 1, 1, 11, 0, 0)
         end_time2 = datetime(2024, 1, 1, 11, 20, 0)
 
-        app1 = self._create_mock_application("app-123", "ETL Job v1", start_time1, end_time1)
-        app2 = self._create_mock_application("app-456", "ETL Job v2", start_time2, end_time2)
+        app1 = self._create_mock_application(
+            "app-123", "ETL Job v1", start_time1, end_time1
+        )
+        app2 = self._create_mock_application(
+            "app-456", "ETL Job v2", start_time2, end_time2
+        )
 
         # Create mock executors
-        executor1_1 = self._create_mock_executor("1", start_time1, end_time1, cores=4, memory_bytes=4096*1024*1024)
-        executor1_2 = self._create_mock_executor("2", start_time1, end_time1, cores=4, memory_bytes=4096*1024*1024)
+        executor1_1 = self._create_mock_executor(
+            "1", start_time1, end_time1, cores=4, memory_bytes=4096 * 1024 * 1024
+        )
+        executor1_2 = self._create_mock_executor(
+            "2", start_time1, end_time1, cores=4, memory_bytes=4096 * 1024 * 1024
+        )
 
-        executor2_1 = self._create_mock_executor("1", start_time2, end_time2, cores=8, memory_bytes=8192*1024*1024)
-        executor2_2 = self._create_mock_executor("2", start_time2, end_time2, cores=8, memory_bytes=8192*1024*1024)
-        executor2_3 = self._create_mock_executor("3", start_time2, end_time2, cores=8, memory_bytes=8192*1024*1024)
+        executor2_1 = self._create_mock_executor(
+            "1", start_time2, end_time2, cores=8, memory_bytes=8192 * 1024 * 1024
+        )
+        executor2_2 = self._create_mock_executor(
+            "2", start_time2, end_time2, cores=8, memory_bytes=8192 * 1024 * 1024
+        )
+        executor2_3 = self._create_mock_executor(
+            "3", start_time2, end_time2, cores=8, memory_bytes=8192 * 1024 * 1024
+        )
 
         # Create mock stages
-        stage1_1 = self._create_mock_stage(1, "Stage 1-1", start_time1, start_time1 + timedelta(minutes=15))
-        stage1_2 = self._create_mock_stage(2, "Stage 1-2", start_time1 + timedelta(minutes=10), end_time1)
+        stage1_1 = self._create_mock_stage(
+            1, "Stage 1-1", start_time1, start_time1 + timedelta(minutes=15)
+        )
+        stage1_2 = self._create_mock_stage(
+            2, "Stage 1-2", start_time1 + timedelta(minutes=10), end_time1
+        )
 
-        stage2_1 = self._create_mock_stage(1, "Stage 2-1", start_time2, start_time2 + timedelta(minutes=10))
-        stage2_2 = self._create_mock_stage(2, "Stage 2-2", start_time2 + timedelta(minutes=5), end_time2)
+        stage2_1 = self._create_mock_stage(
+            1, "Stage 2-1", start_time2, start_time2 + timedelta(minutes=10)
+        )
+        stage2_2 = self._create_mock_stage(
+            2, "Stage 2-2", start_time2 + timedelta(minutes=5), end_time2
+        )
 
         # Mock client responses
         self.mock_client.get_application.side_effect = [app1, app2]
         self.mock_client.list_all_executors.side_effect = [
             [executor1_1, executor1_2],
-            [executor2_1, executor2_2, executor2_3]
+            [executor2_1, executor2_2, executor2_3],
         ]
         self.mock_client.list_stages.side_effect = [
             [stage1_1, stage1_2],
-            [stage2_1, stage2_2]
+            [stage2_1, stage2_2],
         ]
 
         # Call the function
@@ -2680,7 +2922,10 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Check configuration
         self.assertEqual(result["comparison_config"]["interval_minutes"], 5)
-        self.assertEqual(result["comparison_config"]["analysis_type"], "App-Level Executor Timeline Comparison")
+        self.assertEqual(
+            result["comparison_config"]["analysis_type"],
+            "App-Level Executor Timeline Comparison",
+        )
 
         # Check that timeline comparison has data
         self.assertGreater(len(result["timeline_comparison"]), 0)
@@ -2736,9 +2981,12 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         attempt1.end_time = datetime(2024, 1, 1, 10, 30, 0)
         app1.attempts = [attempt1]
 
-        app2 = self._create_mock_application("app-456", "App2",
-                                             datetime(2024, 1, 1, 11, 0, 0),
-                                             datetime(2024, 1, 1, 11, 20, 0))
+        app2 = self._create_mock_application(
+            "app-456",
+            "App2",
+            datetime(2024, 1, 1, 11, 0, 0),
+            datetime(2024, 1, 1, 11, 20, 0),
+        )
 
         self.mock_client.get_application.side_effect = [app1, app2]
         self.mock_client.list_all_executors.side_effect = [[], []]
@@ -2749,7 +2997,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Should return error about building timeline
         self.assertIn("error", result)
-        self.assertEqual(result["error"], "Could not build timeline for one or both applications")
+        self.assertEqual(
+            result["error"], "Could not build timeline for one or both applications"
+        )
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_compare_app_executor_timeline_efficiency_analysis(self, mock_get_client):
@@ -2762,8 +3012,12 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         start_time2 = datetime(2024, 1, 1, 11, 0, 0)
         end_time2 = datetime(2024, 1, 1, 11, 30, 0)  # 30 minutes (faster)
 
-        app1 = self._create_mock_application("app-123", "Slow App", start_time1, end_time1)
-        app2 = self._create_mock_application("app-456", "Fast App", start_time2, end_time2)
+        app1 = self._create_mock_application(
+            "app-123", "Slow App", start_time1, end_time1
+        )
+        app2 = self._create_mock_application(
+            "app-456", "Fast App", start_time2, end_time2
+        )
 
         # App1: Lower efficiency (few executors, long duration)
         executor1_1 = self._create_mock_executor("1", start_time1, end_time1, cores=2)
@@ -2779,7 +3033,7 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.mock_client.get_application.side_effect = [app1, app2]
         self.mock_client.list_all_executors.side_effect = [
             [executor1_1, executor1_2],
-            [executor2_1, executor2_2, executor2_3, executor2_4]
+            [executor2_1, executor2_2, executor2_3, executor2_4],
         ]
         self.mock_client.list_stages.side_effect = [[], []]
 
@@ -2790,11 +3044,19 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertIn("recommendations", result)
 
         # Should detect performance difference (App1 takes longer)
-        performance_recs = [r for r in result["recommendations"] if r.get("type") == "performance"]
-        self.assertGreater(len(performance_recs), 0, "Should detect performance difference")
+        performance_recs = [
+            r for r in result["recommendations"] if r.get("type") == "performance"
+        ]
+        self.assertGreater(
+            len(performance_recs), 0, "Should detect performance difference"
+        )
 
         # Should detect resource allocation difference
-        resource_recs = [r for r in result["recommendations"] if r.get("type") == "resource_allocation"]
+        resource_recs = [
+            r
+            for r in result["recommendations"]
+            if r.get("type") == "resource_allocation"
+        ]
 
         # Check efficiency scores
         self.assertIn("efficiency_score", result["resource_efficiency"]["app1"])
@@ -2802,7 +3064,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Check key differences
         self.assertIn("duration_difference_seconds", result["key_differences"])
-        self.assertLess(result["key_differences"]["duration_difference_seconds"], 0)  # App2 is faster
+        self.assertLess(
+            result["key_differences"]["duration_difference_seconds"], 0
+        )  # App2 is faster
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_compare_app_executor_timeline_different_intervals(self, mock_get_client):
@@ -2828,7 +3092,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Should have fewer intervals (10 minutes / 2 minute intervals = 5 intervals)
         self.assertEqual(result["comparison_config"]["interval_minutes"], 2)
-        self.assertLessEqual(len(result["timeline_comparison"]), 6)  # Allow for rounding
+        self.assertLessEqual(
+            len(result["timeline_comparison"]), 6
+        )  # Allow for rounding
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_compare_app_executor_timeline_error_handling(self, mock_get_client):
@@ -3001,7 +3267,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertIn(2, result)
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_no_sql_executions(self, mock_get_client):
+    def test_get_stage_dependency_from_sql_plan_no_sql_executions(
+        self, mock_get_client
+    ):
         """Test when no SQL executions are found"""
         mock_get_client.return_value = self.mock_client
         self.mock_client.get_sql_list.return_value = []
@@ -3033,7 +3301,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertEqual(result, {})
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_exception_handling(self, mock_get_client):
+    def test_get_stage_dependency_from_sql_plan_exception_handling(
+        self, mock_get_client
+    ):
         """Test exception handling in get_stage_dependency_from_sql_plan"""
         mock_get_client.return_value = self.mock_client
 
@@ -3062,35 +3332,30 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
     def test_build_dependencies_from_dag_data_with_stage_references(self):
         """Test DAG dependency building with stage task references"""
         dag_data = {
-            'stage_task_references': [
-                {'stage_id': 1, 'attempt_id': 0, 'task_id': 1},
-                {'stage_id': 2, 'attempt_id': 0, 'task_id': 2}
+            "stage_task_references": [
+                {"stage_id": 1, "attempt_id": 0, "task_id": 1},
+                {"stage_id": 2, "attempt_id": 0, "task_id": 2},
             ],
-            'dagVizData': {
-                'nodes': [
-                    {'id': 0, 'name': 'scan'},
-                    {'id': 1, 'name': 'filter'}
-                ],
-                'edges': [
-                    {'fromId': 0, 'toId': 1}
-                ]
-            }
+            "dagVizData": {
+                "nodes": [{"id": 0, "name": "scan"}, {"id": 1, "name": "filter"}],
+                "edges": [{"fromId": 0, "toId": 1}],
+            },
         }
 
         result = _build_dependencies_from_dag_data(dag_data)
 
         # Should have dependencies based on the edges
         self.assertIn(2, result)  # Stage 2 should have dependencies
-        self.assertEqual(len(result[2]['parents']), 1)
-        self.assertEqual(result[2]['parents'][0]['stage_id'], 1)
-        self.assertEqual(result[2]['parents'][0]['relationship_type'], 'dag_based')
+        self.assertEqual(len(result[2]["parents"]), 1)
+        self.assertEqual(result[2]["parents"][0]["stage_id"], 1)
+        self.assertEqual(result[2]["parents"][0]["relationship_type"], "dag_based")
 
     def test_build_dependencies_from_dag_data_malformed_data(self):
         """Test DAG dependency building with malformed data"""
         # Missing edges
         dag_data = {
-            'dagVizData': {
-                'nodes': [{'id': 0, 'name': 'scan'}]
+            "dagVizData": {
+                "nodes": [{"id": 0, "name": "scan"}]
                 # No edges
             }
         }
@@ -3098,26 +3363,19 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertEqual(result, {})
 
         # Non-list nodes/edges
-        dag_data = {
-            'dagVizData': {
-                'nodes': "invalid",
-                'edges': "invalid"
-            }
-        }
+        dag_data = {"dagVizData": {"nodes": "invalid", "edges": "invalid"}}
         result = _build_dependencies_from_dag_data(dag_data)
         self.assertEqual(result, {})
 
     def test_build_dependencies_from_dag_data_node_name_extraction(self):
         """Test stage ID extraction from node names"""
         dag_data = {
-            'dagVizData': {
-                'nodes': [
-                    {'id': 0, 'name': 'Stage 1 - Scan'},
-                    {'id': 1, 'name': 'Stage 2 - Filter'}
+            "dagVizData": {
+                "nodes": [
+                    {"id": 0, "name": "Stage 1 - Scan"},
+                    {"id": 1, "name": "Stage 2 - Filter"},
                 ],
-                'edges': [
-                    {'fromId': 0, 'toId': 1}
-                ]
+                "edges": [{"fromId": 0, "toId": 1}],
             }
         }
 
@@ -3125,8 +3383,8 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Should extract stage IDs from node names and build dependencies
         self.assertIn(2, result)
-        self.assertEqual(len(result[2]['parents']), 1)
-        self.assertEqual(result[2]['parents'][0]['stage_id'], 1)
+        self.assertEqual(len(result[2]["parents"]), 1)
+        self.assertEqual(result[2]["parents"][0]["stage_id"], 1)
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_get_stage_dependency_html_parsing_success(self, mock_get_client):
@@ -3151,14 +3409,14 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         # Mock HTML content and parsed DAG data
         html_content = "<html>mock content</html>"
         dag_data = {
-            'stage_task_references': [
-                {'stage_id': 1, 'attempt_id': 0, 'task_id': 1},
-                {'stage_id': 2, 'attempt_id': 0, 'task_id': 2}
+            "stage_task_references": [
+                {"stage_id": 1, "attempt_id": 0, "task_id": 1},
+                {"stage_id": 2, "attempt_id": 0, "task_id": 2},
             ],
-            'dagVizData': {
-                'nodes': [{'id': 0}, {'id': 1}],
-                'edges': [{'fromId': 0, 'toId': 1}]
-            }
+            "dagVizData": {
+                "nodes": [{"id": 0}, {"id": 1}],
+                "edges": [{"fromId": 0, "toId": 1}],
+            },
         }
 
         self.mock_client.get_sql_execution_html.return_value = html_content
@@ -3206,7 +3464,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Verify HTML methods were called
         self.mock_client.get_sql_execution_html.assert_called_once_with("app-123", 1)
-        self.mock_client.extract_dag_data_from_html.assert_called_once_with(html_content)
+        self.mock_client.extract_dag_data_from_html.assert_called_once_with(
+            html_content
+        )
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_get_stage_dependency_html_parsing_failure(self, mock_get_client):
@@ -3226,7 +3486,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Mock HTML parsing methods with failure
         self.mock_client.get_sql_execution_html = MagicMock()
-        self.mock_client.get_sql_execution_html.side_effect = Exception("HTML fetch failed")
+        self.mock_client.get_sql_execution_html.side_effect = Exception(
+            "HTML fetch failed"
+        )
 
         # Mock fallback data
         job1 = MagicMock(spec=JobData)

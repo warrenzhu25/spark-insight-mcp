@@ -15,7 +15,7 @@ def suggest_autoscaling_config(
     app_id: str,
     target_duration_minutes: int = 120,
     cost_optimization: bool = True,
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate optimization recommendations for Spark auto-scaling configuration.
 
@@ -128,11 +128,11 @@ spark.dynamicAllocation.executorAllocationRatio=[calculated value]
 - A/B testing recommendations for scaling parameters
 - Rollback plans for optimization experiments
 
-{'**Cost Optimization Considerations:**' if cost_optimization else ''}
-{'- Spot instance utilization strategies' if cost_optimization else ''}
-{'- Reserved capacity planning recommendations' if cost_optimization else ''}
-{'- Cost per performance unit analysis' if cost_optimization else ''}
-{'- Budget constraint integration with scaling policies' if cost_optimization else ''}"""
+{"**Cost Optimization Considerations:**" if cost_optimization else ""}
+{"- Spot instance utilization strategies" if cost_optimization else ""}
+{"- Reserved capacity planning recommendations" if cost_optimization else ""}
+{"- Cost per performance unit analysis" if cost_optimization else ""}
+{"- Budget constraint integration with scaling policies" if cost_optimization else ""}"""
 
 
 @mcp.prompt()
@@ -140,7 +140,7 @@ def optimize_resource_allocation(
     app_id: str,
     optimization_goal: str = "performance",
     resource_constraints: Optional[str] = None,
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate comprehensive resource allocation optimization recommendations.
 
@@ -155,10 +155,14 @@ def optimize_resource_allocation(
     goal_guidance = {
         "performance": "Optimize for maximum performance with efficient resource utilization",
         "cost": "Optimize for minimum cost while maintaining acceptable performance",
-        "balanced": "Balance performance and cost for optimal total value"
+        "balanced": "Balance performance and cost for optimal total value",
     }.get(optimization_goal, "Balance performance and cost for optimal total value")
 
-    constraints_note = f"\n**Resource Constraints:** {resource_constraints}" if resource_constraints else ""
+    constraints_note = (
+        f"\n**Resource Constraints:** {resource_constraints}"
+        if resource_constraints
+        else ""
+    )
 
     return f"""Optimize resource allocation for Spark application {app_id}.
 
@@ -294,7 +298,7 @@ def improve_query_performance(
     app_id: str,
     focus_area: str = "comprehensive",
     optimization_priority: str = "execution_time",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate SQL query and data processing performance optimization recommendations.
 
@@ -310,13 +314,16 @@ def improve_query_performance(
         "sql": "Focus specifically on SQL query optimization and Catalyst optimizer effectiveness",
         "dataframe": "Emphasize DataFrame API optimizations and structured data processing",
         "rdd": "Concentrate on RDD transformations and low-level optimization opportunities",
-        "comprehensive": "Provide optimization recommendations across all data processing APIs"
-    }.get(focus_area, "Provide optimization recommendations across all data processing APIs")
+        "comprehensive": "Provide optimization recommendations across all data processing APIs",
+    }.get(
+        focus_area,
+        "Provide optimization recommendations across all data processing APIs",
+    )
 
     priority_guidance = {
         "execution_time": "Prioritize reducing total query execution time",
         "resource_efficiency": "Optimize for efficient resource utilization and cost reduction",
-        "throughput": "Maximize data processing throughput and parallelism"
+        "throughput": "Maximize data processing throughput and parallelism",
     }.get(optimization_priority, "Balance execution time, resources, and throughput")
 
     return f"""Optimize query and data processing performance for Spark application {app_id}.
@@ -457,7 +464,7 @@ def reduce_data_skew(
     app_id: str,
     skew_type: str = "comprehensive",
     mitigation_strategy: str = "adaptive",
-    server: Optional[str] = None
+    server: Optional[str] = None,
 ) -> str:
     """Generate comprehensive recommendations for reducing data skew in Spark applications.
 
@@ -473,13 +480,13 @@ def reduce_data_skew(
         "shuffle": "Focus on shuffle operation skew and partition imbalance",
         "join": "Emphasize join skew and key distribution problems",
         "aggregation": "Concentrate on aggregation skew and grouping imbalances",
-        "comprehensive": "Address all types of data skew comprehensively"
+        "comprehensive": "Address all types of data skew comprehensively",
     }.get(skew_type, "Address all types of data skew comprehensively")
 
     strategy_guidance = {
         "preprocessing": "Focus on data preprocessing and upstream solutions",
         "runtime": "Emphasize runtime configuration and Spark-level solutions",
-        "adaptive": "Combine preprocessing and runtime solutions adaptively"
+        "adaptive": "Combine preprocessing and runtime solutions adaptively",
     }.get(mitigation_strategy, "Combine preprocessing and runtime solutions adaptively")
 
     return f"""Develop comprehensive data skew reduction strategies for Spark application {app_id}.

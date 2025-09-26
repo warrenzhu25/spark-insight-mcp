@@ -43,9 +43,7 @@ class TestPerformancePrompts(unittest.TestCase):
     def test_analyze_slow_application_with_params(self):
         """Test slow application analysis prompt with custom parameters"""
         result = analyze_slow_application(
-            "app-456",
-            baseline_duration_minutes=120,
-            server="production"
+            "app-456", baseline_duration_minutes=120, server="production"
         )
 
         self.assertIn("app-456", result)
@@ -154,9 +152,7 @@ class TestOptimizationPrompts(unittest.TestCase):
     def test_suggest_autoscaling_config_with_params(self):
         """Test auto-scaling suggestions with custom parameters"""
         result = suggest_autoscaling_config(
-            "app-123",
-            target_duration_minutes=90,
-            cost_optimization=False
+            "app-123", target_duration_minutes=90, cost_optimization=False
         )
 
         self.assertIn("90 minutes", result)
@@ -179,9 +175,7 @@ class TestOptimizationPrompts(unittest.TestCase):
         for focus in focus_areas:
             for priority in priorities:
                 result = improve_query_performance(
-                    "app-123",
-                    focus_area=focus,
-                    optimization_priority=priority
+                    "app-123", focus_area=focus, optimization_priority=priority
                 )
                 self.assertIn("app-123", result)
                 self.assertIn("query", result.lower())
@@ -194,9 +188,7 @@ class TestOptimizationPrompts(unittest.TestCase):
         for skew_type in skew_types:
             for strategy in strategies:
                 result = reduce_data_skew(
-                    "app-123",
-                    skew_type=skew_type,
-                    mitigation_strategy=strategy
+                    "app-123", skew_type=skew_type, mitigation_strategy=strategy
                 )
                 self.assertIn("app-123", result)
                 self.assertIn("skew", result.lower())
@@ -213,9 +205,7 @@ class TestReportingPrompts(unittest.TestCase):
         for report_type in report_types:
             for audience in audiences:
                 result = generate_performance_report(
-                    "app-123",
-                    report_type=report_type,
-                    audience=audience
+                    "app-123", report_type=report_type, audience=audience
                 )
                 self.assertIn("app-123", result)
                 self.assertIn("report", result.lower())
@@ -229,9 +219,7 @@ class TestReportingPrompts(unittest.TestCase):
         for metric in focus_metrics:
             for context in time_contexts:
                 result = create_executive_summary(
-                    "app-123",
-                    focus_metric=metric,
-                    time_context=context
+                    "app-123", focus_metric=metric, time_context=context
                 )
                 self.assertIn("app-123", result)
                 self.assertIn("executive", result.lower())
@@ -245,9 +233,7 @@ class TestReportingPrompts(unittest.TestCase):
         for period in trend_periods:
             for focus in trend_focuses:
                 result = summarize_trends(
-                    app_ids,
-                    trend_period=period,
-                    trend_focus=focus
+                    app_ids, trend_period=period, trend_focus=focus
                 )
                 for app_id in app_ids:
                     self.assertIn(app_id, result)
@@ -261,9 +247,7 @@ class TestReportingPrompts(unittest.TestCase):
         for bench_type in benchmark_types:
             for dimension in dimensions:
                 result = benchmark_comparison(
-                    "app-123",
-                    benchmark_type=bench_type,
-                    comparison_dimension=dimension
+                    "app-123", benchmark_type=bench_type, comparison_dimension=dimension
                 )
                 self.assertIn("app-123", result)
                 self.assertIn("benchmark", result.lower())
@@ -285,11 +269,17 @@ class TestPromptContentQuality(unittest.TestCase):
             with self.subTest(prompt=prompt_name):
                 # Check for MCP tool call examples
                 self.assertTrue(
-                    any(tool in prompt_content for tool in [
-                        "get_application", "get_application_insights",
-                        "analyze_", "list_", "compare_"
-                    ]),
-                    f"{prompt_name} should contain MCP tool call examples"
+                    any(
+                        tool in prompt_content
+                        for tool in [
+                            "get_application",
+                            "get_application_insights",
+                            "analyze_",
+                            "list_",
+                            "compare_",
+                        ]
+                    ),
+                    f"{prompt_name} should contain MCP tool call examples",
                 )
 
     def test_prompts_have_structured_frameworks(self):
@@ -304,13 +294,19 @@ class TestPromptContentQuality(unittest.TestCase):
         for prompt_content in prompts_to_test:
             # Check for structured framework indicators
             framework_indicators = [
-                "framework", "analysis", "investigation", "sequence",
-                "expected", "recommendations"
+                "framework",
+                "analysis",
+                "investigation",
+                "sequence",
+                "expected",
+                "recommendations",
             ]
             self.assertTrue(
-                any(indicator.lower() in prompt_content.lower()
-                    for indicator in framework_indicators),
-                "Prompt should contain structured framework elements"
+                any(
+                    indicator.lower() in prompt_content.lower()
+                    for indicator in framework_indicators
+                ),
+                "Prompt should contain structured framework elements",
             )
 
     def test_prompts_include_actionable_guidance(self):
@@ -325,13 +321,20 @@ class TestPromptContentQuality(unittest.TestCase):
         for prompt_content in prompts_to_test:
             # Check for actionable guidance indicators
             action_indicators = [
-                "recommendation", "expected", "deliverable", "action",
-                "specific", "implementation", "suggestion"
+                "recommendation",
+                "expected",
+                "deliverable",
+                "action",
+                "specific",
+                "implementation",
+                "suggestion",
             ]
             self.assertTrue(
-                any(indicator.lower() in prompt_content.lower()
-                    for indicator in action_indicators),
-                "Prompt should contain actionable guidance"
+                any(
+                    indicator.lower() in prompt_content.lower()
+                    for indicator in action_indicators
+                ),
+                "Prompt should contain actionable guidance",
             )
 
     def test_prompt_parameter_integration(self):

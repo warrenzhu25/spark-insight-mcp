@@ -12,9 +12,7 @@ from spark_history_mcp.core.app import mcp
 
 @mcp.prompt()
 def investigate_failures(
-    app_id: str,
-    failure_type: str = "all",
-    server: Optional[str] = None
+    app_id: str, failure_type: str = "all", server: Optional[str] = None
 ) -> str:
     """Generate a systematic prompt for investigating application failures and errors.
 
@@ -30,7 +28,7 @@ def investigate_failures(
         "job": "Concentrate on job-level failures and their cascading effects",
         "stage": "Examine stage failures and their impact on application progress",
         "executor": "Investigate executor failures, node issues, and infrastructure problems",
-        "all": "Provide comprehensive failure analysis across all levels"
+        "all": "Provide comprehensive failure analysis across all levels",
     }.get(failure_type, "Provide comprehensive failure analysis across all levels")
 
     return f"""Investigate failures and errors in Spark application {app_id}.
@@ -126,9 +124,7 @@ Focus on providing specific fixes such as:
 
 @mcp.prompt()
 def examine_memory_issues(
-    app_id: str,
-    memory_focus: str = "comprehensive",
-    server: Optional[str] = None
+    app_id: str, memory_focus: str = "comprehensive", server: Optional[str] = None
 ) -> str:
     """Generate a detailed prompt for investigating memory-related problems in Spark applications.
 
@@ -144,7 +140,7 @@ def examine_memory_issues(
         "offheap": "Examine off-heap memory usage and configuration effectiveness",
         "spill": "Investigate memory spill patterns and disk spill operations",
         "gc": "Analyze garbage collection patterns, pressure, and impact on performance",
-        "comprehensive": "Provide thorough analysis across all memory-related aspects"
+        "comprehensive": "Provide thorough analysis across all memory-related aspects",
     }.get(memory_focus, "Provide thorough analysis across all memory-related aspects")
 
     return f"""Investigate memory-related issues in Spark application {app_id}.
@@ -239,9 +235,7 @@ get_application_insights("{app_id}"{server_param})
 
 @mcp.prompt()
 def diagnose_shuffle_problems(
-    app_id: str,
-    shuffle_aspect: str = "comprehensive",
-    server: Optional[str] = None
+    app_id: str, shuffle_aspect: str = "comprehensive", server: Optional[str] = None
 ) -> str:
     """Generate a focused prompt for diagnosing shuffle operation issues and data movement problems.
 
@@ -256,7 +250,7 @@ def diagnose_shuffle_problems(
         "skew": "Focus specifically on data skew detection and mitigation strategies",
         "performance": "Emphasize shuffle performance impact and optimization opportunities",
         "size": "Concentrate on shuffle data volumes and size optimization",
-        "comprehensive": "Provide complete analysis of all shuffle-related aspects"
+        "comprehensive": "Provide complete analysis of all shuffle-related aspects",
     }.get(shuffle_aspect, "Provide complete analysis of all shuffle-related aspects")
 
     return f"""Diagnose shuffle operation problems in Spark application {app_id}.
@@ -354,9 +348,7 @@ get_application_insights("{app_id}"{server_param})
 
 @mcp.prompt()
 def identify_configuration_issues(
-    app_id: str,
-    config_category: str = "all",
-    server: Optional[str] = None
+    app_id: str, config_category: str = "all", server: Optional[str] = None
 ) -> str:
     """Generate a systematic prompt for identifying Spark configuration problems and optimization opportunities.
 
@@ -371,8 +363,11 @@ def identify_configuration_issues(
         "resources": "Focus on resource allocation configuration issues (memory, cores, executors)",
         "performance": "Emphasize performance-related configuration optimizations",
         "reliability": "Concentrate on fault tolerance and reliability configuration settings",
-        "all": "Provide comprehensive configuration analysis across all categories"
-    }.get(config_category, "Provide comprehensive configuration analysis across all categories")
+        "all": "Provide comprehensive configuration analysis across all categories",
+    }.get(
+        config_category,
+        "Provide comprehensive configuration analysis across all categories",
+    )
 
     return f"""Identify configuration issues and optimization opportunities for Spark application {app_id}.
 

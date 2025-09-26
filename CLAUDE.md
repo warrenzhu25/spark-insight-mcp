@@ -2,6 +2,54 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CLI Support
+
+The server now supports **dual-mode operation**:
+
+### **MCP Server Mode** (Default)
+```bash
+# Start MCP server (default behavior)
+spark-mcp
+
+# Or explicitly with server command
+spark-mcp --cli server start
+```
+
+### **CLI Mode** (New!)
+```bash
+# List applications
+spark-mcp --cli apps list --limit 10
+
+# Show application details
+spark-mcp --cli apps show app-20231201-123456
+
+# Get comprehensive insights
+spark-mcp --cli analyze insights app-20231201-123456
+
+# Compare two applications
+spark-mcp --cli analyze compare app1 app2
+
+# Configuration management
+spark-mcp --cli config init --interactive
+spark-mcp --cli config show
+
+# Server management
+spark-mcp --cli server test
+spark-mcp --cli server status
+```
+
+### **Output Formats**
+All CLI commands support multiple output formats:
+- `--format human` (default) - Rich tables and panels
+- `--format json` - Machine-readable JSON
+- `--format table` - Simple tabular format
+
+### **CLI Architecture**
+- **32 MCP tools** accessible via CLI commands
+- **Zero risk** - MCP server functionality completely preserved
+- **Auto-detection** - CLI mode triggered by CLI commands or `--cli` flag
+- **Graceful fallback** - Helpful error messages if CLI dependencies missing
+
 ## Development Commands
 
 ### Setup and Dependencies

@@ -130,7 +130,9 @@ def list_applications(
     # Validate search_type
     valid_search_types = ["exact", "contains", "regex"]
     if search_type not in valid_search_types:
-        raise ValueError(f"search_type must be one of {valid_search_types}, got: {search_type}")
+        raise ValueError(
+            f"search_type must be one of {valid_search_types}, got: {search_type}"
+        )
 
     # Filter applications by name based on search type
     matching_apps = []
@@ -153,7 +155,6 @@ def list_applications(
             raise re.error(f"Invalid regex pattern '{app_name}': {str(e)}") from e
 
     return matching_apps
-
 
 
 @mcp.tool()
@@ -504,7 +505,10 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
 
 @mcp.tool()
 def compare_job_environments(
-    app_id1: str, app_id2: str, server: Optional[str] = None, filter_auto_generated: bool = True
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+    filter_auto_generated: bool = True,
 ) -> Dict[str, Any]:
     """
     Compare Spark environment configurations between two jobs.
@@ -541,21 +545,29 @@ def compare_job_environments(
         common_props = {
             k: {"app1": v, "app2": spark_props2.get(k)}
             for k, v in spark_props1.items()
-            if (k in spark_props2 and v == spark_props2[k] and
-                not _is_auto_generated_config(k, str(v)))
+            if (
+                k in spark_props2
+                and v == spark_props2[k]
+                and not _is_auto_generated_config(k, str(v))
+            )
         }
         different_props = {
             k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
             for k, v in spark_props1.items()
-            if (k in spark_props2 and v != spark_props2[k] and
-                not _is_auto_generated_config(k, str(v)))
+            if (
+                k in spark_props2
+                and v != spark_props2[k]
+                and not _is_auto_generated_config(k, str(v))
+            )
         }
         app1_only_props = {
-            k: v for k, v in spark_props1.items()
+            k: v
+            for k, v in spark_props1.items()
             if k not in spark_props2 and not _is_auto_generated_config(k, str(v))
         }
         app2_only_props = {
-            k: v for k, v in spark_props2.items()
+            k: v
+            for k, v in spark_props2.items()
             if k not in spark_props1 and not _is_auto_generated_config(k, str(v))
         }
     else:
@@ -595,7 +607,7 @@ def compare_job_environments(
             "different": different_props,
             "only_in_app1": app1_only_props,
             "only_in_app2": app2_only_props,
-            "filtered_auto_generated": filter_auto_generated
+            "filtered_auto_generated": filter_auto_generated,
         },
         "system_properties": {
             "key_differences": {
@@ -1023,18 +1035,18 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
         dependencies = {}
 
         # Extract stage references from various data sources
-        stage_references = dag_data.get('stage_task_references', [])
+        stage_references = dag_data.get("stage_task_references", [])
         if not isinstance(stage_references, list):
             stage_references = []
 
         # Process DAG visualization data if available
-        if 'dagVizData' in dag_data:
-            dag_viz = dag_data['dagVizData']
+        if "dagVizData" in dag_data:
+            dag_viz = dag_data["dagVizData"]
 
             # Look for stage information in DAG nodes
-            if isinstance(dag_viz, dict) and 'nodes' in dag_viz and 'edges' in dag_viz:
-                nodes = dag_viz.get('nodes', [])
-                edges = dag_viz.get('edges', [])
+            if isinstance(dag_viz, dict) and "nodes" in dag_viz and "edges" in dag_viz:
+                nodes = dag_viz.get("nodes", [])
+                edges = dag_viz.get("edges", [])
 
                 if not isinstance(nodes, list) or not isinstance(edges, list):
                     return {}
@@ -1042,8 +1054,8 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
                 # Build node-to-stage mapping from stage references
                 node_to_stage = {}
                 for i, ref in enumerate(stage_references):
-                    if isinstance(ref, dict) and 'stage_id' in ref:
-                        stage_id = ref.get('stage_id')
+                    if isinstance(ref, dict) and "stage_id" in ref:
+                        stage_id = ref.get("stage_id")
                         if isinstance(stage_id, int):
                             node_to_stage[i] = stage_id
 
@@ -1052,11 +1064,17 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
                     # Look for stage information in node names or metadata
                     for i, node in enumerate(nodes):
                         if isinstance(node, dict):
-                            node_name = node.get('name', node.get('nodeName', ''))
-                            if isinstance(node_name, str) and 'stage' in node_name.lower():
+                            node_name = node.get("name", node.get("nodeName", ""))
+                            if (
+                                isinstance(node_name, str)
+                                and "stage" in node_name.lower()
+                            ):
                                 # Try to extract stage ID from node name
                                 import re
-                                stage_match = re.search(r'stage\s*(\d+)', node_name, re.IGNORECASE)
+
+                                stage_match = re.search(
+                                    r"stage\s*(\d+)", node_name, re.IGNORECASE
+                                )
                                 if stage_match:
                                     stage_id = int(stage_match.group(1))
                                     node_to_stage[i] = stage_id
@@ -1070,8 +1088,8 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
                         continue
 
                     # Handle different edge formats
-                    from_node = edge.get('from', edge.get('fromId', edge.get('source')))
-                    to_node = edge.get('to', edge.get('toId', edge.get('target')))
+                    from_node = edge.get("from", edge.get("fromId", edge.get("source")))
+                    to_node = edge.get("to", edge.get("toId", edge.get("target")))
 
                     if from_node is None or to_node is None:
                         continue
@@ -1079,10 +1097,13 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
                     from_stage = node_to_stage.get(from_node)
                     to_stage = node_to_stage.get(to_node)
 
-                    if (from_stage is not None and to_stage is not None and
-                        isinstance(from_stage, int) and isinstance(to_stage, int) and
-                        from_stage != to_stage):
-
+                    if (
+                        from_stage is not None
+                        and to_stage is not None
+                        and isinstance(from_stage, int)
+                        and isinstance(to_stage, int)
+                        and from_stage != to_stage
+                    ):
                         # Add parent relationship
                         if to_stage not in stage_to_parents:
                             stage_to_parents[to_stage] = []
@@ -1096,19 +1117,25 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
                             stage_to_children[from_stage].append(to_stage)
 
                 # Build final dependency structure
-                all_stages = set(stage_to_parents.keys()).union(set(stage_to_children.keys()))
+                all_stages = set(stage_to_parents.keys()).union(
+                    set(stage_to_children.keys())
+                )
                 for stage_id in all_stages:
                     dependencies[stage_id] = {
-                        "parents": [{"stage_id": p, "relationship_type": "dag_based"}
-                                  for p in sorted(stage_to_parents.get(stage_id, []))],
-                        "children": [{"stage_id": c, "relationship_type": "dag_based"}
-                                   for c in sorted(stage_to_children.get(stage_id, []))],
-                        "stage_info": {"stage_id": stage_id}
+                        "parents": [
+                            {"stage_id": p, "relationship_type": "dag_based"}
+                            for p in sorted(stage_to_parents.get(stage_id, []))
+                        ],
+                        "children": [
+                            {"stage_id": c, "relationship_type": "dag_based"}
+                            for c in sorted(stage_to_children.get(stage_id, []))
+                        ],
+                        "stage_info": {"stage_id": stage_id},
                     }
 
         # Also try to extract from timeline data if available (future enhancement)
-        if 'timelineData' in dag_data and not dependencies:
-            timeline_data = dag_data['timelineData']
+        if "timelineData" in dag_data and not dependencies:
+            timeline_data = dag_data["timelineData"]
             if isinstance(timeline_data, list):
                 # Process timeline data for stage relationships
                 # This would need specific implementation based on timeline structure
@@ -1116,19 +1143,17 @@ def _build_dependencies_from_dag_data(dag_data: Dict[str, Any]) -> Dict[str, Any
 
         return dependencies
 
-    except (TypeError, ValueError, KeyError, AttributeError) as e:
+    except (TypeError, ValueError, KeyError, AttributeError):
         # Return empty dependencies on parsing error
         return {}
-    except Exception as e:
+    except Exception:
         # Catch any other unexpected errors
         return {}
 
 
 @mcp.tool()
 def get_stage_dependency_from_sql_plan(
-    app_id: str,
-    execution_id: Optional[int] = None,
-    server: Optional[str] = None
+    app_id: str, execution_id: Optional[int] = None, server: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Get stage dependency information from SQL execution plan.
@@ -1158,7 +1183,9 @@ def get_stage_dependency_from_sql_plan(
         # Get SQL execution data
         if execution_id is None:
             # Get the longest running SQL query if no execution_id specified
-            sql_executions = client.get_sql_list(app_id, details=True, plan_description=True)
+            sql_executions = client.get_sql_list(
+                app_id, details=True, plan_description=True
+            )
             if not sql_executions:
                 return {}
 
@@ -1166,7 +1193,9 @@ def get_stage_dependency_from_sql_plan(
             execution = max(sql_executions, key=lambda x: x.duration or 0)
             execution_id = execution.id
         else:
-            execution = client.get_sql_execution(app_id, execution_id, details=True, plan_description=True)
+            execution = client.get_sql_execution(
+                app_id, execution_id, details=True, plan_description=True
+            )
 
         # Try to get enhanced stage dependency data from HTML DAG visualization
         html_dag_data = None
@@ -1175,18 +1204,22 @@ def get_stage_dependency_from_sql_plan(
 
         try:
             # Attempt to fetch HTML page with DAG data
-            if hasattr(client, 'get_sql_execution_html') and hasattr(client, 'extract_dag_data_from_html'):
+            if hasattr(client, "get_sql_execution_html") and hasattr(
+                client, "extract_dag_data_from_html"
+            ):
                 html_content = client.get_sql_execution_html(app_id, execution_id)
                 html_dag_data = client.extract_dag_data_from_html(html_content)
 
-                if html_dag_data and not html_dag_data.get('parsing_error'):
+                if html_dag_data and not html_dag_data.get("parsing_error"):
                     # Try to build dependencies from DAG data
-                    dag_based_dependencies = _build_dependencies_from_dag_data(html_dag_data)
+                    dag_based_dependencies = _build_dependencies_from_dag_data(
+                        html_dag_data
+                    )
                     if dag_based_dependencies:
                         analysis_method = "dag_based"
                 else:
                     # HTML data exists but has parsing errors
-                    if html_dag_data and html_dag_data.get('parsing_error'):
+                    if html_dag_data and html_dag_data.get("parsing_error"):
                         analysis_method = "timing_based_with_html_error"
             else:
                 # Client doesn't have HTML methods, use timing-based only
@@ -1219,13 +1252,19 @@ def get_stage_dependency_from_sql_plan(
                     all_stage_ids.add(stage_id)
                     if stage_id not in stage_job_mapping:
                         stage_job_mapping[stage_id] = []
-                    stage_job_mapping[stage_id].append({
-                        "job_id": job.job_id,
-                        "job_name": job.name,
-                        "job_status": job.status,
-                        "submission_time": job.submission_time.isoformat() if job.submission_time else None,
-                        "completion_time": job.completion_time.isoformat() if job.completion_time else None
-                    })
+                    stage_job_mapping[stage_id].append(
+                        {
+                            "job_id": job.job_id,
+                            "job_name": job.name,
+                            "job_status": job.status,
+                            "submission_time": job.submission_time.isoformat()
+                            if job.submission_time
+                            else None,
+                            "completion_time": job.completion_time.isoformat()
+                            if job.completion_time
+                            else None,
+                        }
+                    )
 
         # Get stage details
         stages = client.list_stages(app_id, with_summaries=False)
@@ -1244,15 +1283,21 @@ def get_stage_dependency_from_sql_plan(
                 "stage_name": stage.name,
                 "status": stage.status,
                 "num_tasks": stage.num_tasks,
-                "submission_time": stage.submission_time.isoformat() if stage.submission_time else None,
-                "completion_time": stage.completion_time.isoformat() if stage.completion_time else None,
+                "submission_time": stage.submission_time.isoformat()
+                if stage.submission_time
+                else None,
+                "completion_time": stage.completion_time.isoformat()
+                if stage.completion_time
+                else None,
                 "duration_ms": None,
-                "attempt_id": stage.attempt_id
+                "attempt_id": stage.attempt_id,
             }
 
             # Calculate duration
             if stage.submission_time and stage.completion_time:
-                duration = (stage.completion_time - stage.submission_time).total_seconds() * 1000
+                duration = (
+                    stage.completion_time - stage.submission_time
+                ).total_seconds() * 1000
                 stage_info[stage_id]["duration_ms"] = int(duration)
 
         # Sort stages by submission time for timeline
@@ -1264,8 +1309,10 @@ def get_stage_dependency_from_sql_plan(
                 "stage_id": stage.stage_id,
                 "stage_name": stage.name,
                 "submission_time": stage.submission_time.isoformat(),
-                "completion_time": stage.completion_time.isoformat() if stage.completion_time else None,
-                "status": stage.status
+                "completion_time": stage.completion_time.isoformat()
+                if stage.completion_time
+                else None,
+                "status": stage.status,
             }
             for stage in timeline_stages
         ]
@@ -1278,19 +1325,25 @@ def get_stage_dependency_from_sql_plan(
                 stage_dependencies[stage_id] = {
                     "parents": dag_dep.get("parents", []),
                     "children": dag_dep.get("children", []),
-                    "stage_info": stage_info.get(stage_id, dag_dep.get("stage_info", {}))
+                    "stage_info": stage_info.get(
+                        stage_id, dag_dep.get("stage_info", {})
+                    ),
                 }
 
                 # Enhance parent/child info with stage names if available
                 for parent in stage_dependencies[stage_id]["parents"]:
                     parent_id = parent["stage_id"]
                     if parent_id in stage_info:
-                        parent["stage_name"] = stage_info[parent_id].get("stage_name", f"Stage {parent_id}")
+                        parent["stage_name"] = stage_info[parent_id].get(
+                            "stage_name", f"Stage {parent_id}"
+                        )
 
                 for child in stage_dependencies[stage_id]["children"]:
                     child_id = child["stage_id"]
                     if child_id in stage_info:
-                        child["stage_name"] = stage_info[child_id].get("stage_name", f"Stage {child_id}")
+                        child["stage_name"] = stage_info[child_id].get(
+                            "stage_name", f"Stage {child_id}"
+                        )
 
             # Ensure all relevant stages are included
             for stage in relevant_stages:
@@ -1298,7 +1351,7 @@ def get_stage_dependency_from_sql_plan(
                     stage_dependencies[stage.stage_id] = {
                         "parents": [],
                         "children": [],
-                        "stage_info": stage_info.get(stage.stage_id, {})
+                        "stage_info": stage_info.get(stage.stage_id, {}),
                     }
 
         else:
@@ -1308,47 +1361,62 @@ def get_stage_dependency_from_sql_plan(
                 stage_dependencies[stage_id] = {
                     "parents": [],
                     "children": [],
-                    "stage_info": stage_info.get(stage_id, {})
+                    "stage_info": stage_info.get(stage_id, {}),
                 }
 
                 # Find potential parent stages (completed before this stage started)
                 for j in range(i):
                     prev_stage = timeline_stages[j]
-                    if (prev_stage.completion_time and
-                        prev_stage.completion_time <= stage.submission_time):
-
+                    if (
+                        prev_stage.completion_time
+                        and prev_stage.completion_time <= stage.submission_time
+                    ):
                         # Check if they're in related jobs (more likely to be dependencies)
-                        prev_jobs = set(job["job_id"] for job in stage_job_mapping.get(prev_stage.stage_id, []))
-                        curr_jobs = set(job["job_id"] for job in stage_job_mapping.get(stage_id, []))
+                        prev_jobs = set(
+                            job["job_id"]
+                            for job in stage_job_mapping.get(prev_stage.stage_id, [])
+                        )
+                        curr_jobs = set(
+                            job["job_id"] for job in stage_job_mapping.get(stage_id, [])
+                        )
 
                         # If they share jobs or are sequential, likely dependency
                         if prev_jobs.intersection(curr_jobs) or abs(j - i) <= 2:
-                            stage_dependencies[stage_id]["parents"].append({
-                                "stage_id": prev_stage.stage_id,
-                                "stage_name": prev_stage.name,
-                                "relationship_type": "timing_based"
-                            })
+                            stage_dependencies[stage_id]["parents"].append(
+                                {
+                                    "stage_id": prev_stage.stage_id,
+                                    "stage_name": prev_stage.name,
+                                    "relationship_type": "timing_based",
+                                }
+                            )
 
                             # Add child relationship to parent
                             if prev_stage.stage_id not in stage_dependencies:
                                 stage_dependencies[prev_stage.stage_id] = {
                                     "parents": [],
                                     "children": [],
-                                    "stage_info": stage_info.get(prev_stage.stage_id, {})
+                                    "stage_info": stage_info.get(
+                                        prev_stage.stage_id, {}
+                                    ),
                                 }
 
-                            stage_dependencies[prev_stage.stage_id]["children"].append({
-                                "stage_id": stage_id,
-                                "stage_name": stage.name,
-                                "relationship_type": "timing_based"
-                            })
+                            stage_dependencies[prev_stage.stage_id]["children"].append(
+                                {
+                                    "stage_id": stage_id,
+                                    "stage_name": stage.name,
+                                    "relationship_type": "timing_based",
+                                }
+                            )
 
         # Identify critical path (longest duration sequence)
         critical_path = []
         if timeline_stages:
             # Simple heuristic: stages with longest individual duration
-            stages_by_duration = [(s.stage_id, stage_info[s.stage_id].get("duration_ms", 0))
-                                 for s in timeline_stages if s.stage_id in stage_info]
+            stages_by_duration = [
+                (s.stage_id, stage_info[s.stage_id].get("duration_ms", 0))
+                for s in timeline_stages
+                if s.stage_id in stage_info
+            ]
             stages_by_duration.sort(key=lambda x: x[1], reverse=True)
 
             # Take top stages that represent significant portion of execution
@@ -1356,12 +1424,16 @@ def get_stage_dependency_from_sql_plan(
             critical_duration = 0
 
             for stage_id, duration in stages_by_duration:
-                critical_path.append({
-                    "stage_id": stage_id,
-                    "stage_name": stage_info[stage_id]["stage_name"],
-                    "duration_ms": duration,
-                    "percentage_of_total": (duration / total_duration * 100) if total_duration > 0 else 0
-                })
+                critical_path.append(
+                    {
+                        "stage_id": stage_id,
+                        "stage_name": stage_info[stage_id]["stage_name"],
+                        "duration_ms": duration,
+                        "percentage_of_total": (duration / total_duration * 100)
+                        if total_duration > 0
+                        else 0,
+                    }
+                )
                 critical_duration += duration
 
                 # Include stages that make up ~80% of execution time
@@ -1374,18 +1446,18 @@ def get_stage_dependency_from_sql_plan(
             "stages_analyzed": len(relevant_stages),
             "jobs_analyzed": len(relevant_jobs),
             "html_dag_available": html_dag_data is not None,
-            "dag_parsing_successful": bool(dag_based_dependencies)
+            "dag_parsing_successful": bool(dag_based_dependencies),
         }
 
-        if html_dag_data and html_dag_data.get('parsing_error'):
-            analysis_metadata["dag_parsing_error"] = html_dag_data['parsing_error']
+        if html_dag_data and html_dag_data.get("parsing_error"):
+            analysis_metadata["dag_parsing_error"] = html_dag_data["parsing_error"]
 
         if html_dag_data:
             analysis_metadata["html_data_keys"] = list(html_dag_data.keys())
 
         return stage_dependencies
 
-    except Exception as e:
+    except Exception:
         return {}
 
 
@@ -1671,11 +1743,10 @@ def get_resource_usage_timeline(
 
 # SparkInsight Analysis Tools
 
+
 @mcp.tool()
 def analyze_auto_scaling(
-    app_id: str,
-    server: Optional[str] = None,
-    target_stage_duration_minutes: int = 2
+    app_id: str, server: Optional[str] = None, target_stage_duration_minutes: int = 2
 ) -> Dict[str, Any]:
     """
     Analyze application workload and provide auto-scaling recommendations.
@@ -1711,9 +1782,12 @@ def analyze_auto_scaling(
 
     # Filter stages that were running in the first 2 minutes
     initial_stages = [
-        s for s in stages
-        if s.submission_time and s.completion_time and
-        s.submission_time <= initial_window and s.completion_time >= initial_window
+        s
+        for s in stages
+        if s.submission_time
+        and s.completion_time
+        and s.submission_time <= initial_window
+        and s.completion_time >= initial_window
     ]
 
     # Calculate recommended initial executors
@@ -1721,10 +1795,9 @@ def analyze_auto_scaling(
     for stage in initial_stages:
         if stage.executor_run_time and stage.num_tasks:
             # Estimate executors needed to complete stage in target duration
-            executors_needed = min(
-                stage.executor_run_time / target_duration_ms,
-                stage.num_tasks
-            ) / 4  # Conservative scaling factor
+            executors_needed = (
+                min(stage.executor_run_time / target_duration_ms, stage.num_tasks) / 4
+            )  # Conservative scaling factor
             initial_executor_demand += executors_needed
 
     recommended_initial = max(2, int(initial_executor_demand))
@@ -1733,11 +1806,15 @@ def analyze_auto_scaling(
     # Create timeline of executor demand
     stage_events = []
     for stage in stages:
-        if stage.submission_time and stage.completion_time and stage.executor_run_time and stage.num_tasks:
-            executors_needed = int(min(
-                stage.executor_run_time / target_duration_ms,
-                stage.num_tasks
-            ) / 4)
+        if (
+            stage.submission_time
+            and stage.completion_time
+            and stage.executor_run_time
+            and stage.num_tasks
+        ):
+            executors_needed = int(
+                min(stage.executor_run_time / target_duration_ms, stage.num_tasks) / 4
+            )
             stage_events.append((stage.submission_time, executors_needed))
             stage_events.append((stage.completion_time, -executors_needed))
 
@@ -1753,40 +1830,50 @@ def analyze_auto_scaling(
     recommended_max = max(recommended_initial, max_demand)
 
     # Get current configuration
-    spark_props = {k: v for k, v in environment.spark_properties} if environment.spark_properties else {}
-    current_initial = spark_props.get("spark.dynamicAllocation.initialExecutors", "Not set")
+    spark_props = (
+        {k: v for k, v in environment.spark_properties}
+        if environment.spark_properties
+        else {}
+    )
+    current_initial = spark_props.get(
+        "spark.dynamicAllocation.initialExecutors", "Not set"
+    )
     current_max = spark_props.get("spark.dynamicAllocation.maxExecutors", "Not set")
 
     # Generate recommendations as a list to match other analysis functions
     recommendations = []
 
     if not current_initial.isdigit() or recommended_initial != int(current_initial):
-        recommendations.append({
-            "type": "auto_scaling",
-            "priority": "medium",
-            "issue": f"Initial executors could be optimized (current: {current_initial})",
-            "suggestion": f"Set spark.dynamicAllocation.initialExecutors to {recommended_initial}",
-            "configuration": {
-                "parameter": "spark.dynamicAllocation.initialExecutors",
-                "current_value": current_initial,
-                "recommended_value": str(recommended_initial),
-                "description": "Based on stages running in first 2 minutes"
+        recommendations.append(
+            {
+                "type": "auto_scaling",
+                "priority": "medium",
+                "issue": f"Initial executors could be optimized (current: {current_initial})",
+                "suggestion": f"Set spark.dynamicAllocation.initialExecutors to {recommended_initial}",
+                "configuration": {
+                    "parameter": "spark.dynamicAllocation.initialExecutors",
+                    "current_value": current_initial,
+                    "recommended_value": str(recommended_initial),
+                    "description": "Based on stages running in first 2 minutes",
+                },
             }
-        })
+        )
 
     if not current_max.isdigit() or recommended_max != int(current_max):
-        recommendations.append({
-            "type": "auto_scaling",
-            "priority": "medium",
-            "issue": f"Max executors could be optimized (current: {current_max})",
-            "suggestion": f"Set spark.dynamicAllocation.maxExecutors to {recommended_max}",
-            "configuration": {
-                "parameter": "spark.dynamicAllocation.maxExecutors",
-                "current_value": current_max,
-                "recommended_value": str(recommended_max),
-                "description": "Based on peak concurrent stage demand"
+        recommendations.append(
+            {
+                "type": "auto_scaling",
+                "priority": "medium",
+                "issue": f"Max executors could be optimized (current: {current_max})",
+                "suggestion": f"Set spark.dynamicAllocation.maxExecutors to {recommended_max}",
+                "configuration": {
+                    "parameter": "spark.dynamicAllocation.maxExecutors",
+                    "current_value": current_max,
+                    "recommended_value": str(recommended_max),
+                    "description": "Based on peak concurrent stage demand",
+                },
             }
-        })
+        )
 
     return {
         "application_id": app_id,
@@ -1802,15 +1889,15 @@ def analyze_auto_scaling(
                 "initial_executors": {
                     "current": current_initial,
                     "recommended": str(recommended_initial),
-                    "description": "Based on stages running in first 2 minutes"
+                    "description": "Based on stages running in first 2 minutes",
                 },
                 "max_executors": {
                     "current": current_max,
                     "recommended": str(recommended_max),
-                    "description": "Based on peak concurrent stage demand"
-                }
-            }
-        }
+                    "description": "Based on peak concurrent stage demand",
+                },
+            },
+        },
     }
 
 
@@ -1819,7 +1906,7 @@ def analyze_shuffle_skew(
     app_id: str,
     server: Optional[str] = None,
     shuffle_threshold_gb: int = 10,
-    skew_ratio_threshold: float = 2.0
+    skew_ratio_threshold: float = 2.0,
 ) -> Dict[str, Any]:
     """
     Analyze shuffle operations to identify data skew issues.
@@ -1859,18 +1946,23 @@ def analyze_shuffle_skew(
 
     for stage in stages:
         # Check if stage has significant shuffle write
-        if not stage.shuffle_write_bytes or stage.shuffle_write_bytes < shuffle_threshold_bytes:
+        if (
+            not stage.shuffle_write_bytes
+            or stage.shuffle_write_bytes < shuffle_threshold_bytes
+        ):
             continue
 
         stage_skew_info = {
             "stage_id": stage.stage_id,
             "attempt_id": stage.attempt_id,
             "name": stage.name,
-            "total_shuffle_write_gb": round(stage.shuffle_write_bytes / (1024 * 1024 * 1024), 2),
+            "total_shuffle_write_gb": round(
+                stage.shuffle_write_bytes / (1024 * 1024 * 1024), 2
+            ),
             "task_count": stage.num_tasks,
             "failed_tasks": stage.num_failed_tasks,
             "task_skew": None,
-            "executor_skew": None
+            "executor_skew": None,
         }
 
         # Check task-level skew
@@ -1890,14 +1982,17 @@ def analyze_shuffle_skew(
                             "skew_ratio": round(task_skew_ratio, 2),
                             "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
                             "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
-                            "is_skewed": task_skew_ratio > skew_ratio_threshold
+                            "is_skewed": task_skew_ratio > skew_ratio_threshold,
                         }
         except Exception:
             # Skip task-level analysis if it fails
             pass
 
         # Check executor-level skew using stage.executor_metrics_distributions
-        if stage.executor_metrics_distributions and stage.executor_metrics_distributions.shuffle_write:
+        if (
+            stage.executor_metrics_distributions
+            and stage.executor_metrics_distributions.shuffle_write
+        ):
             executor_quantiles = stage.executor_metrics_distributions.shuffle_write
             if len(executor_quantiles) >= 5:
                 exec_median = executor_quantiles[2]  # 50th percentile
@@ -1907,19 +2002,36 @@ def analyze_shuffle_skew(
                     exec_skew_ratio = exec_max / exec_median
                     stage_skew_info["executor_skew"] = {
                         "skew_ratio": round(exec_skew_ratio, 2),
-                        "max_executor_shuffle_write_mb": round(exec_max / (1024 * 1024), 2),
-                        "median_executor_shuffle_write_mb": round(exec_median / (1024 * 1024), 2),
-                        "is_skewed": exec_skew_ratio > skew_ratio_threshold
+                        "max_executor_shuffle_write_mb": round(
+                            exec_max / (1024 * 1024), 2
+                        ),
+                        "median_executor_shuffle_write_mb": round(
+                            exec_median / (1024 * 1024), 2
+                        ),
+                        "is_skewed": exec_skew_ratio > skew_ratio_threshold,
                     }
 
         # Add stage to skewed list if either task or executor skew is detected
-        is_task_skewed = stage_skew_info["task_skew"] and stage_skew_info["task_skew"]["is_skewed"]
-        is_executor_skewed = stage_skew_info["executor_skew"] and stage_skew_info["executor_skew"]["is_skewed"]
+        is_task_skewed = (
+            stage_skew_info["task_skew"] and stage_skew_info["task_skew"]["is_skewed"]
+        )
+        is_executor_skewed = (
+            stage_skew_info["executor_skew"]
+            and stage_skew_info["executor_skew"]["is_skewed"]
+        )
 
         if is_task_skewed or is_executor_skewed:
             # Calculate overall skew ratio for sorting (use higher of the two)
-            task_ratio = stage_skew_info["task_skew"]["skew_ratio"] if stage_skew_info["task_skew"] else 0
-            exec_ratio = stage_skew_info["executor_skew"]["skew_ratio"] if stage_skew_info["executor_skew"] else 0
+            task_ratio = (
+                stage_skew_info["task_skew"]["skew_ratio"]
+                if stage_skew_info["task_skew"]
+                else 0
+            )
+            exec_ratio = (
+                stage_skew_info["executor_skew"]["skew_ratio"]
+                if stage_skew_info["executor_skew"]
+                else 0
+            )
             stage_skew_info["max_skew_ratio"] = max(task_ratio, exec_ratio)
             skewed_stages.append(stage_skew_info)
 
@@ -1928,58 +2040,85 @@ def analyze_shuffle_skew(
 
     recommendations = []
     if skewed_stages:
-        task_skewed_count = sum(1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"])
-        executor_skewed_count = sum(1 for s in skewed_stages if s["executor_skew"] and s["executor_skew"]["is_skewed"])
+        task_skewed_count = sum(
+            1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]
+        )
+        executor_skewed_count = sum(
+            1
+            for s in skewed_stages
+            if s["executor_skew"] and s["executor_skew"]["is_skewed"]
+        )
 
         if task_skewed_count > 0:
-            recommendations.append({
-                "type": "data_partitioning",
-                "priority": "high",
-                "issue": f"Found {task_skewed_count} stages with task-level shuffle skew",
-                "suggestion": "Consider repartitioning data by key distribution or using salting techniques"
-            })
+            recommendations.append(
+                {
+                    "type": "data_partitioning",
+                    "priority": "high",
+                    "issue": f"Found {task_skewed_count} stages with task-level shuffle skew",
+                    "suggestion": "Consider repartitioning data by key distribution or using salting techniques",
+                }
+            )
 
         if executor_skewed_count > 0:
-            recommendations.append({
-                "type": "resource_allocation",
-                "priority": "high",
-                "issue": f"Found {executor_skewed_count} stages with executor-level shuffle skew",
-                "suggestion": "Check executor resource allocation, network issues, or host-specific problems"
-            })
+            recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "high",
+                    "issue": f"Found {executor_skewed_count} stages with executor-level shuffle skew",
+                    "suggestion": "Check executor resource allocation, network issues, or host-specific problems",
+                }
+            )
 
         max_skew = max(s["max_skew_ratio"] for s in skewed_stages)
         if max_skew > 10:
-            recommendations.append({
-                "type": "performance",
-                "priority": "critical",
-                "issue": f"Extreme skew detected (ratio: {max_skew})",
-                "suggestion": "Investigate data distribution and consider custom partitioning strategies"
-            })
+            recommendations.append(
+                {
+                    "type": "performance",
+                    "priority": "critical",
+                    "issue": f"Extreme skew detected (ratio: {max_skew})",
+                    "suggestion": "Investigate data distribution and consider custom partitioning strategies",
+                }
+            )
 
     return {
         "application_id": app_id,
         "analysis_type": "Shuffle Skew Analysis",
         "parameters": {
             "shuffle_threshold_gb": shuffle_threshold_gb,
-            "skew_ratio_threshold": skew_ratio_threshold
+            "skew_ratio_threshold": skew_ratio_threshold,
         },
         "skewed_stages": skewed_stages,
         "summary": {
-            "total_stages_analyzed": len([s for s in stages if s.shuffle_write_bytes and s.shuffle_write_bytes >= shuffle_threshold_bytes]),
+            "total_stages_analyzed": len(
+                [
+                    s
+                    for s in stages
+                    if s.shuffle_write_bytes
+                    and s.shuffle_write_bytes >= shuffle_threshold_bytes
+                ]
+            ),
             "skewed_stages_count": len(skewed_stages),
-            "task_skewed_count": sum(1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]),
-            "executor_skewed_count": sum(1 for s in skewed_stages if s["executor_skew"] and s["executor_skew"]["is_skewed"]),
-            "max_skew_ratio": max([s["max_skew_ratio"] for s in skewed_stages]) if skewed_stages else 0
+            "task_skewed_count": sum(
+                1
+                for s in skewed_stages
+                if s["task_skew"] and s["task_skew"]["is_skewed"]
+            ),
+            "executor_skewed_count": sum(
+                1
+                for s in skewed_stages
+                if s["executor_skew"] and s["executor_skew"]["is_skewed"]
+            ),
+            "max_skew_ratio": max([s["max_skew_ratio"] for s in skewed_stages])
+            if skewed_stages
+            else 0,
         },
-        "recommendations": recommendations
+        "recommendations": recommendations,
     }
 
 
 @mcp.tool()
 def analyze_failed_tasks(
-    app_id: str,
-    server: Optional[str] = None,
-    failure_threshold: int = 1
+    app_id: str, server: Optional[str] = None, failure_threshold: int = 1
 ) -> Dict[str, Any]:
     """
     Analyze failed tasks to identify patterns and root causes.
@@ -2007,30 +2146,41 @@ def analyze_failed_tasks(
 
     for stage in stages:
         if stage.num_failed_tasks and stage.num_failed_tasks >= failure_threshold:
-            failed_stages.append({
-                "stage_id": stage.stage_id,
-                "attempt_id": stage.attempt_id,
-                "name": stage.name,
-                "failed_tasks": stage.num_failed_tasks,
-                "total_tasks": stage.num_tasks,
-                "failure_rate": round(stage.num_failed_tasks / max(stage.num_tasks, 1) * 100, 2),
-                "status": stage.status
-            })
+            failed_stages.append(
+                {
+                    "stage_id": stage.stage_id,
+                    "attempt_id": stage.attempt_id,
+                    "name": stage.name,
+                    "failed_tasks": stage.num_failed_tasks,
+                    "total_tasks": stage.num_tasks,
+                    "failure_rate": round(
+                        stage.num_failed_tasks / max(stage.num_tasks, 1) * 100, 2
+                    ),
+                    "status": stage.status,
+                }
+            )
             total_failed_tasks += stage.num_failed_tasks
 
     # Analyze executor failures
     problematic_executors = []
     for executor in executors:
         if executor.failed_tasks and executor.failed_tasks >= failure_threshold:
-            problematic_executors.append({
-                "executor_id": executor.id,
-                "host": executor.host,
-                "failed_tasks": executor.failed_tasks,
-                "completed_tasks": executor.completed_tasks,
-                "failure_rate": round(executor.failed_tasks / max(executor.failed_tasks + executor.completed_tasks, 1) * 100, 2),
-                "remove_reason": executor.remove_reason,
-                "is_active": executor.is_active
-            })
+            problematic_executors.append(
+                {
+                    "executor_id": executor.id,
+                    "host": executor.host,
+                    "failed_tasks": executor.failed_tasks,
+                    "completed_tasks": executor.completed_tasks,
+                    "failure_rate": round(
+                        executor.failed_tasks
+                        / max(executor.failed_tasks + executor.completed_tasks, 1)
+                        * 100,
+                        2,
+                    ),
+                    "remove_reason": executor.remove_reason,
+                    "is_active": executor.is_active,
+                }
+            )
 
     # Sort by failure counts
     failed_stages.sort(key=lambda x: x["failed_tasks"], reverse=True)
@@ -2041,12 +2191,14 @@ def analyze_failed_tasks(
 
     if failed_stages:
         avg_failure_rate = statistics.mean([s["failure_rate"] for s in failed_stages])
-        recommendations.append({
-            "type": "reliability",
-            "priority": "high" if avg_failure_rate > 10 else "medium",
-            "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
-            "suggestion": "Investigate task failure logs and consider increasing task retry settings"
-        })
+        recommendations.append(
+            {
+                "type": "reliability",
+                "priority": "high" if avg_failure_rate > 10 else "medium",
+                "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
+                "suggestion": "Investigate task failure logs and consider increasing task retry settings",
+            }
+        )
 
     if problematic_executors:
         # Check for host-specific issues
@@ -2057,36 +2209,38 @@ def analyze_failed_tasks(
 
         max_host_failures = max(host_failures.values()) if host_failures else 0
         if max_host_failures > total_failed_tasks * 0.5:
-            recommendations.append({
-                "type": "infrastructure",
-                "priority": "high",
-                "issue": "High concentration of failures on specific hosts",
-                "suggestion": "Check infrastructure health and consider blacklisting problematic nodes"
-            })
+            recommendations.append(
+                {
+                    "type": "infrastructure",
+                    "priority": "high",
+                    "issue": "High concentration of failures on specific hosts",
+                    "suggestion": "Check infrastructure health and consider blacklisting problematic nodes",
+                }
+            )
 
     return {
         "application_id": app_id,
         "analysis_type": "Failed Task Analysis",
-        "parameters": {
-            "failure_threshold": failure_threshold
-        },
+        "parameters": {"failure_threshold": failure_threshold},
         "failed_stages": failed_stages,
         "problematic_executors": problematic_executors,
         "summary": {
             "total_failed_tasks": total_failed_tasks,
             "stages_with_failures": len(failed_stages),
             "executors_with_failures": len(problematic_executors),
-            "overall_failure_impact": "high" if total_failed_tasks > 100 else "medium" if total_failed_tasks > 10 else "low"
+            "overall_failure_impact": "high"
+            if total_failed_tasks > 100
+            else "medium"
+            if total_failed_tasks > 10
+            else "low",
         },
-        "recommendations": recommendations
+        "recommendations": recommendations,
     }
 
 
 @mcp.tool()
 def analyze_executor_utilization(
-    app_id: str,
-    server: Optional[str] = None,
-    interval_minutes: int = 1
+    app_id: str, server: Optional[str] = None, interval_minutes: int = 1
 ) -> Dict[str, Any]:
     """
     Analyze executor utilization patterns over time.
@@ -2115,7 +2269,10 @@ def analyze_executor_utilization(
     end_time = app.attempts[0].end_time
 
     if not start_time or not end_time:
-        return {"error": "Application start/end times not available", "application_id": app_id}
+        return {
+            "error": "Application start/end times not available",
+            "application_id": app_id,
+        }
 
     # Create time intervals
     duration = end_time - start_time
@@ -2140,13 +2297,15 @@ def analyze_executor_utilization(
                 if executor.max_memory:
                     total_memory_mb += executor.max_memory / (1024 * 1024)
 
-        intervals.append({
-            "minute": minute,
-            "timestamp": interval_time.isoformat(),
-            "active_executors": active_executors,
-            "total_cores": total_cores,
-            "total_memory_mb": int(total_memory_mb)
-        })
+        intervals.append(
+            {
+                "minute": minute,
+                "timestamp": interval_time.isoformat(),
+                "active_executors": active_executors,
+                "total_cores": total_cores,
+                "total_memory_mb": int(total_memory_mb),
+            }
+        )
 
     # Merge consecutive intervals with same executor count
     merged_intervals = []
@@ -2159,13 +2318,19 @@ def analyze_executor_utilization(
         for i in range(1, len(intervals)):
             if intervals[i]["active_executors"] != current_count:
                 # End current interval
-                time_range = f"{current_start}" if current_start == intervals[i-1]["minute"] else f"{current_start}-{intervals[i-1]['minute']}"
-                merged_intervals.append({
-                    "time_range_minutes": time_range,
-                    "active_executors": current_count,
-                    "total_cores": current_cores,
-                    "total_memory_mb": current_memory
-                })
+                time_range = (
+                    f"{current_start}"
+                    if current_start == intervals[i - 1]["minute"]
+                    else f"{current_start}-{intervals[i - 1]['minute']}"
+                )
+                merged_intervals.append(
+                    {
+                        "time_range_minutes": time_range,
+                        "active_executors": current_count,
+                        "total_cores": current_cores,
+                        "total_memory_mb": current_memory,
+                    }
+                )
 
                 # Start new interval
                 current_start = intervals[i]["minute"]
@@ -2174,13 +2339,19 @@ def analyze_executor_utilization(
                 current_memory = intervals[i]["total_memory_mb"]
 
         # Add final interval
-        time_range = f"{current_start}" if current_start == intervals[-1]["minute"] else f"{current_start}-{intervals[-1]['minute']}"
-        merged_intervals.append({
-            "time_range_minutes": time_range,
-            "active_executors": current_count,
-            "total_cores": current_cores,
-            "total_memory_mb": current_memory
-        })
+        time_range = (
+            f"{current_start}"
+            if current_start == intervals[-1]["minute"]
+            else f"{current_start}-{intervals[-1]['minute']}"
+        )
+        merged_intervals.append(
+            {
+                "time_range_minutes": time_range,
+                "active_executors": current_count,
+                "total_cores": current_cores,
+                "total_memory_mb": current_memory,
+            }
+        )
 
     # Calculate utilization metrics
     executor_counts = [interval["active_executors"] for interval in intervals]
@@ -2190,24 +2361,30 @@ def analyze_executor_utilization(
 
     # Calculate efficiency metrics
     total_executor_minutes = sum(interval["active_executors"] for interval in intervals)
-    utilization_efficiency = (avg_executors / peak_executors * 100) if peak_executors > 0 else 0
+    utilization_efficiency = (
+        (avg_executors / peak_executors * 100) if peak_executors > 0 else 0
+    )
 
     recommendations = []
     if utilization_efficiency < 70:
-        recommendations.append({
-            "type": "resource_efficiency",
-            "priority": "medium",
-            "issue": f"Low executor utilization efficiency ({utilization_efficiency:.1f}%)",
-            "suggestion": "Consider optimizing dynamic allocation settings or job scheduling"
-        })
+        recommendations.append(
+            {
+                "type": "resource_efficiency",
+                "priority": "medium",
+                "issue": f"Low executor utilization efficiency ({utilization_efficiency:.1f}%)",
+                "suggestion": "Consider optimizing dynamic allocation settings or job scheduling",
+            }
+        )
 
     if peak_executors > avg_executors * 2:
-        recommendations.append({
-            "type": "resource_planning",
-            "priority": "medium",
-            "issue": "High variance in executor demand",
-            "suggestion": "Review workload patterns and consider more aggressive scaling policies"
-        })
+        recommendations.append(
+            {
+                "type": "resource_planning",
+                "priority": "medium",
+                "issue": "High variance in executor demand",
+                "suggestion": "Review workload patterns and consider more aggressive scaling policies",
+            }
+        )
 
     return {
         "application_id": app_id,
@@ -2219,9 +2396,9 @@ def analyze_executor_utilization(
             "minimum_executors": min_executors,
             "total_duration_minutes": total_minutes,
             "utilization_efficiency_percent": round(utilization_efficiency, 1),
-            "total_executor_minutes": total_executor_minutes
+            "total_executor_minutes": total_executor_minutes,
         },
-        "recommendations": recommendations
+        "recommendations": recommendations,
     }
 
 
@@ -2232,7 +2409,7 @@ def get_application_insights(
     include_auto_scaling: bool = True,
     include_shuffle_skew: bool = True,
     include_failed_tasks: bool = True,
-    include_executor_utilization: bool = True
+    include_executor_utilization: bool = True,
 ) -> Dict[str, Any]:
     """
     Get comprehensive SparkInsight-style analysis for an application.
@@ -2263,7 +2440,7 @@ def get_application_insights(
         "application_name": app.name,
         "analysis_timestamp": datetime.now().isoformat(),
         "analysis_type": "Comprehensive SparkInsight Analysis",
-        "analyses": {}
+        "analyses": {},
     }
 
     # Run requested analyses
@@ -2287,7 +2464,9 @@ def get_application_insights(
 
     if include_executor_utilization:
         try:
-            insights["analyses"]["executor_utilization"] = analyze_executor_utilization(app_id, server)
+            insights["analyses"]["executor_utilization"] = analyze_executor_utilization(
+                app_id, server
+            )
         except Exception as e:
             insights["analyses"]["executor_utilization"] = {"error": str(e)}
 
@@ -2319,26 +2498,41 @@ def get_application_insights(
                         rec_copy["recommendation_type"] = key
                         rec_copy.setdefault("type", "configuration")
                         rec_copy.setdefault("priority", "medium")
-                        rec_copy.setdefault("issue", f"Configuration optimization for {key}")
-                        rec_copy.setdefault("suggestion", f"Update {key} configuration based on analysis")
+                        rec_copy.setdefault(
+                            "issue", f"Configuration optimization for {key}"
+                        )
+                        rec_copy.setdefault(
+                            "suggestion",
+                            f"Update {key} configuration based on analysis",
+                        )
                         all_recommendations.append(rec_copy)
                         if rec_copy.get("priority") == "critical":
                             critical_issues.append(rec_copy)
             else:
                 # Handle unexpected formats gracefully
-# Note: Unexpected recommendations format will be skipped gracefully
+                # Note: Unexpected recommendations format will be skipped gracefully
                 pass
 
     # Sort recommendations by priority
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    all_recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
+    all_recommendations.sort(
+        key=lambda x: priority_order.get(x.get("priority", "low"), 3)
+    )
 
     insights["summary"] = {
-        "total_analyses_run": len([a for a in insights["analyses"].values() if "error" not in a]),
+        "total_analyses_run": len(
+            [a for a in insights["analyses"].values() if "error" not in a]
+        ),
         "total_recommendations": len(all_recommendations),
         "critical_issues": len(critical_issues),
-        "high_priority_recommendations": len([r for r in all_recommendations if r.get("priority") == "high"]),
-        "overall_health": "critical" if critical_issues else "good" if len(all_recommendations) < 3 else "needs_attention"
+        "high_priority_recommendations": len(
+            [r for r in all_recommendations if r.get("priority") == "high"]
+        ),
+        "overall_health": "critical"
+        if critical_issues
+        else "good"
+        if len(all_recommendations) < 3
+        else "needs_attention",
     }
 
     insights["recommendations"] = all_recommendations
@@ -2360,7 +2554,11 @@ def _calculate_stage_similarity(stage1_name: str, stage2_name: str) -> float:
     return SequenceMatcher(None, stage1_name.lower(), stage2_name.lower()).ratio()
 
 
-def _find_matching_stages(stages1: List[StageData], stages2: List[StageData], similarity_threshold: float = 0.6) -> List[Tuple[StageData, StageData, float]]:
+def _find_matching_stages(
+    stages1: List[StageData],
+    stages2: List[StageData],
+    similarity_threshold: float = 0.6,
+) -> List[Tuple[StageData, StageData, float]]:
     """
     Find matching stages between two applications based on stage name similarity.
 
@@ -2437,7 +2635,7 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
             "total_input_bytes": 0,
             "total_output_bytes": 0,
             "total_tasks": 0,
-            "total_failed_tasks": 0
+            "total_failed_tasks": 0,
         }
 
     total_stage_duration = 0
@@ -2457,13 +2655,15 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
         "total_input_bytes": 0,
         "total_output_bytes": 0,
         "total_tasks": 0,
-        "total_failed_tasks": 0
+        "total_failed_tasks": 0,
     }
 
     for stage in stages:
         # Calculate stage duration
         if stage.completion_time and stage.submission_time:
-            stage_duration = (stage.completion_time - stage.submission_time).total_seconds()
+            stage_duration = (
+                stage.completion_time - stage.submission_time
+            ).total_seconds()
             total_stage_duration += stage_duration
             completed_stages += 1
 
@@ -2483,31 +2683,44 @@ def _calculate_aggregated_stage_metrics(stages: List[StageData]) -> Dict[str, An
         metrics["total_failed_tasks"] += stage.num_failed_tasks or 0
 
         # Aggregate shuffle timing metrics from task distributions
-        if hasattr(stage, 'task_metrics_distributions') and stage.task_metrics_distributions:
+        if (
+            hasattr(stage, "task_metrics_distributions")
+            and stage.task_metrics_distributions
+        ):
             dist = stage.task_metrics_distributions
 
             # Aggregate fetch wait time (use median values to avoid outlier skew)
-            if (dist.shuffle_read_metrics and
-                dist.shuffle_read_metrics.fetch_wait_time and
-                len(dist.shuffle_read_metrics.fetch_wait_time) >= 5):
+            if (
+                dist.shuffle_read_metrics
+                and dist.shuffle_read_metrics.fetch_wait_time
+                and len(dist.shuffle_read_metrics.fetch_wait_time) >= 5
+            ):
                 # Use median value (index 2) multiplied by number of tasks for approximation
                 median_fetch_wait = dist.shuffle_read_metrics.fetch_wait_time[2]
-                metrics["total_shuffle_fetch_wait_time"] += median_fetch_wait * (stage.num_tasks or 1)
+                metrics["total_shuffle_fetch_wait_time"] += median_fetch_wait * (
+                    stage.num_tasks or 1
+                )
 
             # Aggregate remote requests duration (use median values)
-            if (dist.shuffle_read_metrics and
-                dist.shuffle_read_metrics.remote_reqs_duration and
-                len(dist.shuffle_read_metrics.remote_reqs_duration) >= 5):
+            if (
+                dist.shuffle_read_metrics
+                and dist.shuffle_read_metrics.remote_reqs_duration
+                and len(dist.shuffle_read_metrics.remote_reqs_duration) >= 5
+            ):
                 # Use median value (index 2) multiplied by number of tasks for approximation
                 median_remote_reqs = dist.shuffle_read_metrics.remote_reqs_duration[2]
-                metrics["total_shuffle_remote_reqs_duration"] += median_remote_reqs * (stage.num_tasks or 1)
+                metrics["total_shuffle_remote_reqs_duration"] += median_remote_reqs * (
+                    stage.num_tasks or 1
+                )
 
-    metrics.update({
-        "total_stage_duration": total_stage_duration,
-        "completed_stages": completed_stages,
-        "failed_stages": failed_stages,
-        "avg_stage_duration": total_stage_duration / max(completed_stages, 1)
-    })
+    metrics.update(
+        {
+            "total_stage_duration": total_stage_duration,
+            "completed_stages": completed_stages,
+            "failed_stages": failed_stages,
+            "avg_stage_duration": total_stage_duration / max(completed_stages, 1),
+        }
+    )
 
     return metrics
 
@@ -2526,16 +2739,20 @@ def _is_auto_generated_config(key: str, value: str) -> bool:
     import re
 
     # App identifiers (except user-set app names without timestamps/UUIDs)
-    if key.startswith('spark.app.'):
-        if key == 'spark.app.name':
+    if key.startswith("spark.app."):
+        if key == "spark.app.name":
             # Filter app names with timestamps, UUIDs, or other auto-generated patterns
-            timestamp_pattern = r'\d{4}-\d{2}-\d{2}|\d{13,}|\d{10}'
-            uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-            random_suffix = r'[_-]\d+$|[_-][0-9a-f]+$'
+            timestamp_pattern = r"\d{4}-\d{2}-\d{2}|\d{13,}|\d{10}"
+            uuid_pattern = (
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+            )
+            random_suffix = r"[_-]\d+$|[_-][0-9a-f]+$"
 
-            if (re.search(timestamp_pattern, value, re.IGNORECASE) or
-                re.search(uuid_pattern, value, re.IGNORECASE) or
-                re.search(random_suffix, value, re.IGNORECASE)):
+            if (
+                re.search(timestamp_pattern, value, re.IGNORECASE)
+                or re.search(uuid_pattern, value, re.IGNORECASE)
+                or re.search(random_suffix, value, re.IGNORECASE)
+            ):
                 return True
         else:
             # All other spark.app.* configs are typically auto-generated
@@ -2543,31 +2760,37 @@ def _is_auto_generated_config(key: str, value: str) -> bool:
 
     # Driver network configurations
     network_configs = [
-        'spark.driver.host', 'spark.driver.bindAddress',
-        'spark.driver.blockManager.port', 'spark.ui.port',
-        'spark.blockManager.port'
+        "spark.driver.host",
+        "spark.driver.bindAddress",
+        "spark.driver.blockManager.port",
+        "spark.ui.port",
+        "spark.blockManager.port",
     ]
     if key in network_configs:
         return True
 
     # Port configurations (any config ending with .port)
-    if key.endswith('.port'):
+    if key.endswith(".port"):
         return True
 
     # Session and execution identifiers
     session_configs = [
-        'spark.sql.session.uuid', 'spark.sql.execution.id',
-        'spark.sql.streaming.queryId'
+        "spark.sql.session.uuid",
+        "spark.sql.execution.id",
+        "spark.sql.streaming.queryId",
     ]
     if key in session_configs:
         return True
 
     # System-specific paths with machine identifiers
-    if any(key.endswith(pattern) for pattern in ['dir', 'path', 'home']) and value:
+    if any(key.endswith(pattern) for pattern in ["dir", "path", "home"]) and value:
         # Check for machine-specific patterns in paths
         machine_patterns = [
-            r'/tmp/.*/\d+', r'/var/folders/.*', r'C:\\Users\\.*\\AppData',
-            r'/home/[^/]+/', r'/Users/[^/]+/'
+            r"/tmp/.*/\d+",
+            r"/var/folders/.*",
+            r"C:\\Users\\.*\\AppData",
+            r"/home/[^/]+/",
+            r"/Users/[^/]+/",
         ]
         if any(re.search(pattern, value) for pattern in machine_patterns):
             return True
@@ -2575,21 +2798,27 @@ def _is_auto_generated_config(key: str, value: str) -> bool:
     # Values containing timestamps, UUIDs, or long numeric identifiers
     if value:
         # Timestamp patterns (epoch, ISO dates, etc.)
-        if re.search(r'\d{13,}|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}', value):
+        if re.search(r"\d{13,}|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", value):
             return True
 
         # UUID patterns
-        if re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value, re.IGNORECASE):
+        if re.search(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            value,
+            re.IGNORECASE,
+        ):
             return True
 
         # Long random identifiers (more than 8 consecutive alphanumeric chars)
-        if re.search(r'[0-9a-f]{12,}', value, re.IGNORECASE):
+        if re.search(r"[0-9a-f]{12,}", value, re.IGNORECASE):
             return True
 
     return False
 
 
-def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_generated: bool = True) -> Dict[str, Any]:
+def _compare_environments(
+    client, app_id1: str, app_id2: str, filter_auto_generated: bool = True
+) -> Dict[str, Any]:
     """
     Compare Spark environment configurations between two applications.
     Extracted from compare_job_environments with performance impact analysis added.
@@ -2610,20 +2839,31 @@ def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_genera
 
     # Memory-related configs
     memory_configs = [
-        "spark.executor.memory", "spark.executor.memoryFraction", "spark.storage.memoryFraction",
-        "spark.shuffle.memoryFraction", "spark.driver.memory", "spark.driver.maxResultSize"
+        "spark.executor.memory",
+        "spark.executor.memoryFraction",
+        "spark.storage.memoryFraction",
+        "spark.shuffle.memoryFraction",
+        "spark.driver.memory",
+        "spark.driver.maxResultSize",
     ]
 
     # Resource allocation configs
     resource_configs = [
-        "spark.executor.cores", "spark.executor.instances", "spark.dynamicAllocation.enabled",
-        "spark.dynamicAllocation.minExecutors", "spark.dynamicAllocation.maxExecutors"
+        "spark.executor.cores",
+        "spark.executor.instances",
+        "spark.dynamicAllocation.enabled",
+        "spark.dynamicAllocation.minExecutors",
+        "spark.dynamicAllocation.maxExecutors",
     ]
 
     # Performance tuning configs
     performance_configs = [
-        "spark.serializer", "spark.sql.adaptive.enabled", "spark.sql.adaptive.coalescePartitions.enabled",
-        "spark.shuffle.compress", "spark.io.compression.codec", "spark.sql.execution.arrow.pyspark.enabled"
+        "spark.serializer",
+        "spark.sql.adaptive.enabled",
+        "spark.sql.adaptive.coalescePartitions.enabled",
+        "spark.shuffle.compress",
+        "spark.io.compression.codec",
+        "spark.sql.execution.arrow.pyspark.enabled",
     ]
 
     all_perf_configs = memory_configs + resource_configs + performance_configs
@@ -2635,29 +2875,36 @@ def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_genera
         if val1 != val2:
             impact = _analyze_config_performance_impact(config, val1, val2)
             if impact:
-                performance_impact_analysis.append({
-                    "property": config,
-                    "app1_value": val1 or "NOT_SET",
-                    "app2_value": val2 or "NOT_SET",
-                    "category": impact["category"],
-                    "likely_impact": impact["description"],
-                    "severity": impact["severity"]
-                })
+                performance_impact_analysis.append(
+                    {
+                        "property": config,
+                        "app1_value": val1 or "NOT_SET",
+                        "app2_value": val2 or "NOT_SET",
+                        "category": impact["category"],
+                        "likely_impact": impact["description"],
+                        "severity": impact["severity"],
+                    }
+                )
 
     # Apply filtering to spark properties if requested
     if filter_auto_generated:
         different_props = {
             k: {"app1": v, "app2": spark_props2.get(k, "NOT_SET")}
             for k, v in spark_props1.items()
-            if (k in spark_props2 and v != spark_props2[k] and
-                not _is_auto_generated_config(k, str(v)))
+            if (
+                k in spark_props2
+                and v != spark_props2[k]
+                and not _is_auto_generated_config(k, str(v))
+            )
         }
         app1_only_props = {
-            k: v for k, v in spark_props1.items()
+            k: v
+            for k, v in spark_props1.items()
             if k not in spark_props2 and not _is_auto_generated_config(k, str(v))
         }
         app2_only_props = {
-            k: v for k, v in spark_props2.items()
+            k: v
+            for k, v in spark_props2.items()
             if k not in spark_props1 and not _is_auto_generated_config(k, str(v))
         }
     else:
@@ -2679,7 +2926,7 @@ def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_genera
             "app1_only": app1_only_props,
             "app2_only": app2_only_props,
             "performance_impact_analysis": performance_impact_analysis,
-            "filtered_auto_generated": filter_auto_generated
+            "filtered_auto_generated": filter_auto_generated,
         },
         "runtime_environment": {
             "app1": {
@@ -2693,10 +2940,15 @@ def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_genera
                 "scala_version": env2.runtime.scala_version,
             },
             "differences": [
-                {"property": "java_version", "app1": env1.runtime.java_version, "app2": env2.runtime.java_version}
+                {
+                    "property": "java_version",
+                    "app1": env1.runtime.java_version,
+                    "app2": env2.runtime.java_version,
+                }
                 for prop in ["java_version", "scala_version"]
-                if getattr(env1.runtime, prop, None) != getattr(env2.runtime, prop, None)
-            ]
+                if getattr(env1.runtime, prop, None)
+                != getattr(env2.runtime, prop, None)
+            ],
         },
         "system_properties": {
             "key_differences": {
@@ -2705,16 +2957,22 @@ def _compare_environments(client, app_id1: str, app_id2: str, filter_auto_genera
                     "app2": system_props2.get(k, "NOT_SET"),
                 }
                 for k in [
-                    "java.version", "java.runtime.version", "os.name",
-                    "os.version", "user.timezone", "file.encoding"
+                    "java.version",
+                    "java.runtime.version",
+                    "os.name",
+                    "os.version",
+                    "user.timezone",
+                    "file.encoding",
                 ]
                 if system_props1.get(k) != system_props2.get(k)
             }
-        }
+        },
     }
 
 
-def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict[str, str]]:
+def _analyze_config_performance_impact(
+    config: str, val1, val2
+) -> Optional[Dict[str, str]]:
     """Analyze the potential performance impact of configuration differences"""
     if val1 == val2:
         return None
@@ -2725,13 +2983,15 @@ def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict
             return {
                 "category": "memory_allocation",
                 "description": "Different executor memory allocation may affect task performance and spill behavior",
-                "severity": "high" if abs(hash(str(val1)) - hash(str(val2))) > 1000000 else "medium"
+                "severity": "high"
+                if abs(hash(str(val1)) - hash(str(val2))) > 1000000
+                else "medium",
             }
         elif "fraction" in config.lower():
             return {
                 "category": "memory_management",
                 "description": "Memory fraction differences can impact caching and shuffle performance",
-                "severity": "medium"
+                "severity": "medium",
             }
 
     # Resource allocation configurations
@@ -2739,14 +2999,14 @@ def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict
         return {
             "category": "resource_allocation",
             "description": f"Different {config.split('.')[-1]} allocation affects parallelism and resource utilization",
-            "severity": "high"
+            "severity": "high",
         }
 
     elif "dynamicAllocation" in config:
         return {
             "category": "auto_scaling",
             "description": "Dynamic allocation settings impact resource scaling behavior",
-            "severity": "medium"
+            "severity": "medium",
         }
 
     # Performance tuning configurations
@@ -2754,21 +3014,23 @@ def _analyze_config_performance_impact(config: str, val1, val2) -> Optional[Dict
         return {
             "category": "serialization",
             "description": f"Different serializers ({val1} vs {val2}) can significantly impact performance",
-            "severity": "high" if "kryo" in str(val1).lower() or "kryo" in str(val2).lower() else "medium"
+            "severity": "high"
+            if "kryo" in str(val1).lower() or "kryo" in str(val2).lower()
+            else "medium",
         }
 
     elif "adaptive" in config.lower():
         return {
             "category": "query_optimization",
             "description": "Adaptive query execution settings affect SQL optimization",
-            "severity": "medium"
+            "severity": "medium",
         }
 
     elif "compress" in config.lower() or "codec" in config.lower():
         return {
             "category": "compression",
             "description": "Compression settings impact I/O performance and storage efficiency",
-            "severity": "low"
+            "severity": "low",
         }
 
     return None
@@ -2778,19 +3040,23 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
     """Compare SQL execution plans between two Spark applications."""
     try:
         # Get SQL queries for both applications (check if method exists)
-        if not hasattr(client, 'get_sql_list'):
+        if not hasattr(client, "get_sql_list"):
             return {
                 "sql_analysis": "not_supported",
-                "message": "SQL query listing not supported by client"
+                "message": "SQL query listing not supported by client",
             }
 
-        sql_queries1 = client.get_sql_list(app_id1, details=True, plan_description=False)
-        sql_queries2 = client.get_sql_list(app_id2, details=True, plan_description=False)
+        sql_queries1 = client.get_sql_list(
+            app_id1, details=True, plan_description=False
+        )
+        sql_queries2 = client.get_sql_list(
+            app_id2, details=True, plan_description=False
+        )
 
         if not sql_queries1 and not sql_queries2:
             return {
                 "sql_analysis": "no_sql_queries",
-                "message": "No SQL queries found in either application"
+                "message": "No SQL queries found in either application",
             }
 
         # SQL query analysis
@@ -2798,24 +3064,32 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
             "app1": {
                 "query_count": len(sql_queries1),
                 "total_duration_ms": sum(q.duration or 0 for q in sql_queries1),
-                "avg_duration_ms": sum(q.duration or 0 for q in sql_queries1) / max(len(sql_queries1), 1),
+                "avg_duration_ms": sum(q.duration or 0 for q in sql_queries1)
+                / max(len(sql_queries1), 1),
                 "failed_queries": sum(1 for q in sql_queries1 if q.status == "FAILED"),
             },
             "app2": {
                 "query_count": len(sql_queries2),
                 "total_duration_ms": sum(q.duration or 0 for q in sql_queries2),
-                "avg_duration_ms": sum(q.duration or 0 for q in sql_queries2) / max(len(sql_queries2), 1),
+                "avg_duration_ms": sum(q.duration or 0 for q in sql_queries2)
+                / max(len(sql_queries2), 1),
                 "failed_queries": sum(1 for q in sql_queries2 if q.status == "FAILED"),
-            }
+            },
         }
 
         # Calculate comparison ratios
         comparison_ratios = {}
-        if sql_comparison["app1"]["query_count"] > 0 and sql_comparison["app2"]["query_count"] > 0:
+        if (
+            sql_comparison["app1"]["query_count"] > 0
+            and sql_comparison["app2"]["query_count"] > 0
+        ):
             comparison_ratios = {
-                "query_count_ratio": sql_comparison["app2"]["query_count"] / sql_comparison["app1"]["query_count"],
-                "avg_duration_ratio": sql_comparison["app2"]["avg_duration_ms"] / max(sql_comparison["app1"]["avg_duration_ms"], 1),
-                "total_duration_ratio": sql_comparison["app2"]["total_duration_ms"] / max(sql_comparison["app1"]["total_duration_ms"], 1),
+                "query_count_ratio": sql_comparison["app2"]["query_count"]
+                / sql_comparison["app1"]["query_count"],
+                "avg_duration_ratio": sql_comparison["app2"]["avg_duration_ms"]
+                / max(sql_comparison["app1"]["avg_duration_ms"], 1),
+                "total_duration_ratio": sql_comparison["app2"]["total_duration_ms"]
+                / max(sql_comparison["app1"]["total_duration_ms"], 1),
             }
 
         # Execution plan analysis (simplified)
@@ -2823,39 +3097,55 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
             "app1_plan_count": 0,
             "app2_plan_count": 0,
             "common_plan_patterns": [],
-            "plan_differences": []
+            "plan_differences": [],
         }
 
         # Try to get detailed execution plans for top queries
-        top_queries1 = sorted(sql_queries1, key=lambda x: x.duration or 0, reverse=True)[:3]
-        top_queries2 = sorted(sql_queries2, key=lambda x: x.duration or 0, reverse=True)[:3]
+        top_queries1 = sorted(
+            sql_queries1, key=lambda x: x.duration or 0, reverse=True
+        )[:3]
+        top_queries2 = sorted(
+            sql_queries2, key=lambda x: x.duration or 0, reverse=True
+        )[:3]
 
         plan_details1 = []
         plan_details2 = []
 
         for query in top_queries1:
             try:
-                if hasattr(client, 'get_sql_execution'):
-                    plan = client.get_sql_execution(app_id1, query.execution_id, details=True, plan_description=True)
+                if hasattr(client, "get_sql_execution"):
+                    plan = client.get_sql_execution(
+                        app_id1, query.execution_id, details=True, plan_description=True
+                    )
                     if plan:
-                        plan_details1.append({
-                            "execution_id": query.execution_id,
-                            "duration_ms": query.duration,
-                            "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
-                        })
+                        plan_details1.append(
+                            {
+                                "execution_id": query.execution_id,
+                                "duration_ms": query.duration,
+                                "plan_nodes_count": len(plan.get("nodes", []))
+                                if isinstance(plan, dict)
+                                else 0,
+                            }
+                        )
             except:
                 pass
 
         for query in top_queries2:
             try:
-                if hasattr(client, 'get_sql_execution'):
-                    plan = client.get_sql_execution(app_id2, query.execution_id, details=True, plan_description=True)
+                if hasattr(client, "get_sql_execution"):
+                    plan = client.get_sql_execution(
+                        app_id2, query.execution_id, details=True, plan_description=True
+                    )
                     if plan:
-                        plan_details2.append({
-                            "execution_id": query.execution_id,
-                            "duration_ms": query.duration,
-                            "plan_nodes_count": len(plan.get('nodes', [])) if isinstance(plan, dict) else 0
-                        })
+                        plan_details2.append(
+                            {
+                                "execution_id": query.execution_id,
+                                "duration_ms": query.duration,
+                                "plan_nodes_count": len(plan.get("nodes", []))
+                                if isinstance(plan, dict)
+                                else 0,
+                            }
+                        )
             except:
                 pass
 
@@ -2865,24 +3155,34 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
         # SQL performance recommendations
         sql_recommendations = []
 
-        if sql_comparison["app1"]["query_count"] > 0 or sql_comparison["app2"]["query_count"] > 0:
+        if (
+            sql_comparison["app1"]["query_count"] > 0
+            or sql_comparison["app2"]["query_count"] > 0
+        ):
             # Query performance analysis
             if comparison_ratios.get("avg_duration_ratio", 1) > 1.5:
-                sql_recommendations.append({
-                    "type": "sql_performance",
-                    "priority": "high",
-                    "issue": f"App2 SQL queries are {comparison_ratios['avg_duration_ratio']:.1f}x slower on average",
-                    "suggestion": "Review SQL query optimization, indexing strategies, and adaptive query execution settings"
-                })
+                sql_recommendations.append(
+                    {
+                        "type": "sql_performance",
+                        "priority": "high",
+                        "issue": f"App2 SQL queries are {comparison_ratios['avg_duration_ratio']:.1f}x slower on average",
+                        "suggestion": "Review SQL query optimization, indexing strategies, and adaptive query execution settings",
+                    }
+                )
 
             # Query failure analysis
-            if sql_comparison["app1"]["failed_queries"] > 0 or sql_comparison["app2"]["failed_queries"] > 0:
-                sql_recommendations.append({
-                    "type": "sql_reliability",
-                    "priority": "medium",
-                    "issue": f"SQL query failures detected (App1: {sql_comparison['app1']['failed_queries']}, App2: {sql_comparison['app2']['failed_queries']})",
-                    "suggestion": "Investigate failed SQL queries and review data quality or schema issues"
-                })
+            if (
+                sql_comparison["app1"]["failed_queries"] > 0
+                or sql_comparison["app2"]["failed_queries"] > 0
+            ):
+                sql_recommendations.append(
+                    {
+                        "type": "sql_reliability",
+                        "priority": "medium",
+                        "issue": f"SQL query failures detected (App1: {sql_comparison['app1']['failed_queries']}, App2: {sql_comparison['app2']['failed_queries']})",
+                        "suggestion": "Investigate failed SQL queries and review data quality or schema issues",
+                    }
+                )
 
         return {
             "sql_query_comparison": sql_comparison,
@@ -2891,15 +3191,15 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
             "sql_recommendations": sql_recommendations,
             "top_queries_analyzed": {
                 "app1_count": len(plan_details1),
-                "app2_count": len(plan_details2)
-            }
+                "app2_count": len(plan_details2),
+            },
         }
 
     except Exception as e:
         return {
             "sql_analysis": "error",
             "error_message": f"Error analyzing SQL execution plans: {str(e)}",
-            "sql_recommendations": []
+            "sql_recommendations": [],
         }
 
 
@@ -2908,7 +3208,7 @@ def _gather_basic_insights(client, app_id1: str, app_id2: str) -> Dict[str, Any]
     insights = {
         "shuffle_analysis": {},
         "failure_analysis": {},
-        "utilization_analysis": {}
+        "utilization_analysis": {},
     }
 
     try:
@@ -2921,40 +3221,69 @@ def _gather_basic_insights(client, app_id1: str, app_id2: str) -> Dict[str, Any]
                 stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
                 stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
             except Exception as e:
-                insights["shuffle_analysis"]["error"] = f"Could not get stages: {str(e)}"
+                insights["shuffle_analysis"]["error"] = (
+                    f"Could not get stages: {str(e)}"
+                )
                 stages1 = stages2 = []
 
         if stages1 and stages2:
             # Simple shuffle analysis
-            total_shuffle_read1 = sum(getattr(s, 'shuffle_read_bytes', 0) for s in stages1)
-            total_shuffle_read2 = sum(getattr(s, 'shuffle_read_bytes', 0) for s in stages2)
-            total_shuffle_write1 = sum(getattr(s, 'shuffle_write_bytes', 0) for s in stages1)
-            total_shuffle_write2 = sum(getattr(s, 'shuffle_write_bytes', 0) for s in stages2)
+            total_shuffle_read1 = sum(
+                getattr(s, "shuffle_read_bytes", 0) for s in stages1
+            )
+            total_shuffle_read2 = sum(
+                getattr(s, "shuffle_read_bytes", 0) for s in stages2
+            )
+            total_shuffle_write1 = sum(
+                getattr(s, "shuffle_write_bytes", 0) for s in stages1
+            )
+            total_shuffle_write2 = sum(
+                getattr(s, "shuffle_write_bytes", 0) for s in stages2
+            )
 
             insights["shuffle_analysis"] = {
                 "app1": {
                     "total_shuffle_read_gb": total_shuffle_read1 / (1024**3),
                     "total_shuffle_write_gb": total_shuffle_write1 / (1024**3),
-                    "shuffle_stages_count": sum(1 for s in stages1 if getattr(s, 'shuffle_read_bytes', 0) > 0 or getattr(s, 'shuffle_write_bytes', 0) > 0)
+                    "shuffle_stages_count": sum(
+                        1
+                        for s in stages1
+                        if getattr(s, "shuffle_read_bytes", 0) > 0
+                        or getattr(s, "shuffle_write_bytes", 0) > 0
+                    ),
                 },
                 "app2": {
                     "total_shuffle_read_gb": total_shuffle_read2 / (1024**3),
                     "total_shuffle_write_gb": total_shuffle_write2 / (1024**3),
-                    "shuffle_stages_count": sum(1 for s in stages2 if getattr(s, 'shuffle_read_bytes', 0) > 0 or getattr(s, 'shuffle_write_bytes', 0) > 0)
+                    "shuffle_stages_count": sum(
+                        1
+                        for s in stages2
+                        if getattr(s, "shuffle_read_bytes", 0) > 0
+                        or getattr(s, "shuffle_write_bytes", 0) > 0
+                    ),
                 },
                 "comparison": {
-                    "shuffle_read_ratio": total_shuffle_read2 / max(total_shuffle_read1, 1),
-                    "shuffle_write_ratio": total_shuffle_write2 / max(total_shuffle_write1, 1),
-                    "shuffle_volume_ratio": (total_shuffle_read2 + total_shuffle_write2) / max(total_shuffle_read1 + total_shuffle_write1, 1)
-                }
+                    "shuffle_read_ratio": total_shuffle_read2
+                    / max(total_shuffle_read1, 1),
+                    "shuffle_write_ratio": total_shuffle_write2
+                    / max(total_shuffle_write1, 1),
+                    "shuffle_volume_ratio": (total_shuffle_read2 + total_shuffle_write2)
+                    / max(total_shuffle_read1 + total_shuffle_write1, 1),
+                },
             }
 
         # Simple failure analysis using stage data
         try:
-            failed_tasks1 = sum(getattr(s, 'num_failed_tasks', 0) for s in stages1)
-            failed_tasks2 = sum(getattr(s, 'num_failed_tasks', 0) for s in stages2)
-            total_tasks1 = sum(getattr(s, 'num_complete_tasks', 0) + getattr(s, 'num_failed_tasks', 0) for s in stages1)
-            total_tasks2 = sum(getattr(s, 'num_complete_tasks', 0) + getattr(s, 'num_failed_tasks', 0) for s in stages2)
+            failed_tasks1 = sum(getattr(s, "num_failed_tasks", 0) for s in stages1)
+            failed_tasks2 = sum(getattr(s, "num_failed_tasks", 0) for s in stages2)
+            total_tasks1 = sum(
+                getattr(s, "num_complete_tasks", 0) + getattr(s, "num_failed_tasks", 0)
+                for s in stages1
+            )
+            total_tasks2 = sum(
+                getattr(s, "num_complete_tasks", 0) + getattr(s, "num_failed_tasks", 0)
+                for s in stages2
+            )
 
             failure_rate1 = (failed_tasks1 / max(total_tasks1, 1)) * 100
             failure_rate2 = (failed_tasks2 / max(total_tasks2, 1)) * 100
@@ -2963,21 +3292,30 @@ def _gather_basic_insights(client, app_id1: str, app_id2: str) -> Dict[str, Any]
                 "app1": {
                     "total_failed_tasks": failed_tasks1,
                     "failure_rate": failure_rate1,
-                    "failed_stages_count": sum(1 for s in stages1 if getattr(s, 'num_failed_tasks', 0) > 0)
+                    "failed_stages_count": sum(
+                        1 for s in stages1 if getattr(s, "num_failed_tasks", 0) > 0
+                    ),
                 },
                 "app2": {
                     "total_failed_tasks": failed_tasks2,
                     "failure_rate": failure_rate2,
-                    "failed_stages_count": sum(1 for s in stages2 if getattr(s, 'num_failed_tasks', 0) > 0)
+                    "failed_stages_count": sum(
+                        1 for s in stages2 if getattr(s, "num_failed_tasks", 0) > 0
+                    ),
                 },
                 "comparison": {
                     "failure_rate_improvement": failure_rate1 - failure_rate2,
-                    "reliability_change": "improved" if failure_rate2 < failure_rate1 else
-                                         "degraded" if failure_rate2 > failure_rate1 else "unchanged"
-                }
+                    "reliability_change": "improved"
+                    if failure_rate2 < failure_rate1
+                    else "degraded"
+                    if failure_rate2 > failure_rate1
+                    else "unchanged",
+                },
             }
         except Exception as e:
-            insights["failure_analysis"]["error"] = f"Error analyzing failures: {str(e)}"
+            insights["failure_analysis"]["error"] = (
+                f"Error analyzing failures: {str(e)}"
+            )
 
         # Simple utilization analysis using executor data
         try:
@@ -2992,20 +3330,29 @@ def _gather_basic_insights(client, app_id1: str, app_id2: str) -> Dict[str, Any]
                 "app1": {
                     "total_executors": len(executors1),
                     "active_executors": active_executors1,
-                    "executor_efficiency": active_executors1 / max(len(executors1), 1) * 100
+                    "executor_efficiency": active_executors1
+                    / max(len(executors1), 1)
+                    * 100,
                 },
                 "app2": {
                     "total_executors": len(executors2),
                     "active_executors": active_executors2,
-                    "executor_efficiency": active_executors2 / max(len(executors2), 1) * 100
+                    "executor_efficiency": active_executors2
+                    / max(len(executors2), 1)
+                    * 100,
                 },
                 "comparison": {
                     "executor_count_ratio": len(executors2) / max(len(executors1), 1),
-                    "efficiency_change": (active_executors2 / max(len(executors2), 1) * 100) - (active_executors1 / max(len(executors1), 1) * 100)
-                }
+                    "efficiency_change": (
+                        active_executors2 / max(len(executors2), 1) * 100
+                    )
+                    - (active_executors1 / max(len(executors1), 1) * 100),
+                },
             }
         except Exception as e:
-            insights["utilization_analysis"]["error"] = f"Error analyzing utilization: {str(e)}"
+            insights["utilization_analysis"]["error"] = (
+                f"Error analyzing utilization: {str(e)}"
+            )
 
     except Exception as e:
         return {"error": f"Error gathering basic insights: {str(e)}"}
@@ -3016,38 +3363,48 @@ def _gather_basic_insights(client, app_id1: str, app_id2: str) -> Dict[str, Any]
     # Shuffle-based recommendations
     shuffle_data = insights.get("shuffle_analysis", {})
     if not shuffle_data.get("error"):
-        shuffle_volume_ratio = shuffle_data.get("comparison", {}).get("shuffle_volume_ratio", 1)
+        shuffle_volume_ratio = shuffle_data.get("comparison", {}).get(
+            "shuffle_volume_ratio", 1
+        )
         if shuffle_volume_ratio > 2:
-            insights_recommendations.append({
-                "type": "shuffle_volume",
-                "priority": "medium",
-                "issue": f"App2 has {shuffle_volume_ratio:.1f}x more shuffle data than App1",
-                "suggestion": "Consider broadcast joins, pre-aggregation, or data layout optimizations"
-            })
+            insights_recommendations.append(
+                {
+                    "type": "shuffle_volume",
+                    "priority": "medium",
+                    "issue": f"App2 has {shuffle_volume_ratio:.1f}x more shuffle data than App1",
+                    "suggestion": "Consider broadcast joins, pre-aggregation, or data layout optimizations",
+                }
+            )
 
     # Failure-based recommendations
     failure_data = insights.get("failure_analysis", {})
     if not failure_data.get("error"):
-        reliability_change = failure_data.get("comparison", {}).get("reliability_change")
+        reliability_change = failure_data.get("comparison", {}).get(
+            "reliability_change"
+        )
         if reliability_change == "degraded":
-            insights_recommendations.append({
-                "type": "reliability",
-                "priority": "high",
-                "issue": "App2 has higher task failure rate than App1",
-                "suggestion": "Investigate resource allocation, memory settings, and error patterns"
-            })
+            insights_recommendations.append(
+                {
+                    "type": "reliability",
+                    "priority": "high",
+                    "issue": "App2 has higher task failure rate than App1",
+                    "suggestion": "Investigate resource allocation, memory settings, and error patterns",
+                }
+            )
 
     # Utilization-based recommendations
     util_data = insights.get("utilization_analysis", {})
     if not util_data.get("error"):
         efficiency_change = util_data.get("comparison", {}).get("efficiency_change", 0)
         if efficiency_change < -10:  # Efficiency decreased by more than 10%
-            insights_recommendations.append({
-                "type": "resource_efficiency",
-                "priority": "medium",
-                "issue": f"App2 resource efficiency decreased by {abs(efficiency_change):.1f}%",
-                "suggestion": "Review executor allocation, memory settings, and parallelism configuration"
-            })
+            insights_recommendations.append(
+                {
+                    "type": "resource_efficiency",
+                    "priority": "medium",
+                    "issue": f"App2 resource efficiency decreased by {abs(efficiency_change):.1f}%",
+                    "suggestion": "Review executor allocation, memory settings, and parallelism configuration",
+                }
+            )
 
     insights["recommendations"] = insights_recommendations
     return insights
@@ -3057,7 +3414,7 @@ def _generate_cross_dimensional_recommendations(
     environment_comparison: Dict[str, Any],
     sql_plans_comparison: Dict[str, Any],
     basic_insights: Dict[str, Any],
-    aggregated_overview: Dict[str, Any]
+    aggregated_overview: Dict[str, Any],
 ) -> List[Dict[str, str]]:
     """Generate enhanced recommendations by analyzing patterns across all dimensions."""
     cross_recommendations = []
@@ -3073,100 +3430,143 @@ def _generate_cross_dimensional_recommendations(
     # Pattern 1: Memory configuration + Memory spill + Utilization
     memory_configs = [k for k in config_differences.keys() if "memory" in k.lower()]
     stage_metrics = aggregated_overview.get("aggregated_stage_comparison", {})
-    memory_spill_ratio = stage_metrics.get("comparison", {}).get("memory_spill_ratio", 1)
+    memory_spill_ratio = stage_metrics.get("comparison", {}).get(
+        "memory_spill_ratio", 1
+    )
 
     if memory_configs and memory_spill_ratio > 2:
-        memory_util_change = utilization_analysis.get("comparison", {}).get("memory_utilization_improvement", 0)
+        memory_util_change = utilization_analysis.get("comparison", {}).get(
+            "memory_utilization_improvement", 0
+        )
         if memory_util_change < 0:
-            cross_recommendations.append({
-                "type": "cross_dimensional_memory",
-                "priority": "critical",
-                "issue": "Memory configuration differences correlate with increased memory spill and decreased utilization",
-                "suggestion": f"Memory configs changed: {', '.join(memory_configs[:3])}. Increase executor memory or optimize memory fractions to reduce {memory_spill_ratio:.1f}x spill increase"
-            })
+            cross_recommendations.append(
+                {
+                    "type": "cross_dimensional_memory",
+                    "priority": "critical",
+                    "issue": "Memory configuration differences correlate with increased memory spill and decreased utilization",
+                    "suggestion": f"Memory configs changed: {', '.join(memory_configs[:3])}. Increase executor memory or optimize memory fractions to reduce {memory_spill_ratio:.1f}x spill increase",
+                }
+            )
 
     # Pattern 2: Serializer + Shuffle performance + Network utilization
-    serializer_changed = any("serializer" in k.lower() for k in config_differences.keys())
-    shuffle_volume_ratio = shuffle_analysis.get("comparison", {}).get("shuffle_volume_ratio", 1)
+    serializer_changed = any(
+        "serializer" in k.lower() for k in config_differences.keys()
+    )
+    shuffle_volume_ratio = shuffle_analysis.get("comparison", {}).get(
+        "shuffle_volume_ratio", 1
+    )
 
     if serializer_changed and shuffle_volume_ratio > 1.5:
-        cross_recommendations.append({
-            "type": "cross_dimensional_serialization",
-            "priority": "high",
-            "issue": f"Serializer configuration change coincides with {shuffle_volume_ratio:.1f}x increase in shuffle data",
-            "suggestion": "Review serializer efficiency (e.g., Kryo vs Java) and its impact on shuffle operations and network utilization"
-        })
+        cross_recommendations.append(
+            {
+                "type": "cross_dimensional_serialization",
+                "priority": "high",
+                "issue": f"Serializer configuration change coincides with {shuffle_volume_ratio:.1f}x increase in shuffle data",
+                "suggestion": "Review serializer efficiency (e.g., Kryo vs Java) and its impact on shuffle operations and network utilization",
+            }
+        )
 
     # Pattern 3: SQL query performance + Stage performance correlation
-    sql_avg_duration_ratio = sql_plans_comparison.get("comparison_ratios", {}).get("avg_duration_ratio", 1)
+    sql_avg_duration_ratio = sql_plans_comparison.get("comparison_ratios", {}).get(
+        "avg_duration_ratio", 1
+    )
     stage_duration_ratio = stage_metrics.get("comparison", {}).get("duration_ratio", 1)
 
     if sql_avg_duration_ratio > 1.3 and stage_duration_ratio > 1.3:
-        cross_recommendations.append({
-            "type": "cross_dimensional_performance",
-            "priority": "high",
-            "issue": f"Both SQL queries ({sql_avg_duration_ratio:.1f}x) and stages ({stage_duration_ratio:.1f}x) are significantly slower in App2",
-            "suggestion": "Performance degradation spans both SQL optimization and stage execution. Check adaptive query execution settings and review overall resource allocation"
-        })
+        cross_recommendations.append(
+            {
+                "type": "cross_dimensional_performance",
+                "priority": "high",
+                "issue": f"Both SQL queries ({sql_avg_duration_ratio:.1f}x) and stages ({stage_duration_ratio:.1f}x) are significantly slower in App2",
+                "suggestion": "Performance degradation spans both SQL optimization and stage execution. Check adaptive query execution settings and review overall resource allocation",
+            }
+        )
 
     # Pattern 4: Dynamic allocation + Executor utilization patterns
-    dynamic_allocation_configs = [k for k in config_differences.keys() if "dynamic" in k.lower()]
-    efficiency_change = utilization_analysis.get("comparison", {}).get("efficiency_change", 0)
-    underutil_diff = (utilization_analysis.get("app2", {}).get("underutilized_executors", 0) -
-                     utilization_analysis.get("app1", {}).get("underutilized_executors", 0))
+    dynamic_allocation_configs = [
+        k for k in config_differences.keys() if "dynamic" in k.lower()
+    ]
+    efficiency_change = utilization_analysis.get("comparison", {}).get(
+        "efficiency_change", 0
+    )
+    underutil_diff = utilization_analysis.get("app2", {}).get(
+        "underutilized_executors", 0
+    ) - utilization_analysis.get("app1", {}).get("underutilized_executors", 0)
 
     if dynamic_allocation_configs and efficiency_change < -5 and underutil_diff > 0:
-        cross_recommendations.append({
-            "type": "cross_dimensional_scaling",
-            "priority": "medium",
-            "issue": f"Dynamic allocation changes led to {abs(efficiency_change):.1f}% efficiency decrease and {underutil_diff} more underutilized executors",
-            "suggestion": f"Review dynamic allocation parameters: {', '.join(dynamic_allocation_configs)}. Consider adjusting min/max executors and scaling thresholds"
-        })
+        cross_recommendations.append(
+            {
+                "type": "cross_dimensional_scaling",
+                "priority": "medium",
+                "issue": f"Dynamic allocation changes led to {abs(efficiency_change):.1f}% efficiency decrease and {underutil_diff} more underutilized executors",
+                "suggestion": f"Review dynamic allocation parameters: {', '.join(dynamic_allocation_configs)}. Consider adjusting min/max executors and scaling thresholds",
+            }
+        )
 
     # Pattern 5: Resource allocation + Failure rate correlation
-    core_configs = [k for k in config_differences.keys() if "cores" in k.lower() or "executor" in k.lower()]
-    reliability_change = failure_analysis.get("comparison", {}).get("reliability_change")
+    core_configs = [
+        k
+        for k in config_differences.keys()
+        if "cores" in k.lower() or "executor" in k.lower()
+    ]
+    reliability_change = failure_analysis.get("comparison", {}).get(
+        "reliability_change"
+    )
 
     if core_configs and reliability_change == "degraded":
-        failure_rate_change = failure_analysis.get("comparison", {}).get("failure_rate_improvement", 0)
-        cross_recommendations.append({
-            "type": "cross_dimensional_reliability",
-            "priority": "high",
-            "issue": f"Resource allocation changes coincide with reliability degradation (failure rate increased by {abs(failure_rate_change):.2f}%)",
-            "suggestion": f"Resource configs changed: {', '.join(core_configs[:2])}. Ensure adequate resources per executor and review task timeout settings"
-        })
+        failure_rate_change = failure_analysis.get("comparison", {}).get(
+            "failure_rate_improvement", 0
+        )
+        cross_recommendations.append(
+            {
+                "type": "cross_dimensional_reliability",
+                "priority": "high",
+                "issue": f"Resource allocation changes coincide with reliability degradation (failure rate increased by {abs(failure_rate_change):.2f}%)",
+                "suggestion": f"Resource configs changed: {', '.join(core_configs[:2])}. Ensure adequate resources per executor and review task timeout settings",
+            }
+        )
 
     # Pattern 6: Compression + I/O patterns + Disk utilization
-    compression_configs = [k for k in config_differences.keys() if "compress" in k.lower() or "codec" in k.lower()]
+    compression_configs = [
+        k
+        for k in config_differences.keys()
+        if "compress" in k.lower() or "codec" in k.lower()
+    ]
     input_output_changes = (
-        stage_metrics.get("comparison", {}).get("input_ratio", 1) +
-        stage_metrics.get("comparison", {}).get("output_ratio", 1)
+        stage_metrics.get("comparison", {}).get("input_ratio", 1)
+        + stage_metrics.get("comparison", {}).get("output_ratio", 1)
     ) / 2
 
     if compression_configs and input_output_changes > 1.3:
-        cross_recommendations.append({
-            "type": "cross_dimensional_io",
-            "priority": "low",
-            "issue": f"Compression configuration changes with {input_output_changes:.1f}x increase in I/O operations",
-            "suggestion": "Review compression codec efficiency and its impact on I/O performance. Consider codec benchmarking for your data patterns"
-        })
+        cross_recommendations.append(
+            {
+                "type": "cross_dimensional_io",
+                "priority": "low",
+                "issue": f"Compression configuration changes with {input_output_changes:.1f}x increase in I/O operations",
+                "suggestion": "Review compression codec efficiency and its impact on I/O performance. Consider codec benchmarking for your data patterns",
+            }
+        )
 
     # Pattern 7: Holistic performance degradation pattern
-    total_degradation_indicators = sum([
-        1 if sql_avg_duration_ratio > 1.2 else 0,
-        1 if stage_duration_ratio > 1.2 else 0,
-        1 if efficiency_change < -5 else 0,
-        1 if reliability_change == "degraded" else 0,
-        1 if memory_spill_ratio > 1.5 else 0
-    ])
+    total_degradation_indicators = sum(
+        [
+            1 if sql_avg_duration_ratio > 1.2 else 0,
+            1 if stage_duration_ratio > 1.2 else 0,
+            1 if efficiency_change < -5 else 0,
+            1 if reliability_change == "degraded" else 0,
+            1 if memory_spill_ratio > 1.5 else 0,
+        ]
+    )
 
     if total_degradation_indicators >= 3:
-        cross_recommendations.append({
-            "type": "holistic_performance_review",
-            "priority": "critical",
-            "issue": f"Multiple performance dimensions degraded ({total_degradation_indicators}/5 indicators)",
-            "suggestion": "Comprehensive performance review needed. Consider reverting to App1 configuration as baseline and making incremental changes with performance validation"
-        })
+        cross_recommendations.append(
+            {
+                "type": "holistic_performance_review",
+                "priority": "critical",
+                "issue": f"Multiple performance dimensions degraded ({total_degradation_indicators}/5 indicators)",
+                "suggestion": "Comprehensive performance review needed. Consider reverting to App1 configuration as baseline and making incremental changes with performance validation",
+            }
+        )
 
     return cross_recommendations
 
@@ -3176,11 +3576,11 @@ def _get_basic_app_info(app) -> Dict[str, Any]:
     return {
         "id": app.id,
         "name": app.name,
-        "cores_granted": getattr(app, 'cores_granted', None),
-        "max_cores": getattr(app, 'max_cores', None),
-        "cores_per_executor": getattr(app, 'cores_per_executor', None),
-        "memory_per_executor_mb": getattr(app, 'memory_per_executor_mb', None),
-        "max_executors": getattr(app, 'max_executors', None),
+        "cores_granted": getattr(app, "cores_granted", None),
+        "max_cores": getattr(app, "max_cores", None),
+        "cores_per_executor": getattr(app, "cores_per_executor", None),
+        "memory_per_executor_mb": getattr(app, "memory_per_executor_mb", None),
+        "max_executors": getattr(app, "max_executors", None),
     }
 
 
@@ -3203,8 +3603,7 @@ def _calculate_job_stats(jobs) -> Dict[str, Any]:
         return {"count": len(jobs), "total_duration": 0, "avg_duration": 0}
 
     durations = [
-        (j.completion_time - j.submission_time).total_seconds()
-        for j in completed_jobs
+        (j.completion_time - j.submission_time).total_seconds() for j in completed_jobs
     ]
 
     return {
@@ -3220,7 +3619,7 @@ def _calculate_job_stats(jobs) -> Dict[str, Any]:
 def _filter_significant_metrics(
     metrics_dict: Dict[str, Any],
     significance_threshold: float = 0.2,
-    show_only_significant: bool = False
+    show_only_significant: bool = False,
 ) -> Dict[str, Any]:
     """
     Filter metrics dictionary to show only those with significant differences.
@@ -3240,7 +3639,7 @@ def _filter_significant_metrics(
             "filtering_applied": False,
             "significance_threshold": significance_threshold,
             "total_metrics": len(metrics_dict),
-            "significant_metrics": len(metrics_dict)
+            "significant_metrics": len(metrics_dict),
         }
 
     significant_metrics = {}
@@ -3249,7 +3648,7 @@ def _filter_significant_metrics(
     for metric_name, value in metrics_dict.items():
         if isinstance(value, (int, float)):
             # Handle infinite values (always significant)
-            if value == float('inf'):
+            if value == float("inf"):
                 significant_metrics[metric_name] = "∞ (new data)"
                 significant_metrics[f"{metric_name}_change"] = "∞"
             elif value == 0.0:
@@ -3264,9 +3663,13 @@ def _filter_significant_metrics(
                     significant_metrics[metric_name] = value
                     # Add percentage change for clarity
                     if value >= 1.0:
-                        significant_metrics[f"{metric_name}_change"] = f"+{((value - 1.0) * 100):.1f}%"
+                        significant_metrics[f"{metric_name}_change"] = (
+                            f"+{((value - 1.0) * 100):.1f}%"
+                        )
                     else:
-                        significant_metrics[f"{metric_name}_change"] = f"{((value - 1.0) * 100):.1f}%"
+                        significant_metrics[f"{metric_name}_change"] = (
+                            f"{((value - 1.0) * 100):.1f}%"
+                        )
         else:
             # For non-numeric values, always include
             significant_metrics[metric_name] = value
@@ -3277,14 +3680,14 @@ def _filter_significant_metrics(
         "significance_threshold": significance_threshold,
         "total_metrics": total_metrics,
         "significant_metrics": len(significant_metrics),
-        "filtered_out_count": total_metrics - len(significant_metrics)
+        "filtered_out_count": total_metrics - len(significant_metrics),
     }
 
 
 def _filter_stage_metrics_comparison(
     stage_metric_comparison: Dict[str, Any],
     significance_threshold: float = 0.2,
-    show_only_significant: bool = True
+    show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
     Filter detailed stage metrics comparison to show only significant differences.
@@ -3302,7 +3705,7 @@ def _filter_stage_metrics_comparison(
             "metrics": stage_metric_comparison,
             "filtering_applied": False,
             "significance_threshold": significance_threshold,
-            "category_summary": {}
+            "category_summary": {},
         }
 
     filtered_metrics = {}
@@ -3320,9 +3723,17 @@ def _filter_stage_metrics_comparison(
         # Handle different metric patterns within categories
         if "app1_" in str(category_metrics) and "app2_" in str(category_metrics):
             # This category has app1/app2 comparisons - calculate ratios
-            app1_values = {k: v for k, v in category_metrics.items() if k.startswith("app1_")}
-            app2_values = {k: v for k, v in category_metrics.items() if k.startswith("app2_")}
-            other_values = {k: v for k, v in category_metrics.items() if not (k.startswith("app1_") or k.startswith("app2_"))}
+            app1_values = {
+                k: v for k, v in category_metrics.items() if k.startswith("app1_")
+            }
+            app2_values = {
+                k: v for k, v in category_metrics.items() if k.startswith("app2_")
+            }
+            other_values = {
+                k: v
+                for k, v in category_metrics.items()
+                if not (k.startswith("app1_") or k.startswith("app2_"))
+            }
 
             for app1_key, app1_val in app1_values.items():
                 metric_base_name = app1_key[5:]  # Remove "app1_" prefix
@@ -3333,7 +3744,9 @@ def _filter_stage_metrics_comparison(
                     total_metrics += 1
 
                     # Calculate significance
-                    if isinstance(app1_val, (int, float)) and isinstance(app2_val, (int, float)):
+                    if isinstance(app1_val, (int, float)) and isinstance(
+                        app2_val, (int, float)
+                    ):
                         if app1_val == 0 and app2_val == 0:
                             # Both zero - not significant
                             continue
@@ -3343,14 +3756,20 @@ def _filter_stage_metrics_comparison(
                             significant_metrics[app2_key] = app2_val
                             # Add ratio information
                             if app1_val == 0 and app2_val > 0:
-                                significant_metrics[f"{metric_base_name}_ratio"] = "∞ (new data)"
+                                significant_metrics[f"{metric_base_name}_ratio"] = (
+                                    "∞ (new data)"
+                                )
                                 significant_metrics[f"{metric_base_name}_change"] = "∞"
                             elif app2_val == 0 and app1_val > 0:
                                 significant_metrics[f"{metric_base_name}_ratio"] = 0.0
-                                significant_metrics[f"{metric_base_name}_change"] = "-100.0%"
+                                significant_metrics[f"{metric_base_name}_change"] = (
+                                    "-100.0%"
+                                )
                         else:
                             # Calculate ratio
-                            ratio = app2_val / app1_val if app1_val != 0 else float('inf')
+                            ratio = (
+                                app2_val / app1_val if app1_val != 0 else float("inf")
+                            )
                             diff_from_one = abs(ratio - 1.0)
 
                             if diff_from_one >= significance_threshold:
@@ -3359,9 +3778,13 @@ def _filter_stage_metrics_comparison(
                                 # Add ratio and percentage change
                                 significant_metrics[f"{metric_base_name}_ratio"] = ratio
                                 if ratio >= 1.0:
-                                    significant_metrics[f"{metric_base_name}_change"] = f"+{((ratio - 1.0) * 100):.1f}%"
+                                    significant_metrics[
+                                        f"{metric_base_name}_change"
+                                    ] = f"+{((ratio - 1.0) * 100):.1f}%"
                                 else:
-                                    significant_metrics[f"{metric_base_name}_change"] = f"{((ratio - 1.0) * 100):.1f}%"
+                                    significant_metrics[
+                                        f"{metric_base_name}_change"
+                                    ] = f"{((ratio - 1.0) * 100):.1f}%"
                     else:
                         # Non-numeric values - always include
                         significant_metrics[app1_key] = app1_val
@@ -3380,15 +3803,23 @@ def _filter_stage_metrics_comparison(
 
         category_summary[category_name] = {
             "total_metrics": total_metrics,
-            "significant_metrics": len([k for k in significant_metrics.keys() if k.startswith(("app1_", "app2_"))]) // 2,
-            "all_metrics_shown": total_metrics == 0  # True if we don't calculate ratios for this category
+            "significant_metrics": len(
+                [
+                    k
+                    for k in significant_metrics.keys()
+                    if k.startswith(("app1_", "app2_"))
+                ]
+            )
+            // 2,
+            "all_metrics_shown": total_metrics
+            == 0,  # True if we don't calculate ratios for this category
         }
 
     return {
         "metrics": filtered_metrics,
         "filtering_applied": True,
         "significance_threshold": significance_threshold,
-        "category_summary": category_summary
+        "category_summary": category_summary,
     }
 
 
@@ -3410,7 +3841,7 @@ def _calculate_safe_ratio(value1: float, value2: float) -> float:
     if value1 == 0 and value2 == 0:
         return 1.0  # No difference
     elif value1 == 0:
-        return float('inf')  # Infinite increase (new data appeared)
+        return float("inf")  # Infinite increase (new data appeared)
     elif value2 == 0:
         return 0.0  # Complete decrease (data disappeared)
     else:
@@ -3418,8 +3849,7 @@ def _calculate_safe_ratio(value1: float, value2: float) -> float:
 
 
 def _analyze_executor_performance_patterns(
-    executor_summary1: Dict[str, Any],
-    executor_summary2: Dict[str, Any]
+    executor_summary1: Dict[str, Any], executor_summary2: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Analyze executor performance patterns and generate comparative insights.
@@ -3445,7 +3875,7 @@ def _analyze_executor_performance_patterns(
                 "total_shuffle_read": 0,
                 "total_shuffle_write": 0,
                 "executors_with_failures": 0,
-                "executors_with_spill": 0
+                "executors_with_spill": 0,
             }
 
         task_times = []
@@ -3463,69 +3893,92 @@ def _analyze_executor_performance_patterns(
             # This is aggregated summary data
             return {
                 "total_executors": executors.get("total_executors", 0),
-                "avg_task_time": executors.get("total_duration", 0) / max(executors.get("completed_tasks", 1), 1),
-                "avg_failed_tasks": executors.get("failed_tasks", 0) / max(executors.get("total_executors", 1), 1),
-                "avg_succeeded_tasks": executors.get("completed_tasks", 0) / max(executors.get("total_executors", 1), 1),
+                "avg_task_time": executors.get("total_duration", 0)
+                / max(executors.get("completed_tasks", 1), 1),
+                "avg_failed_tasks": executors.get("failed_tasks", 0)
+                / max(executors.get("total_executors", 1), 1),
+                "avg_succeeded_tasks": executors.get("completed_tasks", 0)
+                / max(executors.get("total_executors", 1), 1),
                 "total_memory_spilled": executors.get("memory_used", 0),
                 "total_shuffle_read": executors.get("total_shuffle_read", 0),
                 "total_shuffle_write": executors.get("total_shuffle_write", 0),
-                "executors_with_failures": 1 if executors.get("failed_tasks", 0) > 0 else 0,
+                "executors_with_failures": 1
+                if executors.get("failed_tasks", 0) > 0
+                else 0,
                 "executors_with_spill": 1 if executors.get("memory_used", 0) > 0 else 0,
-                "task_efficiency": executors.get("completed_tasks", 0) / max(executors.get("completed_tasks", 0) + executors.get("failed_tasks", 0), 1)
+                "task_efficiency": executors.get("completed_tasks", 0)
+                / max(
+                    executors.get("completed_tasks", 0)
+                    + executors.get("failed_tasks", 0),
+                    1,
+                ),
             }
 
         # This is individual executor data (original format)
         for executor_id, metrics in executors.items():
             # Safely access attributes with getattr or direct dict access
-            if hasattr(metrics, 'task_time') and metrics.task_time:
+            if hasattr(metrics, "task_time") and metrics.task_time:
                 task_times.append(metrics.task_time)
-            elif isinstance(metrics, dict) and metrics.get('task_time'):
-                task_times.append(metrics['task_time'])
+            elif isinstance(metrics, dict) and metrics.get("task_time"):
+                task_times.append(metrics["task_time"])
 
-            if hasattr(metrics, 'failed_tasks') and metrics.failed_tasks:
+            if hasattr(metrics, "failed_tasks") and metrics.failed_tasks:
                 failed_tasks.append(metrics.failed_tasks)
                 if metrics.failed_tasks > 0:
                     executors_with_failures += 1
-            elif isinstance(metrics, dict) and metrics.get('failed_tasks'):
-                failed_tasks.append(metrics['failed_tasks'])
-                if metrics['failed_tasks'] > 0:
+            elif isinstance(metrics, dict) and metrics.get("failed_tasks"):
+                failed_tasks.append(metrics["failed_tasks"])
+                if metrics["failed_tasks"] > 0:
                     executors_with_failures += 1
 
-            if hasattr(metrics, 'succeeded_tasks') and metrics.succeeded_tasks:
+            if hasattr(metrics, "succeeded_tasks") and metrics.succeeded_tasks:
                 succeeded_tasks.append(metrics.succeeded_tasks)
-            elif isinstance(metrics, dict) and metrics.get('succeeded_tasks'):
-                succeeded_tasks.append(metrics['succeeded_tasks'])
+            elif isinstance(metrics, dict) and metrics.get("succeeded_tasks"):
+                succeeded_tasks.append(metrics["succeeded_tasks"])
 
-            if hasattr(metrics, 'memory_bytes_spilled') and metrics.memory_bytes_spilled:
+            if (
+                hasattr(metrics, "memory_bytes_spilled")
+                and metrics.memory_bytes_spilled
+            ):
                 memory_spilled.append(metrics.memory_bytes_spilled)
                 if metrics.memory_bytes_spilled > 0:
                     executors_with_spill += 1
-            elif isinstance(metrics, dict) and metrics.get('memory_bytes_spilled'):
-                memory_spilled.append(metrics['memory_bytes_spilled'])
-                if metrics['memory_bytes_spilled'] > 0:
+            elif isinstance(metrics, dict) and metrics.get("memory_bytes_spilled"):
+                memory_spilled.append(metrics["memory_bytes_spilled"])
+                if metrics["memory_bytes_spilled"] > 0:
                     executors_with_spill += 1
 
-            if hasattr(metrics, 'shuffle_read') and metrics.shuffle_read:
+            if hasattr(metrics, "shuffle_read") and metrics.shuffle_read:
                 shuffle_reads.append(metrics.shuffle_read)
-            elif isinstance(metrics, dict) and metrics.get('shuffle_read'):
-                shuffle_reads.append(metrics['shuffle_read'])
+            elif isinstance(metrics, dict) and metrics.get("shuffle_read"):
+                shuffle_reads.append(metrics["shuffle_read"])
 
-            if hasattr(metrics, 'shuffle_write') and metrics.shuffle_write:
+            if hasattr(metrics, "shuffle_write") and metrics.shuffle_write:
                 shuffle_writes.append(metrics.shuffle_write)
-            elif isinstance(metrics, dict) and metrics.get('shuffle_write'):
-                shuffle_writes.append(metrics['shuffle_write'])
+            elif isinstance(metrics, dict) and metrics.get("shuffle_write"):
+                shuffle_writes.append(metrics["shuffle_write"])
 
         return {
             "total_executors": len(executors),
             "avg_task_time": statistics.mean(task_times) if task_times else 0,
             "avg_failed_tasks": statistics.mean(failed_tasks) if failed_tasks else 0,
-            "avg_succeeded_tasks": statistics.mean(succeeded_tasks) if succeeded_tasks else 0,
+            "avg_succeeded_tasks": statistics.mean(succeeded_tasks)
+            if succeeded_tasks
+            else 0,
             "total_memory_spilled": sum(memory_spilled),
             "total_shuffle_read": sum(shuffle_reads),
             "total_shuffle_write": sum(shuffle_writes),
             "executors_with_failures": executors_with_failures,
             "executors_with_spill": executors_with_spill,
-            "task_efficiency": statistics.mean([s / (s + f) for s, f in zip(succeeded_tasks, failed_tasks, strict=False) if (s + f) > 0]) if succeeded_tasks and failed_tasks else 1.0
+            "task_efficiency": statistics.mean(
+                [
+                    s / (s + f)
+                    for s, f in zip(succeeded_tasks, failed_tasks, strict=False)
+                    if (s + f) > 0
+                ]
+            )
+            if succeeded_tasks and failed_tasks
+            else 1.0,
         }
 
     app1_analysis = analyze_executor_group(executor_summary1)
@@ -3536,18 +3989,32 @@ def _analyze_executor_performance_patterns(
 
     if app1_analysis["total_executors"] > 0 and app2_analysis["total_executors"] > 0:
         comparison_analysis = {
-            "executor_count_ratio": app2_analysis["total_executors"] / app1_analysis["total_executors"],
-            "task_time_ratio": app2_analysis["avg_task_time"] / max(app1_analysis["avg_task_time"], 1),
-            "failure_rate_ratio": app2_analysis["avg_failed_tasks"] / max(app1_analysis["avg_failed_tasks"], 1),
-            "memory_spill_ratio": app2_analysis["total_memory_spilled"] / max(app1_analysis["total_memory_spilled"], 1),
+            "executor_count_ratio": app2_analysis["total_executors"]
+            / app1_analysis["total_executors"],
+            "task_time_ratio": app2_analysis["avg_task_time"]
+            / max(app1_analysis["avg_task_time"], 1),
+            "failure_rate_ratio": app2_analysis["avg_failed_tasks"]
+            / max(app1_analysis["avg_failed_tasks"], 1),
+            "memory_spill_ratio": app2_analysis["total_memory_spilled"]
+            / max(app1_analysis["total_memory_spilled"], 1),
             "shuffle_efficiency_comparison": {
-                "read_ratio": app2_analysis["total_shuffle_read"] / max(app1_analysis["total_shuffle_read"], 1),
-                "write_ratio": app2_analysis["total_shuffle_write"] / max(app1_analysis["total_shuffle_write"], 1)
+                "read_ratio": app2_analysis["total_shuffle_read"]
+                / max(app1_analysis["total_shuffle_read"], 1),
+                "write_ratio": app2_analysis["total_shuffle_write"]
+                / max(app1_analysis["total_shuffle_write"], 1),
             },
             "reliability_comparison": {
-                "app1_failure_percentage": (app1_analysis["executors_with_failures"] / max(app1_analysis["total_executors"], 1)) * 100,
-                "app2_failure_percentage": (app2_analysis["executors_with_failures"] / max(app2_analysis["total_executors"], 1)) * 100
-            }
+                "app1_failure_percentage": (
+                    app1_analysis["executors_with_failures"]
+                    / max(app1_analysis["total_executors"], 1)
+                )
+                * 100,
+                "app2_failure_percentage": (
+                    app2_analysis["executors_with_failures"]
+                    / max(app2_analysis["total_executors"], 1)
+                )
+                * 100,
+            },
         }
 
     # Generate insights and recommendations
@@ -3558,29 +4025,43 @@ def _analyze_executor_performance_patterns(
         # Task efficiency insights
         if comparison_analysis["task_time_ratio"] > 1.5:
             insights.append("App2 executors are significantly slower in task execution")
-            recommendations.append("Investigate executor resource allocation and task distribution in App2")
+            recommendations.append(
+                "Investigate executor resource allocation and task distribution in App2"
+            )
         elif comparison_analysis["task_time_ratio"] < 0.67:
             insights.append("App2 executors are significantly faster in task execution")
 
         # Memory efficiency insights
         if comparison_analysis["memory_spill_ratio"] > 2.0:
-            insights.append(f"App2 has {comparison_analysis['memory_spill_ratio']:.1f}x more memory spill per executor")
-            recommendations.append("Consider increasing executor memory allocation in App2")
+            insights.append(
+                f"App2 has {comparison_analysis['memory_spill_ratio']:.1f}x more memory spill per executor"
+            )
+            recommendations.append(
+                "Consider increasing executor memory allocation in App2"
+            )
 
         # Reliability insights
-        app1_failure_pct = comparison_analysis["reliability_comparison"]["app1_failure_percentage"]
-        app2_failure_pct = comparison_analysis["reliability_comparison"]["app2_failure_percentage"]
+        app1_failure_pct = comparison_analysis["reliability_comparison"][
+            "app1_failure_percentage"
+        ]
+        app2_failure_pct = comparison_analysis["reliability_comparison"][
+            "app2_failure_percentage"
+        ]
 
         if app2_failure_pct > app1_failure_pct * 2:
-            insights.append(f"App2 has {app2_failure_pct:.1f}% executors with failures vs {app1_failure_pct:.1f}% in App1")
-            recommendations.append("Investigate infrastructure issues affecting App2 executors")
+            insights.append(
+                f"App2 has {app2_failure_pct:.1f}% executors with failures vs {app1_failure_pct:.1f}% in App1"
+            )
+            recommendations.append(
+                "Investigate infrastructure issues affecting App2 executors"
+            )
 
     return {
         "app1_executor_metrics": app1_analysis,
         "app2_executor_metrics": app2_analysis,
         "comparative_analysis": comparison_analysis,
         "insights": insights,
-        "recommendations": recommendations
+        "recommendations": recommendations,
     }
 
 
@@ -3610,10 +4091,16 @@ def get_stage_summary(
             "jvm_gc_time": task_summary.jvm_gc_time,
             "memory_bytes_spilled": task_summary.memory_bytes_spilled,
             "disk_bytes_spilled": task_summary.disk_bytes_spilled,
-            "shuffle_read_bytes": task_summary.shuffle_read_metrics.read_bytes if task_summary.shuffle_read_metrics else None,
+            "shuffle_read_bytes": task_summary.shuffle_read_metrics.read_bytes
+            if task_summary.shuffle_read_metrics
+            else None,
             "shuffle_write_bytes": task_summary.shuffle_write_bytes,
-            "input_bytes": task_summary.input_metrics.bytes_read if task_summary.input_metrics else None,
-            "output_bytes": task_summary.output_metrics.bytes_written if task_summary.output_metrics else None
+            "input_bytes": task_summary.input_metrics.bytes_read
+            if task_summary.input_metrics
+            else None,
+            "output_bytes": task_summary.output_metrics.bytes_written
+            if task_summary.output_metrics
+            else None,
         }
     except Exception:
         # Second try: use basic stage data as fallback
@@ -3625,13 +4112,13 @@ def get_stage_summary(
                 "num_tasks": stage.num_tasks,
                 "num_failed_tasks": stage.num_failed_tasks,
                 "executor_run_time": stage.executor_run_time,
-                "memory_bytes_spilled": getattr(stage, 'memory_bytes_spilled', None),
-                "disk_bytes_spilled": getattr(stage, 'disk_bytes_spilled', None),
-                "shuffle_read_bytes": getattr(stage, 'shuffle_read_bytes', None),
-                "shuffle_write_bytes": getattr(stage, 'shuffle_write_bytes', None),
-                "input_bytes": getattr(stage, 'input_bytes', None),
-                "output_bytes": getattr(stage, 'output_bytes', None),
-                "fallback_note": "Using basic stage data - detailed task metrics unavailable"
+                "memory_bytes_spilled": getattr(stage, "memory_bytes_spilled", None),
+                "disk_bytes_spilled": getattr(stage, "disk_bytes_spilled", None),
+                "shuffle_read_bytes": getattr(stage, "shuffle_read_bytes", None),
+                "shuffle_write_bytes": getattr(stage, "shuffle_write_bytes", None),
+                "input_bytes": getattr(stage, "input_bytes", None),
+                "output_bytes": getattr(stage, "output_bytes", None),
+                "fallback_note": "Using basic stage data - detailed task metrics unavailable",
             }
         except Exception:
             return None
@@ -3639,9 +4126,7 @@ def get_stage_summary(
 
 @mcp.tool()
 def compare_app_resources(
-    app_id1: str,
-    app_id2: str,
-    server: Optional[str] = None
+    app_id1: str, app_id2: str, server: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Compare resource allocation and configuration between two Spark applications.
@@ -3672,68 +4157,79 @@ def compare_app_resources(
         resource_comparison = {}
 
         if app1_info["cores_granted"] and app2_info["cores_granted"]:
-            resource_comparison["cores_granted_ratio"] = app2_info["cores_granted"] / app1_info["cores_granted"]
+            resource_comparison["cores_granted_ratio"] = (
+                app2_info["cores_granted"] / app1_info["cores_granted"]
+            )
 
         if app1_info["max_cores"] and app2_info["max_cores"]:
-            resource_comparison["max_cores_ratio"] = app2_info["max_cores"] / app1_info["max_cores"]
+            resource_comparison["max_cores_ratio"] = (
+                app2_info["max_cores"] / app1_info["max_cores"]
+            )
 
         if app1_info["memory_per_executor_mb"] and app2_info["memory_per_executor_mb"]:
-            resource_comparison["memory_per_executor_ratio"] = app2_info["memory_per_executor_mb"] / app1_info["memory_per_executor_mb"]
+            resource_comparison["memory_per_executor_ratio"] = (
+                app2_info["memory_per_executor_mb"]
+                / app1_info["memory_per_executor_mb"]
+            )
 
         if app1_info["max_executors"] and app2_info["max_executors"]:
-            resource_comparison["max_executors_ratio"] = app2_info["max_executors"] / app1_info["max_executors"]
+            resource_comparison["max_executors_ratio"] = (
+                app2_info["max_executors"] / app1_info["max_executors"]
+            )
 
         # Generate resource-specific recommendations
         recommendations = []
 
         # Cores analysis
         if resource_comparison.get("cores_granted_ratio", 1) > 2:
-            recommendations.append({
-                "type": "resource_scaling",
-                "priority": "medium",
-                "issue": f"App2 uses {resource_comparison['cores_granted_ratio']:.1f}x more cores than App1",
-                "suggestion": "Consider if App2 needs this level of CPU resources or if App1 is under-provisioned"
-            })
+            recommendations.append(
+                {
+                    "type": "resource_scaling",
+                    "priority": "medium",
+                    "issue": f"App2 uses {resource_comparison['cores_granted_ratio']:.1f}x more cores than App1",
+                    "suggestion": "Consider if App2 needs this level of CPU resources or if App1 is under-provisioned",
+                }
+            )
         elif resource_comparison.get("cores_granted_ratio", 1) < 0.5:
-            recommendations.append({
-                "type": "resource_scaling",
-                "priority": "high",
-                "issue": f"App2 uses {resource_comparison['cores_granted_ratio']:.1f}x fewer cores than App1",
-                "suggestion": "App2 may be CPU-constrained - consider increasing core allocation"
-            })
+            recommendations.append(
+                {
+                    "type": "resource_scaling",
+                    "priority": "high",
+                    "issue": f"App2 uses {resource_comparison['cores_granted_ratio']:.1f}x fewer cores than App1",
+                    "suggestion": "App2 may be CPU-constrained - consider increasing core allocation",
+                }
+            )
 
         # Memory analysis
         if resource_comparison.get("memory_per_executor_ratio", 1) > 2:
-            recommendations.append({
-                "type": "memory_allocation",
-                "priority": "medium",
-                "issue": f"App2 allocates {resource_comparison['memory_per_executor_ratio']:.1f}x more memory per executor",
-                "suggestion": "Verify if App2's workload requires this memory or if it's over-provisioned"
-            })
+            recommendations.append(
+                {
+                    "type": "memory_allocation",
+                    "priority": "medium",
+                    "issue": f"App2 allocates {resource_comparison['memory_per_executor_ratio']:.1f}x more memory per executor",
+                    "suggestion": "Verify if App2's workload requires this memory or if it's over-provisioned",
+                }
+            )
         elif resource_comparison.get("memory_per_executor_ratio", 1) < 0.5:
-            recommendations.append({
-                "type": "memory_allocation",
-                "priority": "high",
-                "issue": f"App2 has {resource_comparison['memory_per_executor_ratio']:.1f}x less memory per executor",
-                "suggestion": "App2 may experience memory pressure - consider increasing executor memory"
-            })
+            recommendations.append(
+                {
+                    "type": "memory_allocation",
+                    "priority": "high",
+                    "issue": f"App2 has {resource_comparison['memory_per_executor_ratio']:.1f}x less memory per executor",
+                    "suggestion": "App2 may experience memory pressure - consider increasing executor memory",
+                }
+            )
 
         return {
-            "applications": {
-                "app1": app1_info,
-                "app2": app2_info
-            },
+            "applications": {"app1": app1_info, "app2": app2_info},
             "resource_comparison": resource_comparison,
-            "recommendations": recommendations
+            "recommendations": recommendations,
         }
 
     except Exception as e:
         return {
             "error": f"Failed to compare app resources: {str(e)}",
-            "applications": {
-                "app1": {"id": app_id1},
-                "app2": {"id": app_id2}
-            }
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
         }
 
 
@@ -3743,7 +4239,7 @@ def compare_app_executors(
     app_id2: str,
     server: Optional[str] = None,
     significance_threshold: float = 0.2,
-    show_only_significant: bool = True
+    show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
     Compare executor-level performance metrics between two Spark applications.
@@ -3773,18 +4269,38 @@ def compare_app_executors(
             return {
                 "error": "Could not retrieve executor summaries for one or both applications",
                 "applications": {
-                    "app1": {"id": app_id1, "executor_summary": exec_summary1 is not None},
-                    "app2": {"id": app_id2, "executor_summary": exec_summary2 is not None}
-                }
+                    "app1": {
+                        "id": app_id1,
+                        "executor_summary": exec_summary1 is not None,
+                    },
+                    "app2": {
+                        "id": app_id2,
+                        "executor_summary": exec_summary2 is not None,
+                    },
+                },
             }
 
         # Calculate executor performance ratios with proper zero handling
         executor_comparison = {
-            "executor_count_ratio": _calculate_safe_ratio(exec_summary1.get("total_executors", 0), exec_summary2.get("total_executors", 0)),
-            "memory_usage_ratio": _calculate_safe_ratio(exec_summary1.get("memory_used", 0), exec_summary2.get("memory_used", 0)),
-            "task_completion_ratio": _calculate_safe_ratio(exec_summary1.get("completed_tasks", 0), exec_summary2.get("completed_tasks", 0)),
-            "gc_time_ratio": _calculate_safe_ratio(exec_summary1.get("total_gc_time", 0), exec_summary2.get("total_gc_time", 0)),
-            "active_tasks_ratio": _calculate_safe_ratio(exec_summary1.get("active_tasks", 0), exec_summary2.get("active_tasks", 0)),
+            "executor_count_ratio": _calculate_safe_ratio(
+                exec_summary1.get("total_executors", 0),
+                exec_summary2.get("total_executors", 0),
+            ),
+            "memory_usage_ratio": _calculate_safe_ratio(
+                exec_summary1.get("memory_used", 0), exec_summary2.get("memory_used", 0)
+            ),
+            "task_completion_ratio": _calculate_safe_ratio(
+                exec_summary1.get("completed_tasks", 0),
+                exec_summary2.get("completed_tasks", 0),
+            ),
+            "gc_time_ratio": _calculate_safe_ratio(
+                exec_summary1.get("total_gc_time", 0),
+                exec_summary2.get("total_gc_time", 0),
+            ),
+            "active_tasks_ratio": _calculate_safe_ratio(
+                exec_summary1.get("active_tasks", 0),
+                exec_summary2.get("active_tasks", 0),
+            ),
         }
 
         # Calculate efficiency metrics
@@ -3792,63 +4308,95 @@ def compare_app_executors(
 
         # Task completion efficiency (tasks per executor)
         if exec_summary1.get("total_executors", 0) > 0:
-            efficiency_metrics["app1_tasks_per_executor"] = exec_summary1.get("completed_tasks", 0) / exec_summary1["total_executors"]
+            efficiency_metrics["app1_tasks_per_executor"] = (
+                exec_summary1.get("completed_tasks", 0)
+                / exec_summary1["total_executors"]
+            )
         if exec_summary2.get("total_executors", 0) > 0:
-            efficiency_metrics["app2_tasks_per_executor"] = exec_summary2.get("completed_tasks", 0) / exec_summary2["total_executors"]
+            efficiency_metrics["app2_tasks_per_executor"] = (
+                exec_summary2.get("completed_tasks", 0)
+                / exec_summary2["total_executors"]
+            )
 
         # Memory utilization efficiency
-        if exec_summary1.get("memory_used", 0) > 0 and exec_summary1.get("completed_tasks", 0) > 0:
-            efficiency_metrics["app1_tasks_per_mb"] = exec_summary1["completed_tasks"] / (exec_summary1["memory_used"] / (1024 * 1024))
-        if exec_summary2.get("memory_used", 0) > 0 and exec_summary2.get("completed_tasks", 0) > 0:
-            efficiency_metrics["app2_tasks_per_mb"] = exec_summary2["completed_tasks"] / (exec_summary2["memory_used"] / (1024 * 1024))
+        if (
+            exec_summary1.get("memory_used", 0) > 0
+            and exec_summary1.get("completed_tasks", 0) > 0
+        ):
+            efficiency_metrics["app1_tasks_per_mb"] = exec_summary1[
+                "completed_tasks"
+            ] / (exec_summary1["memory_used"] / (1024 * 1024))
+        if (
+            exec_summary2.get("memory_used", 0) > 0
+            and exec_summary2.get("completed_tasks", 0) > 0
+        ):
+            efficiency_metrics["app2_tasks_per_mb"] = exec_summary2[
+                "completed_tasks"
+            ] / (exec_summary2["memory_used"] / (1024 * 1024))
 
         # Generate executor-specific recommendations
         recommendations = []
 
         # Executor scaling analysis
         if executor_comparison["executor_count_ratio"] > 1.5:
-            recommendations.append({
-                "type": "executor_scaling",
-                "priority": "medium",
-                "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x more executors than App1",
-                "suggestion": "Evaluate if App2 needs this level of parallelism or if resources can be optimized"
-            })
+            recommendations.append(
+                {
+                    "type": "executor_scaling",
+                    "priority": "medium",
+                    "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x more executors than App1",
+                    "suggestion": "Evaluate if App2 needs this level of parallelism or if resources can be optimized",
+                }
+            )
         elif executor_comparison["executor_count_ratio"] < 0.7:
-            recommendations.append({
-                "type": "executor_scaling",
-                "priority": "high",
-                "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x fewer executors than App1",
-                "suggestion": "App2 may benefit from increased parallelism - consider scaling up executors"
-            })
+            recommendations.append(
+                {
+                    "type": "executor_scaling",
+                    "priority": "high",
+                    "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x fewer executors than App1",
+                    "suggestion": "App2 may benefit from increased parallelism - consider scaling up executors",
+                }
+            )
 
         # Memory efficiency analysis
         if executor_comparison["memory_usage_ratio"] > 2.0:
-            recommendations.append({
-                "type": "memory_efficiency",
-                "priority": "medium",
-                "issue": f"App2 uses {executor_comparison['memory_usage_ratio']:.1f}x more memory than App1",
-                "suggestion": "Review App2's memory usage patterns - may indicate inefficient data structures or caching"
-            })
+            recommendations.append(
+                {
+                    "type": "memory_efficiency",
+                    "priority": "medium",
+                    "issue": f"App2 uses {executor_comparison['memory_usage_ratio']:.1f}x more memory than App1",
+                    "suggestion": "Review App2's memory usage patterns - may indicate inefficient data structures or caching",
+                }
+            )
 
         # GC performance analysis
         if executor_comparison["gc_time_ratio"] > 2.0:
-            recommendations.append({
-                "type": "gc_performance",
-                "priority": "high",
-                "issue": f"App2 has {executor_comparison['gc_time_ratio']:.1f}x more GC time than App1",
-                "suggestion": "App2 experiencing memory pressure - consider increasing executor memory or optimizing data structures"
-            })
+            recommendations.append(
+                {
+                    "type": "gc_performance",
+                    "priority": "high",
+                    "issue": f"App2 has {executor_comparison['gc_time_ratio']:.1f}x more GC time than App1",
+                    "suggestion": "App2 experiencing memory pressure - consider increasing executor memory or optimizing data structures",
+                }
+            )
 
         # Task efficiency analysis
-        if efficiency_metrics.get("app1_tasks_per_executor", 0) > 0 and efficiency_metrics.get("app2_tasks_per_executor", 0) > 0:
-            task_efficiency_ratio = efficiency_metrics["app2_tasks_per_executor"] / efficiency_metrics["app1_tasks_per_executor"]
+        if (
+            efficiency_metrics.get("app1_tasks_per_executor", 0) > 0
+            and efficiency_metrics.get("app2_tasks_per_executor", 0) > 0
+        ):
+            task_efficiency_ratio = (
+                efficiency_metrics["app2_tasks_per_executor"]
+                / efficiency_metrics["app1_tasks_per_executor"]
+            )
             if task_efficiency_ratio < 0.5:
-                recommendations.append({
-                    "type": "task_efficiency",
-                    "priority": "medium",
-                    "issue": f"App2 processes {task_efficiency_ratio:.1f}x fewer tasks per executor than App1",
-                    "suggestion": "App2's executors may be underutilized - check for data skew or resource bottlenecks"
-                })
+                recommendations.append(
+                    {
+                        "type": "task_efficiency",
+                        "priority": "medium",
+                        "issue": f"App2 processes {task_efficiency_ratio:.1f}x fewer tasks per executor than App1",
+                        "suggestion": "App2's executors may be underutilized - check for data skew or resource bottlenecks",
+                    }
+                )
 
         # Apply significance filtering to executor comparison ratios
         filtered_executor_comparison = _filter_significant_metrics(
@@ -3857,10 +4405,22 @@ def compare_app_executors(
 
         # Apply significance filtering to efficiency metrics (those that are ratios)
         efficiency_ratios = {}
-        if efficiency_metrics.get("app1_tasks_per_executor", 0) > 0 and efficiency_metrics.get("app2_tasks_per_executor", 0) > 0:
-            efficiency_ratios["tasks_per_executor_ratio"] = efficiency_metrics["app2_tasks_per_executor"] / efficiency_metrics["app1_tasks_per_executor"]
-        if efficiency_metrics.get("app1_tasks_per_mb", 0) > 0 and efficiency_metrics.get("app2_tasks_per_mb", 0) > 0:
-            efficiency_ratios["tasks_per_mb_ratio"] = efficiency_metrics["app2_tasks_per_mb"] / efficiency_metrics["app1_tasks_per_mb"]
+        if (
+            efficiency_metrics.get("app1_tasks_per_executor", 0) > 0
+            and efficiency_metrics.get("app2_tasks_per_executor", 0) > 0
+        ):
+            efficiency_ratios["tasks_per_executor_ratio"] = (
+                efficiency_metrics["app2_tasks_per_executor"]
+                / efficiency_metrics["app1_tasks_per_executor"]
+            )
+        if (
+            efficiency_metrics.get("app1_tasks_per_mb", 0) > 0
+            and efficiency_metrics.get("app2_tasks_per_mb", 0) > 0
+        ):
+            efficiency_ratios["tasks_per_mb_ratio"] = (
+                efficiency_metrics["app2_tasks_per_mb"]
+                / efficiency_metrics["app1_tasks_per_mb"]
+            )
 
         filtered_efficiency_ratios = _filter_significant_metrics(
             efficiency_ratios, significance_threshold, show_only_significant
@@ -3868,14 +4428,8 @@ def compare_app_executors(
 
         return {
             "applications": {
-                "app1": {
-                    "id": app_id1,
-                    "executor_metrics": exec_summary1
-                },
-                "app2": {
-                    "id": app_id2,
-                    "executor_metrics": exec_summary2
-                }
+                "app1": {"id": app_id1, "executor_metrics": exec_summary1},
+                "app2": {"id": app_id2, "executor_metrics": exec_summary2},
             },
             "executor_comparison": filtered_executor_comparison["metrics"],
             "efficiency_metrics": efficiency_metrics,
@@ -3884,33 +4438,36 @@ def compare_app_executors(
             "filtering_summary": {
                 "executor_comparison": {
                     "total_metrics": filtered_executor_comparison["total_metrics"],
-                    "significant_metrics": filtered_executor_comparison["significant_metrics"],
-                    "filtering_applied": filtered_executor_comparison["filtering_applied"]
+                    "significant_metrics": filtered_executor_comparison[
+                        "significant_metrics"
+                    ],
+                    "filtering_applied": filtered_executor_comparison[
+                        "filtering_applied"
+                    ],
                 },
                 "efficiency_ratios": {
                     "total_metrics": filtered_efficiency_ratios["total_metrics"],
-                    "significant_metrics": filtered_efficiency_ratios["significant_metrics"],
-                    "filtering_applied": filtered_efficiency_ratios["filtering_applied"]
+                    "significant_metrics": filtered_efficiency_ratios[
+                        "significant_metrics"
+                    ],
+                    "filtering_applied": filtered_efficiency_ratios[
+                        "filtering_applied"
+                    ],
                 },
-                "significance_threshold": significance_threshold
-            }
+                "significance_threshold": significance_threshold,
+            },
         }
 
     except Exception as e:
         return {
             "error": f"Failed to compare executor performance: {str(e)}",
-            "applications": {
-                "app1": {"id": app_id1},
-                "app2": {"id": app_id2}
-            }
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
         }
 
 
 @mcp.tool()
 def compare_app_jobs(
-    app_id1: str,
-    app_id2: str,
-    server: Optional[str] = None
+    app_id1: str, app_id2: str, server: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Compare job-level performance metrics between two Spark applications.
@@ -3941,9 +4498,18 @@ def compare_app_jobs(
         # Calculate job performance ratios
         job_comparison = {
             "job_count_ratio": job_stats2["count"] / max(job_stats1["count"], 1),
-            "avg_duration_ratio": job_stats2["avg_duration"] / max(job_stats1["avg_duration"], 1) if job_stats1["avg_duration"] > 0 else 0,
-            "total_duration_ratio": job_stats2["total_duration"] / max(job_stats1["total_duration"], 1) if job_stats1["total_duration"] > 0 else 0,
-            "completion_rate_ratio": (job_stats2["completed_count"] / max(job_stats2["count"], 1)) / max((job_stats1["completed_count"] / max(job_stats1["count"], 1)), 0.01),
+            "avg_duration_ratio": job_stats2["avg_duration"]
+            / max(job_stats1["avg_duration"], 1)
+            if job_stats1["avg_duration"] > 0
+            else 0,
+            "total_duration_ratio": job_stats2["total_duration"]
+            / max(job_stats1["total_duration"], 1)
+            if job_stats1["total_duration"] > 0
+            else 0,
+            "completion_rate_ratio": (
+                job_stats2["completed_count"] / max(job_stats2["count"], 1)
+            )
+            / max((job_stats1["completed_count"] / max(job_stats1["count"], 1)), 0.01),
         }
 
         # Job success rate analysis
@@ -3953,80 +4519,92 @@ def compare_app_jobs(
         # Job timing analysis
         timing_analysis = {}
         if job_stats1["avg_duration"] > 0 and job_stats2["avg_duration"] > 0:
-            timing_analysis["avg_duration_difference_seconds"] = job_stats2["avg_duration"] - job_stats1["avg_duration"]
-            timing_analysis["avg_duration_improvement_percent"] = ((job_stats1["avg_duration"] - job_stats2["avg_duration"]) / job_stats1["avg_duration"]) * 100
+            timing_analysis["avg_duration_difference_seconds"] = (
+                job_stats2["avg_duration"] - job_stats1["avg_duration"]
+            )
+            timing_analysis["avg_duration_improvement_percent"] = (
+                (job_stats1["avg_duration"] - job_stats2["avg_duration"])
+                / job_stats1["avg_duration"]
+            ) * 100
 
         # Generate job-specific recommendations
         recommendations = []
 
         # Job count analysis
         if job_comparison["job_count_ratio"] > 2.0:
-            recommendations.append({
-                "type": "job_complexity",
-                "priority": "medium",
-                "issue": f"App2 has {job_comparison['job_count_ratio']:.1f}x more jobs than App1",
-                "suggestion": "App2 may have more complex workflow or different job decomposition strategy"
-            })
+            recommendations.append(
+                {
+                    "type": "job_complexity",
+                    "priority": "medium",
+                    "issue": f"App2 has {job_comparison['job_count_ratio']:.1f}x more jobs than App1",
+                    "suggestion": "App2 may have more complex workflow or different job decomposition strategy",
+                }
+            )
 
         # Duration performance analysis
         if job_comparison["avg_duration_ratio"] > 1.5:
-            recommendations.append({
-                "type": "job_performance",
-                "priority": "high",
-                "issue": f"App2 jobs are {job_comparison['avg_duration_ratio']:.1f}x slower on average than App1",
-                "suggestion": "Investigate job-level performance bottlenecks in App2 - may need optimization or resource scaling"
-            })
+            recommendations.append(
+                {
+                    "type": "job_performance",
+                    "priority": "high",
+                    "issue": f"App2 jobs are {job_comparison['avg_duration_ratio']:.1f}x slower on average than App1",
+                    "suggestion": "Investigate job-level performance bottlenecks in App2 - may need optimization or resource scaling",
+                }
+            )
         elif job_comparison["avg_duration_ratio"] < 0.7:
-            recommendations.append({
-                "type": "job_performance",
-                "priority": "low",
-                "issue": f"App2 jobs are {1/job_comparison['avg_duration_ratio']:.1f}x faster than App1",
-                "suggestion": "App2 shows better job-level performance - consider applying similar optimizations to App1"
-            })
+            recommendations.append(
+                {
+                    "type": "job_performance",
+                    "priority": "low",
+                    "issue": f"App2 jobs are {1 / job_comparison['avg_duration_ratio']:.1f}x faster than App1",
+                    "suggestion": "App2 shows better job-level performance - consider applying similar optimizations to App1",
+                }
+            )
 
         # Success rate analysis
         if job2_success_rate < job1_success_rate - 0.1:  # More than 10% difference
-            recommendations.append({
-                "type": "job_reliability",
-                "priority": "high",
-                "issue": f"App2 has {(job1_success_rate - job2_success_rate)*100:.1f}% lower job success rate",
-                "suggestion": "App2 experiencing more job failures - investigate error patterns and resource issues"
-            })
+            recommendations.append(
+                {
+                    "type": "job_reliability",
+                    "priority": "high",
+                    "issue": f"App2 has {(job1_success_rate - job2_success_rate) * 100:.1f}% lower job success rate",
+                    "suggestion": "App2 experiencing more job failures - investigate error patterns and resource issues",
+                }
+            )
 
         # Total execution time analysis
         if job_comparison["total_duration_ratio"] > 2.0:
-            recommendations.append({
-                "type": "overall_efficiency",
-                "priority": "medium",
-                "issue": f"App2 takes {job_comparison['total_duration_ratio']:.1f}x longer total execution time",
-                "suggestion": "App2 may benefit from better parallelization or resource optimization"
-            })
+            recommendations.append(
+                {
+                    "type": "overall_efficiency",
+                    "priority": "medium",
+                    "issue": f"App2 takes {job_comparison['total_duration_ratio']:.1f}x longer total execution time",
+                    "suggestion": "App2 may benefit from better parallelization or resource optimization",
+                }
+            )
 
         return {
             "applications": {
                 "app1": {
                     "id": app_id1,
                     "job_stats": job_stats1,
-                    "success_rate": job1_success_rate
+                    "success_rate": job1_success_rate,
                 },
                 "app2": {
                     "id": app_id2,
                     "job_stats": job_stats2,
-                    "success_rate": job2_success_rate
-                }
+                    "success_rate": job2_success_rate,
+                },
             },
             "job_comparison": job_comparison,
             "timing_analysis": timing_analysis,
-            "recommendations": recommendations
+            "recommendations": recommendations,
         }
 
     except Exception as e:
         return {
             "error": f"Failed to compare job performance: {str(e)}",
-            "applications": {
-                "app1": {"id": app_id1},
-                "app2": {"id": app_id2}
-            }
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
         }
 
 
@@ -4036,7 +4614,7 @@ def compare_app_stages_aggregated(
     app_id2: str,
     server: Optional[str] = None,
     significance_threshold: float = 0.2,
-    show_only_significant: bool = True
+    show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
     Compare aggregated stage-level metrics between two Spark applications.
@@ -4073,9 +4651,15 @@ def compare_app_stages_aggregated(
             return {
                 "error": "No stages found in one or both applications",
                 "applications": {
-                    "app1": {"id": app_id1, "stage_count": len(stages1) if stages1 else 0},
-                    "app2": {"id": app_id2, "stage_count": len(stages2) if stages2 else 0}
-                }
+                    "app1": {
+                        "id": app_id1,
+                        "stage_count": len(stages1) if stages1 else 0,
+                    },
+                    "app2": {
+                        "id": app_id2,
+                        "stage_count": len(stages2) if stages2 else 0,
+                    },
+                },
             }
 
         # Calculate aggregated stage metrics
@@ -4084,15 +4668,40 @@ def compare_app_stages_aggregated(
 
         # Calculate stage performance ratios with proper zero handling
         stage_comparison = {
-            "stage_count_ratio": _calculate_safe_ratio(stage_metrics1["total_stages"], stage_metrics2["total_stages"]),
-            "duration_ratio": _calculate_safe_ratio(stage_metrics1["total_stage_duration"], stage_metrics2["total_stage_duration"]),
-            "executor_runtime_ratio": _calculate_safe_ratio(stage_metrics1["total_executor_run_time"], stage_metrics2["total_executor_run_time"]),
-            "memory_spill_ratio": _calculate_safe_ratio(stage_metrics1["total_memory_spilled"], stage_metrics2["total_memory_spilled"]),
-            "shuffle_read_ratio": _calculate_safe_ratio(stage_metrics1["total_shuffle_read_bytes"], stage_metrics2["total_shuffle_read_bytes"]),
-            "shuffle_write_ratio": _calculate_safe_ratio(stage_metrics1["total_shuffle_write_bytes"], stage_metrics2["total_shuffle_write_bytes"]),
-            "input_ratio": _calculate_safe_ratio(stage_metrics1["total_input_bytes"], stage_metrics2["total_input_bytes"]),
-            "output_ratio": _calculate_safe_ratio(stage_metrics1["total_output_bytes"], stage_metrics2["total_output_bytes"]),
-            "task_failure_ratio": _calculate_safe_ratio(stage_metrics1["total_failed_tasks"], stage_metrics2["total_failed_tasks"]),
+            "stage_count_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_stages"], stage_metrics2["total_stages"]
+            ),
+            "duration_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_stage_duration"],
+                stage_metrics2["total_stage_duration"],
+            ),
+            "executor_runtime_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_executor_run_time"],
+                stage_metrics2["total_executor_run_time"],
+            ),
+            "memory_spill_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_memory_spilled"],
+                stage_metrics2["total_memory_spilled"],
+            ),
+            "shuffle_read_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_shuffle_read_bytes"],
+                stage_metrics2["total_shuffle_read_bytes"],
+            ),
+            "shuffle_write_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_shuffle_write_bytes"],
+                stage_metrics2["total_shuffle_write_bytes"],
+            ),
+            "input_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_input_bytes"], stage_metrics2["total_input_bytes"]
+            ),
+            "output_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_output_bytes"],
+                stage_metrics2["total_output_bytes"],
+            ),
+            "task_failure_ratio": _calculate_safe_ratio(
+                stage_metrics1["total_failed_tasks"],
+                stage_metrics2["total_failed_tasks"],
+            ),
         }
 
         # Data processing efficiency analysis
@@ -4100,78 +4709,114 @@ def compare_app_stages_aggregated(
 
         # Tasks per stage efficiency
         if stage_metrics1["total_stages"] > 0:
-            efficiency_analysis["app1_avg_tasks_per_stage"] = stage_metrics1["total_tasks"] / stage_metrics1["total_stages"]
+            efficiency_analysis["app1_avg_tasks_per_stage"] = (
+                stage_metrics1["total_tasks"] / stage_metrics1["total_stages"]
+            )
         if stage_metrics2["total_stages"] > 0:
-            efficiency_analysis["app2_avg_tasks_per_stage"] = stage_metrics2["total_tasks"] / stage_metrics2["total_stages"]
+            efficiency_analysis["app2_avg_tasks_per_stage"] = (
+                stage_metrics2["total_tasks"] / stage_metrics2["total_stages"]
+            )
 
         # Data throughput analysis (bytes processed per second)
         if stage_metrics1["total_stage_duration"] > 0:
-            efficiency_analysis["app1_input_throughput_bps"] = stage_metrics1["total_input_bytes"] / stage_metrics1["total_stage_duration"]
-            efficiency_analysis["app1_output_throughput_bps"] = stage_metrics1["total_output_bytes"] / stage_metrics1["total_stage_duration"]
+            efficiency_analysis["app1_input_throughput_bps"] = (
+                stage_metrics1["total_input_bytes"]
+                / stage_metrics1["total_stage_duration"]
+            )
+            efficiency_analysis["app1_output_throughput_bps"] = (
+                stage_metrics1["total_output_bytes"]
+                / stage_metrics1["total_stage_duration"]
+            )
 
         if stage_metrics2["total_stage_duration"] > 0:
-            efficiency_analysis["app2_input_throughput_bps"] = stage_metrics2["total_input_bytes"] / stage_metrics2["total_stage_duration"]
-            efficiency_analysis["app2_output_throughput_bps"] = stage_metrics2["total_output_bytes"] / stage_metrics2["total_stage_duration"]
+            efficiency_analysis["app2_input_throughput_bps"] = (
+                stage_metrics2["total_input_bytes"]
+                / stage_metrics2["total_stage_duration"]
+            )
+            efficiency_analysis["app2_output_throughput_bps"] = (
+                stage_metrics2["total_output_bytes"]
+                / stage_metrics2["total_stage_duration"]
+            )
 
         # Generate stage-specific recommendations
         recommendations = []
 
         # Stage complexity analysis
         if stage_comparison["stage_count_ratio"] > 1.5:
-            recommendations.append({
-                "type": "stage_complexity",
-                "priority": "medium",
-                "issue": f"App2 has {stage_comparison['stage_count_ratio']:.1f}x more stages than App1",
-                "suggestion": "App2 has more complex execution plan - may indicate different algorithm or less optimized query planning"
-            })
+            recommendations.append(
+                {
+                    "type": "stage_complexity",
+                    "priority": "medium",
+                    "issue": f"App2 has {stage_comparison['stage_count_ratio']:.1f}x more stages than App1",
+                    "suggestion": "App2 has more complex execution plan - may indicate different algorithm or less optimized query planning",
+                }
+            )
 
         # Performance analysis
         if stage_comparison["duration_ratio"] > 1.5:
-            recommendations.append({
-                "type": "stage_performance",
-                "priority": "high",
-                "issue": f"App2 stages take {stage_comparison['duration_ratio']:.1f}x longer total time than App1",
-                "suggestion": "App2 experiencing stage-level performance issues - investigate resource allocation or data skew"
-            })
+            recommendations.append(
+                {
+                    "type": "stage_performance",
+                    "priority": "high",
+                    "issue": f"App2 stages take {stage_comparison['duration_ratio']:.1f}x longer total time than App1",
+                    "suggestion": "App2 experiencing stage-level performance issues - investigate resource allocation or data skew",
+                }
+            )
 
         # Memory spill analysis
         if stage_comparison["memory_spill_ratio"] > 2.0:
-            recommendations.append({
-                "type": "memory_pressure",
-                "priority": "high",
-                "issue": f"App2 has {stage_comparison['memory_spill_ratio']:.1f}x more memory spill than App1",
-                "suggestion": "App2 experiencing memory pressure - increase executor memory or optimize data structures"
-            })
+            recommendations.append(
+                {
+                    "type": "memory_pressure",
+                    "priority": "high",
+                    "issue": f"App2 has {stage_comparison['memory_spill_ratio']:.1f}x more memory spill than App1",
+                    "suggestion": "App2 experiencing memory pressure - increase executor memory or optimize data structures",
+                }
+            )
 
         # Shuffle efficiency analysis
-        if stage_comparison["shuffle_read_ratio"] > 2.0 or stage_comparison["shuffle_write_ratio"] > 2.0:
-            recommendations.append({
-                "type": "shuffle_efficiency",
-                "priority": "medium",
-                "issue": f"App2 has significantly more shuffle operations (read: {stage_comparison['shuffle_read_ratio']:.1f}x, write: {stage_comparison['shuffle_write_ratio']:.1f}x)",
-                "suggestion": "App2 may have data skew or inefficient partitioning - consider repartitioning strategies"
-            })
+        if (
+            stage_comparison["shuffle_read_ratio"] > 2.0
+            or stage_comparison["shuffle_write_ratio"] > 2.0
+        ):
+            recommendations.append(
+                {
+                    "type": "shuffle_efficiency",
+                    "priority": "medium",
+                    "issue": f"App2 has significantly more shuffle operations (read: {stage_comparison['shuffle_read_ratio']:.1f}x, write: {stage_comparison['shuffle_write_ratio']:.1f}x)",
+                    "suggestion": "App2 may have data skew or inefficient partitioning - consider repartitioning strategies",
+                }
+            )
 
         # Task failure analysis
         if stage_comparison["task_failure_ratio"] > 2.0:
-            recommendations.append({
-                "type": "reliability",
-                "priority": "high",
-                "issue": f"App2 has {stage_comparison['task_failure_ratio']:.1f}x more task failures than App1",
-                "suggestion": "App2 experiencing reliability issues - investigate infrastructure or data quality problems"
-            })
+            recommendations.append(
+                {
+                    "type": "reliability",
+                    "priority": "high",
+                    "issue": f"App2 has {stage_comparison['task_failure_ratio']:.1f}x more task failures than App1",
+                    "suggestion": "App2 experiencing reliability issues - investigate infrastructure or data quality problems",
+                }
+            )
 
         # Throughput efficiency analysis
-        if (efficiency_analysis.get("app1_input_throughput_bps", 0) > 0 and
-            efficiency_analysis.get("app2_input_throughput_bps", 0) > 0):
-            throughput_ratio = efficiency_analysis["app2_input_throughput_bps"] / efficiency_analysis["app1_input_throughput_bps"]
+        if (
+            efficiency_analysis.get("app1_input_throughput_bps", 0) > 0
+            and efficiency_analysis.get("app2_input_throughput_bps", 0) > 0
+        ):
+            throughput_ratio = (
+                efficiency_analysis["app2_input_throughput_bps"]
+                / efficiency_analysis["app1_input_throughput_bps"]
+            )
             if throughput_ratio < 0.5:
-                recommendations.append({
-                    "type": "throughput_efficiency",
-                    "priority": "medium",
-                    "issue": f"App2 has {throughput_ratio:.1f}x lower input processing throughput than App1",
-                    "suggestion": "App2's data processing efficiency is lower - check for I/O bottlenecks or resource constraints"
-                })
+                recommendations.append(
+                    {
+                        "type": "throughput_efficiency",
+                        "priority": "medium",
+                        "issue": f"App2 has {throughput_ratio:.1f}x lower input processing throughput than App1",
+                        "suggestion": "App2's data processing efficiency is lower - check for I/O bottlenecks or resource constraints",
+                    }
+                )
 
         # Apply significance filtering to stage comparison ratios
         filtered_stage_comparison = _filter_significant_metrics(
@@ -4180,12 +4825,30 @@ def compare_app_stages_aggregated(
 
         # Calculate throughput efficiency ratios for filtering
         efficiency_ratios = {}
-        if efficiency_analysis.get("app1_input_throughput_bps", 0) > 0 and efficiency_analysis.get("app2_input_throughput_bps", 0) > 0:
-            efficiency_ratios["input_throughput_ratio"] = efficiency_analysis["app2_input_throughput_bps"] / efficiency_analysis["app1_input_throughput_bps"]
-        if efficiency_analysis.get("app1_output_throughput_bps", 0) > 0 and efficiency_analysis.get("app2_output_throughput_bps", 0) > 0:
-            efficiency_ratios["output_throughput_ratio"] = efficiency_analysis["app2_output_throughput_bps"] / efficiency_analysis["app1_output_throughput_bps"]
-        if efficiency_analysis.get("app1_avg_tasks_per_stage", 0) > 0 and efficiency_analysis.get("app2_avg_tasks_per_stage", 0) > 0:
-            efficiency_ratios["tasks_per_stage_ratio"] = efficiency_analysis["app2_avg_tasks_per_stage"] / efficiency_analysis["app1_avg_tasks_per_stage"]
+        if (
+            efficiency_analysis.get("app1_input_throughput_bps", 0) > 0
+            and efficiency_analysis.get("app2_input_throughput_bps", 0) > 0
+        ):
+            efficiency_ratios["input_throughput_ratio"] = (
+                efficiency_analysis["app2_input_throughput_bps"]
+                / efficiency_analysis["app1_input_throughput_bps"]
+            )
+        if (
+            efficiency_analysis.get("app1_output_throughput_bps", 0) > 0
+            and efficiency_analysis.get("app2_output_throughput_bps", 0) > 0
+        ):
+            efficiency_ratios["output_throughput_ratio"] = (
+                efficiency_analysis["app2_output_throughput_bps"]
+                / efficiency_analysis["app1_output_throughput_bps"]
+            )
+        if (
+            efficiency_analysis.get("app1_avg_tasks_per_stage", 0) > 0
+            and efficiency_analysis.get("app2_avg_tasks_per_stage", 0) > 0
+        ):
+            efficiency_ratios["tasks_per_stage_ratio"] = (
+                efficiency_analysis["app2_avg_tasks_per_stage"]
+                / efficiency_analysis["app1_avg_tasks_per_stage"]
+            )
 
         filtered_efficiency_ratios = _filter_significant_metrics(
             efficiency_ratios, significance_threshold, show_only_significant
@@ -4193,14 +4856,8 @@ def compare_app_stages_aggregated(
 
         return {
             "applications": {
-                "app1": {
-                    "id": app_id1,
-                    "stage_metrics": stage_metrics1
-                },
-                "app2": {
-                    "id": app_id2,
-                    "stage_metrics": stage_metrics2
-                }
+                "app1": {"id": app_id1, "stage_metrics": stage_metrics1},
+                "app2": {"id": app_id2, "stage_metrics": stage_metrics2},
             },
             "stage_comparison": filtered_stage_comparison["metrics"],
             "efficiency_analysis": efficiency_analysis,
@@ -4209,25 +4866,28 @@ def compare_app_stages_aggregated(
             "filtering_summary": {
                 "stage_comparison": {
                     "total_metrics": filtered_stage_comparison["total_metrics"],
-                    "significant_metrics": filtered_stage_comparison["significant_metrics"],
-                    "filtering_applied": filtered_stage_comparison["filtering_applied"]
+                    "significant_metrics": filtered_stage_comparison[
+                        "significant_metrics"
+                    ],
+                    "filtering_applied": filtered_stage_comparison["filtering_applied"],
                 },
                 "efficiency_ratios": {
                     "total_metrics": filtered_efficiency_ratios["total_metrics"],
-                    "significant_metrics": filtered_efficiency_ratios["significant_metrics"],
-                    "filtering_applied": filtered_efficiency_ratios["filtering_applied"]
+                    "significant_metrics": filtered_efficiency_ratios[
+                        "significant_metrics"
+                    ],
+                    "filtering_applied": filtered_efficiency_ratios[
+                        "filtering_applied"
+                    ],
                 },
-                "significance_threshold": significance_threshold
-            }
+                "significance_threshold": significance_threshold,
+            },
         }
 
     except Exception as e:
         return {
             "error": f"Failed to compare aggregated stage performance: {str(e)}",
-            "applications": {
-                "app1": {"id": app_id1},
-                "app2": {"id": app_id2}
-            }
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
         }
 
 
@@ -4241,7 +4901,7 @@ def compare_app_performance(
     include_raw_data: bool = False,
     filter_auto_generated: bool = True,
     significance_threshold: float = 0.2,
-    show_only_significant: bool = True
+    show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
     Comprehensive performance comparison between two Spark applications.
@@ -4288,26 +4948,30 @@ def compare_app_performance(
             "error": "No stages found in one or both applications",
             "applications": {
                 "app1": {"id": app_id1, "name": app1.name, "stage_count": len(stages1)},
-                "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)}
-            }
+                "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)},
+            },
         }
 
     # PHASE 1: AGGREGATED APPLICATION OVERVIEW
     # Use specialized comparison tools for aggregated overview
     try:
-        executor_comparison = compare_app_executors(app_id1, app_id2, server, significance_threshold, show_only_significant)
+        executor_comparison = compare_app_executors(
+            app_id1, app_id2, server, significance_threshold, show_only_significant
+        )
     except Exception as e:
         executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
 
     try:
-        stage_comparison = compare_app_stages_aggregated(app_id1, app_id2, server, significance_threshold, show_only_significant)
+        stage_comparison = compare_app_stages_aggregated(
+            app_id1, app_id2, server, significance_threshold, show_only_significant
+        )
     except Exception as e:
         stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
 
     # Create streamlined aggregated overview using specialized tools
     aggregated_overview = {
         "executor_comparison": executor_comparison,
-        "stage_comparison": stage_comparison
+        "stage_comparison": stage_comparison,
     }
 
     # Find matching stages between applications
@@ -4318,9 +4982,9 @@ def compare_app_performance(
             "error": f"No matching stages found between applications (similarity threshold: {similarity_threshold})",
             "applications": {
                 "app1": {"id": app_id1, "name": app1.name, "stage_count": len(stages1)},
-                "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)}
+                "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)},
             },
-            "suggestion": "Try lowering the similarity_threshold parameter or check that applications are performing similar operations"
+            "suggestion": "Try lowering the similarity_threshold parameter or check that applications are performing similar operations",
         }
 
     # Calculate time differences for matching stages
@@ -4334,32 +4998,32 @@ def compare_app_performance(
             time_diff = abs(duration2 - duration1)
             time_diff_percent = (time_diff / max(duration1, duration2)) * 100
 
-            stage_differences.append({
-                "stage1": stage1,
-                "stage2": stage2,
-                "similarity": similarity,
-                "duration1": duration1,
-                "duration2": duration2,
-                "time_difference_seconds": time_diff,
-                "time_difference_percent": time_diff_percent,
-                "slower_app": "app1" if duration1 > duration2 else "app2"
-            })
+            stage_differences.append(
+                {
+                    "stage1": stage1,
+                    "stage2": stage2,
+                    "similarity": similarity,
+                    "duration1": duration1,
+                    "duration2": duration2,
+                    "time_difference_seconds": time_diff,
+                    "time_difference_percent": time_diff_percent,
+                    "slower_app": "app1" if duration1 > duration2 else "app2",
+                }
+            )
 
     if not stage_differences:
         return {
             "error": "No stages with calculable durations found",
             "applications": {
                 "app1": {"id": app_id1, "name": app1.name},
-                "app2": {"id": app_id2, "name": app2.name}
+                "app2": {"id": app_id2, "name": app2.name},
             },
-            "matched_stages": len(stage_matches)
+            "matched_stages": len(stage_matches),
         }
 
     # Sort by time difference and get top N
     top_differences = sorted(
-        stage_differences,
-        key=lambda x: x["time_difference_seconds"],
-        reverse=True
+        stage_differences, key=lambda x: x["time_difference_seconds"], reverse=True
     )[:top_n]
 
     # Get detailed summaries for top different stages
@@ -4379,36 +5043,40 @@ def compare_app_performance(
 
         stage_metric_comparison = {
             "duration": {
-                "app1_ms": safe_get_metric(stage1, 'execution_time', 0),
-                "app2_ms": safe_get_metric(stage2, 'execution_time', 0),
-                "difference_ms": safe_get_metric(stage2, 'execution_time', 0) - safe_get_metric(stage1, 'execution_time', 0)
+                "app1_ms": safe_get_metric(stage1, "execution_time", 0),
+                "app2_ms": safe_get_metric(stage2, "execution_time", 0),
+                "difference_ms": safe_get_metric(stage2, "execution_time", 0)
+                - safe_get_metric(stage1, "execution_time", 0),
             },
             "tasks": {
-                "app1_total": safe_get_metric(stage1, 'num_tasks', 0),
-                "app2_total": safe_get_metric(stage2, 'num_tasks', 0),
-                "app1_failed": safe_get_metric(stage1, 'num_failed_tasks', 0),
-                "app2_failed": safe_get_metric(stage2, 'num_failed_tasks', 0)
+                "app1_total": safe_get_metric(stage1, "num_tasks", 0),
+                "app2_total": safe_get_metric(stage2, "num_tasks", 0),
+                "app1_failed": safe_get_metric(stage1, "num_failed_tasks", 0),
+                "app2_failed": safe_get_metric(stage2, "num_failed_tasks", 0),
             },
             "io_metrics": {
-                "app1_input_bytes": safe_get_metric(stage1, 'input_bytes', 0),
-                "app2_input_bytes": safe_get_metric(stage2, 'input_bytes', 0),
-                "app1_output_bytes": safe_get_metric(stage1, 'output_bytes', 0),
-                "app2_output_bytes": safe_get_metric(stage2, 'output_bytes', 0)
+                "app1_input_bytes": safe_get_metric(stage1, "input_bytes", 0),
+                "app2_input_bytes": safe_get_metric(stage2, "input_bytes", 0),
+                "app1_output_bytes": safe_get_metric(stage1, "output_bytes", 0),
+                "app2_output_bytes": safe_get_metric(stage2, "output_bytes", 0),
             },
             "shuffle_metrics": {
-                "app1_read_bytes": safe_get_metric(stage1, 'shuffle_read_bytes', 0),
-                "app2_read_bytes": safe_get_metric(stage2, 'shuffle_read_bytes', 0),
-                "app1_write_bytes": safe_get_metric(stage1, 'shuffle_write_bytes', 0),
-                "app2_write_bytes": safe_get_metric(stage2, 'shuffle_write_bytes', 0)
+                "app1_read_bytes": safe_get_metric(stage1, "shuffle_read_bytes", 0),
+                "app2_read_bytes": safe_get_metric(stage2, "shuffle_read_bytes", 0),
+                "app1_write_bytes": safe_get_metric(stage1, "shuffle_write_bytes", 0),
+                "app2_write_bytes": safe_get_metric(stage2, "shuffle_write_bytes", 0),
             },
             "memory_metrics": {
-                "app1_spill_bytes": safe_get_metric(stage1, 'memory_bytes_spilled', 0),
-                "app2_spill_bytes": safe_get_metric(stage2, 'memory_bytes_spilled', 0),
-                "app1_disk_spill_bytes": safe_get_metric(stage1, 'disk_bytes_spilled', 0),
-                "app2_disk_spill_bytes": safe_get_metric(stage2, 'disk_bytes_spilled', 0)
-            }
+                "app1_spill_bytes": safe_get_metric(stage1, "memory_bytes_spilled", 0),
+                "app2_spill_bytes": safe_get_metric(stage2, "memory_bytes_spilled", 0),
+                "app1_disk_spill_bytes": safe_get_metric(
+                    stage1, "disk_bytes_spilled", 0
+                ),
+                "app2_disk_spill_bytes": safe_get_metric(
+                    stage2, "disk_bytes_spilled", 0
+                ),
+            },
         }
-
 
         # Apply significance filtering to stage metrics comparison
         filtered_stage_metrics = _filter_stage_metrics_comparison(
@@ -4423,25 +5091,27 @@ def compare_app_performance(
                 "stage_id": stage1.stage_id,
                 "name": stage1.name,
                 "status": stage1.status,
-                "duration_seconds": diff["duration1"]
+                "duration_seconds": diff["duration1"],
             },
             "app2_stage": {
                 "stage_id": stage2.stage_id,
                 "name": stage2.name,
                 "status": stage2.status,
-                "duration_seconds": diff["duration2"]
+                "duration_seconds": diff["duration2"],
             },
             "time_difference": {
                 "absolute_seconds": diff["time_difference_seconds"],
                 "percentage": diff["time_difference_percent"],
-                "slower_application": diff["slower_app"]
+                "slower_application": diff["slower_app"],
             },
             "stage_metrics_comparison": filtered_stage_metrics["metrics"],
             "metrics_filtering_summary": {
                 "filtering_applied": filtered_stage_metrics["filtering_applied"],
-                "significance_threshold": filtered_stage_metrics["significance_threshold"],
-                "category_summary": filtered_stage_metrics["category_summary"]
-            }
+                "significance_threshold": filtered_stage_metrics[
+                    "significance_threshold"
+                ],
+                "category_summary": filtered_stage_metrics["category_summary"],
+            },
         }
 
         # Conditionally add raw data for debugging/investigation
@@ -4456,7 +5126,7 @@ def compare_app_performance(
                     "shuffle_read_bytes": stage1.shuffle_read_bytes,
                     "shuffle_write_bytes": stage1.shuffle_write_bytes,
                     "input_bytes": stage1.input_bytes,
-                    "output_bytes": stage1.output_bytes
+                    "output_bytes": stage1.output_bytes,
                 },
                 "app2_stage_metrics": {
                     "num_tasks": stage2.num_tasks,
@@ -4467,8 +5137,8 @@ def compare_app_performance(
                     "shuffle_read_bytes": stage2.shuffle_read_bytes,
                     "shuffle_write_bytes": stage2.shuffle_write_bytes,
                     "input_bytes": stage2.input_bytes,
-                    "output_bytes": stage2.output_bytes
-                }
+                    "output_bytes": stage2.output_bytes,
+                },
             }
 
         detailed_comparisons.append(stage_comparison)
@@ -4476,7 +5146,11 @@ def compare_app_performance(
     # Generate summary statistics
     total_time_diff = sum(d["time_difference_seconds"] for d in top_differences)
     avg_time_diff = total_time_diff / len(top_differences) if top_differences else 0
-    max_time_diff = max(d["time_difference_seconds"] for d in top_differences) if top_differences else 0
+    max_time_diff = (
+        max(d["time_difference_seconds"] for d in top_differences)
+        if top_differences
+        else 0
+    )
 
     # Enhanced recommendations combining both application and stage-level insights
     recommendations = []
@@ -4488,49 +5162,67 @@ def compare_app_performance(
         if core_ratio > 1.5 or core_ratio < 0.67:  # >50% difference
             slower_app = "app1" if core_ratio > 1.5 else "app2"
             faster_app = "app2" if core_ratio > 1.5 else "app1"
-            recommendations.append({
-                "type": "resource_allocation",
-                "priority": "medium",
-                "issue": f"Significant core allocation difference (ratio: {core_ratio:.2f})",
-                "suggestion": f"Consider equalizing core allocation - {slower_app} has fewer cores than {faster_app}"
-            })
+            recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "medium",
+                    "issue": f"Significant core allocation difference (ratio: {core_ratio:.2f})",
+                    "suggestion": f"Consider equalizing core allocation - {slower_app} has fewer cores than {faster_app}",
+                }
+            )
 
     # Memory allocation differences
     if app1.memory_per_executor_mb and app2.memory_per_executor_mb:
         memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
         if memory_ratio > 1.5 or memory_ratio < 0.67:  # >50% difference
-            recommendations.append({
-                "type": "resource_allocation",
-                "priority": "medium",
-                "issue": f"Significant memory per executor difference (ratio: {memory_ratio:.2f})",
-                "suggestion": "Review memory allocation settings between applications"
-            })
+            recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "medium",
+                    "issue": f"Significant memory per executor difference (ratio: {memory_ratio:.2f})",
+                    "suggestion": "Review memory allocation settings between applications",
+                }
+            )
 
     # Extract recommendations from specialized comparison tools
     # Executor efficiency recommendations
-    if (aggregated_overview["executor_comparison"] and
-        isinstance(aggregated_overview["executor_comparison"], dict) and
-        "recommendations" in aggregated_overview["executor_comparison"]):
-        recommendations.extend(aggregated_overview["executor_comparison"]["recommendations"])
+    if (
+        aggregated_overview["executor_comparison"]
+        and isinstance(aggregated_overview["executor_comparison"], dict)
+        and "recommendations" in aggregated_overview["executor_comparison"]
+    ):
+        recommendations.extend(
+            aggregated_overview["executor_comparison"]["recommendations"]
+        )
 
     # Stage-level aggregated recommendations
-    if (aggregated_overview["stage_comparison"] and
-        isinstance(aggregated_overview["stage_comparison"], dict) and
-        "recommendations" in aggregated_overview["stage_comparison"]):
-        recommendations.extend(aggregated_overview["stage_comparison"]["recommendations"])
+    if (
+        aggregated_overview["stage_comparison"]
+        and isinstance(aggregated_overview["stage_comparison"], dict)
+        and "recommendations" in aggregated_overview["stage_comparison"]
+    ):
+        recommendations.extend(
+            aggregated_overview["stage_comparison"]["recommendations"]
+        )
 
     # STAGE-LEVEL RECOMMENDATIONS (existing logic)
     # Check for stages with large time differences
     large_diff_threshold = 60  # seconds
-    large_diff_stages = [d for d in top_differences if d["time_difference_seconds"] > large_diff_threshold]
+    large_diff_stages = [
+        d
+        for d in top_differences
+        if d["time_difference_seconds"] > large_diff_threshold
+    ]
 
     if large_diff_stages:
-        recommendations.append({
-            "type": "stage_performance",
-            "priority": "high",
-            "issue": f"Found {len(large_diff_stages)} stages with >60s time difference",
-            "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues in specific stages"
-        })
+        recommendations.append(
+            {
+                "type": "stage_performance",
+                "priority": "high",
+                "issue": f"Found {len(large_diff_stages)} stages with >60s time difference",
+                "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues in specific stages",
+            }
+        )
 
     # Check for memory spilling differences at stage level using simplified comparisons
     spill_diff_stages = []
@@ -4544,15 +5236,19 @@ def compare_app_performance(
                 spill_diff_stages.append(comp)
 
     if spill_diff_stages:
-        recommendations.append({
-            "type": "stage_memory",
-            "priority": "medium",
-            "issue": f"Found {len(spill_diff_stages)} stages with significant memory spill differences",
-            "suggestion": "Check memory allocation and partitioning strategies for specific stages"
-        })
+        recommendations.append(
+            {
+                "type": "stage_memory",
+                "priority": "medium",
+                "issue": f"Found {len(spill_diff_stages)} stages with significant memory spill differences",
+                "suggestion": "Check memory allocation and partitioning strategies for specific stages",
+            }
+        )
 
     # Environment and configuration comparison
-    environment_comparison = _compare_environments(client, app_id1, app_id2, filter_auto_generated)
+    environment_comparison = _compare_environments(
+        client, app_id1, app_id2, filter_auto_generated
+    )
 
     # SQL execution plans comparison
     sql_plans_comparison = _compare_sql_execution_plans(client, app_id1, app_id2)
@@ -4568,7 +5264,7 @@ def compare_app_performance(
     return {
         "applications": {
             "app1": {"id": app_id1, "name": app1.name},
-            "app2": {"id": app_id2, "name": app2.name}
+            "app2": {"id": app_id2, "name": app2.name},
         },
         "aggregated_overview": aggregated_overview,
         "environment_comparison": environment_comparison,
@@ -4581,22 +5277,24 @@ def compare_app_performance(
                 "show_only_significant": show_only_significant,
                 "total_stages_app1": len(stages1),
                 "total_stages_app2": len(stages2),
-                "matched_stages": len(stage_matches)
+                "matched_stages": len(stage_matches),
             },
             "top_stage_differences": detailed_comparisons,
             "stage_summary": {
                 "total_time_difference_seconds": total_time_diff,
                 "average_time_difference_seconds": avg_time_diff,
                 "maximum_time_difference_seconds": max_time_diff,
-                "stages_analyzed": len(top_differences)
-            }
+                "stages_analyzed": len(top_differences),
+            },
         },
         "recommendations": recommendations,
         "filtering_summary": {
             "enabled": show_only_significant,
             "threshold": significance_threshold,
-            "description": f"{'Filtering applied' if show_only_significant else 'No filtering applied'} - showing metrics with ≥{significance_threshold*100:.0f}% difference from baseline" if show_only_significant else "All metrics shown regardless of significance"
-        }
+            "description": f"{'Filtering applied' if show_only_significant else 'No filtering applied'} - showing metrics with ≥{significance_threshold * 100:.0f}% difference from baseline"
+            if show_only_significant
+            else "All metrics shown regardless of significance",
+        },
     }
 
 
@@ -4607,7 +5305,7 @@ def compare_stages(
     stage_id1: int,
     stage_id2: int,
     server: Optional[str] = None,
-    significance_threshold: float = 0.2
+    significance_threshold: float = 0.2,
 ) -> Dict[str, Any]:
     """
     Compare specific stages between two Spark applications.
@@ -4636,14 +5334,14 @@ def compare_stages(
             stage_id=stage_id1,
             attempt_id=0,
             details=False,
-            with_summaries=True
+            with_summaries=True,
         )
         stage2 = client.get_stage_attempt(
             app_id=app_id2,
             stage_id=stage_id2,
             attempt_id=0,
             details=False,
-            with_summaries=True
+            with_summaries=True,
         )
 
         # Get task metric distributions
@@ -4668,8 +5366,8 @@ def compare_stages(
             "error": f"Failed to retrieve stage data: {str(e)}",
             "stages": {
                 "stage1": {"app_id": app_id1, "stage_id": stage_id1},
-                "stage2": {"app_id": app_id2, "stage_id": stage_id2}
-            }
+                "stage2": {"app_id": app_id2, "stage_id": stage_id2},
+            },
         }
 
     # Build comparison result
@@ -4679,24 +5377,26 @@ def compare_stages(
                 "app_id": app_id1,
                 "stage_id": stage_id1,
                 "name": stage1.name,
-                "status": stage1.status
+                "status": stage1.status,
             },
             "stage2": {
                 "app_id": app_id2,
                 "stage_id": stage_id2,
                 "name": stage2.name,
-                "status": stage2.status
-            }
+                "status": stage2.status,
+            },
         },
         "significant_differences": {},
         "summary": {
             "significance_threshold": significance_threshold,
-            "total_differences_found": 0
-        }
+            "total_differences_found": 0,
+        },
     }
 
     # Helper function to calculate significance and format comparison
-    def calculate_difference(val1: float, val2: float, metric_name: str) -> Optional[Dict[str, Any]]:
+    def calculate_difference(
+        val1: float, val2: float, metric_name: str
+    ) -> Optional[Dict[str, Any]]:
         if val1 == 0 and val2 == 0:
             return None
 
@@ -4710,7 +5410,7 @@ def compare_stages(
                 "stage1": val1,
                 "stage2": val2,
                 "change": f"{change_pct:+.1f}%",
-                "significance": diff_ratio
+                "significance": diff_ratio,
             }
         return None
 
@@ -4721,9 +5421,13 @@ def compare_stages(
     duration1 = 0
     duration2 = 0
     if stage1.completion_time and stage1.first_task_launched_time:
-        duration1 = (stage1.completion_time - stage1.first_task_launched_time).total_seconds()
+        duration1 = (
+            stage1.completion_time - stage1.first_task_launched_time
+        ).total_seconds()
     if stage2.completion_time and stage2.first_task_launched_time:
-        duration2 = (stage2.completion_time - stage2.first_task_launched_time).total_seconds()
+        duration2 = (
+            stage2.completion_time - stage2.first_task_launched_time
+        ).total_seconds()
 
     duration_diff = calculate_difference(duration1, duration2, "duration")
     if duration_diff:
@@ -4732,13 +5436,33 @@ def compare_stages(
     # Task count comparisons
     task_metrics = [
         ("num_tasks", stage1.num_tasks or 0, stage2.num_tasks or 0),
-        ("num_failed_tasks", stage1.num_failed_tasks or 0, stage2.num_failed_tasks or 0),
-        ("memory_bytes_spilled", stage1.memory_bytes_spilled or 0, stage2.memory_bytes_spilled or 0),
-        ("disk_bytes_spilled", stage1.disk_bytes_spilled or 0, stage2.disk_bytes_spilled or 0),
+        (
+            "num_failed_tasks",
+            stage1.num_failed_tasks or 0,
+            stage2.num_failed_tasks or 0,
+        ),
+        (
+            "memory_bytes_spilled",
+            stage1.memory_bytes_spilled or 0,
+            stage2.memory_bytes_spilled or 0,
+        ),
+        (
+            "disk_bytes_spilled",
+            stage1.disk_bytes_spilled or 0,
+            stage2.disk_bytes_spilled or 0,
+        ),
         ("input_bytes", stage1.input_bytes or 0, stage2.input_bytes or 0),
         ("output_bytes", stage1.output_bytes or 0, stage2.output_bytes or 0),
-        ("shuffle_read_bytes", stage1.shuffle_read_bytes or 0, stage2.shuffle_read_bytes or 0),
-        ("shuffle_write_bytes", stage1.shuffle_write_bytes or 0, stage2.shuffle_write_bytes or 0)
+        (
+            "shuffle_read_bytes",
+            stage1.shuffle_read_bytes or 0,
+            stage2.shuffle_read_bytes or 0,
+        ),
+        (
+            "shuffle_write_bytes",
+            stage1.shuffle_write_bytes or 0,
+            stage2.shuffle_write_bytes or 0,
+        ),
     ]
 
     for metric_name, val1, val2 in task_metrics:
@@ -4752,7 +5476,7 @@ def compare_stages(
     # Compare task-level distributions (median and max)
     task_distributions = {}
 
-    if (stage1.task_metrics_distributions and stage2.task_metrics_distributions):
+    if stage1.task_metrics_distributions and stage2.task_metrics_distributions:
         dist1 = stage1.task_metrics_distributions
         dist2 = stage2.task_metrics_distributions
 
@@ -4760,9 +5484,17 @@ def compare_stages(
         task_dist_metrics = [
             ("duration", dist1.duration, dist2.duration),
             ("executor_run_time", dist1.executor_run_time, dist2.executor_run_time),
-            ("peak_execution_memory", dist1.peak_execution_memory, dist2.peak_execution_memory),
-            ("memory_bytes_spilled", dist1.memory_bytes_spilled, dist2.memory_bytes_spilled),
-            ("disk_bytes_spilled", dist1.disk_bytes_spilled, dist2.disk_bytes_spilled)
+            (
+                "peak_execution_memory",
+                dist1.peak_execution_memory,
+                dist2.peak_execution_memory,
+            ),
+            (
+                "memory_bytes_spilled",
+                dist1.memory_bytes_spilled,
+                dist2.memory_bytes_spilled,
+            ),
+            ("disk_bytes_spilled", dist1.disk_bytes_spilled, dist2.disk_bytes_spilled),
         ]
 
         for metric_name, vals1, vals2 in task_dist_metrics:
@@ -4770,12 +5502,16 @@ def compare_stages(
                 metric_comparison = {}
 
                 # Compare median (50th percentile - index 2)
-                median_diff = calculate_difference(vals1[2], vals2[2], f"{metric_name}_median")
+                median_diff = calculate_difference(
+                    vals1[2], vals2[2], f"{metric_name}_median"
+                )
                 if median_diff:
                     metric_comparison["median"] = median_diff
 
                 # Compare max (100th percentile - index 4)
-                max_diff = calculate_difference(vals1[4], vals2[4], f"{metric_name}_max")
+                max_diff = calculate_difference(
+                    vals1[4], vals2[4], f"{metric_name}_max"
+                )
                 if max_diff:
                     metric_comparison["max"] = max_diff
 
@@ -4783,15 +5519,19 @@ def compare_stages(
                     task_distributions[metric_name] = metric_comparison
 
         # Shuffle metrics from nested objects
-        if (dist1.shuffle_read_metrics and dist2.shuffle_read_metrics and
-            dist1.shuffle_read_metrics.read_bytes and dist2.shuffle_read_metrics.read_bytes and
-            len(dist1.shuffle_read_metrics.read_bytes) >= 5 and len(dist2.shuffle_read_metrics.read_bytes) >= 5):
-
+        if (
+            dist1.shuffle_read_metrics
+            and dist2.shuffle_read_metrics
+            and dist1.shuffle_read_metrics.read_bytes
+            and dist2.shuffle_read_metrics.read_bytes
+            and len(dist1.shuffle_read_metrics.read_bytes) >= 5
+            and len(dist2.shuffle_read_metrics.read_bytes) >= 5
+        ):
             read_comparison = {}
             median_diff = calculate_difference(
                 dist1.shuffle_read_metrics.read_bytes[2],
                 dist2.shuffle_read_metrics.read_bytes[2],
-                "shuffle_read_median"
+                "shuffle_read_median",
             )
             if median_diff:
                 read_comparison["median"] = median_diff
@@ -4799,7 +5539,7 @@ def compare_stages(
             max_diff = calculate_difference(
                 dist1.shuffle_read_metrics.read_bytes[4],
                 dist2.shuffle_read_metrics.read_bytes[4],
-                "shuffle_read_max"
+                "shuffle_read_max",
             )
             if max_diff:
                 read_comparison["max"] = max_diff
@@ -4808,15 +5548,19 @@ def compare_stages(
                 task_distributions["shuffle_read_bytes"] = read_comparison
 
         # Add fetch_wait_time comparison
-        if (dist1.shuffle_read_metrics and dist2.shuffle_read_metrics and
-            dist1.shuffle_read_metrics.fetch_wait_time and dist2.shuffle_read_metrics.fetch_wait_time and
-            len(dist1.shuffle_read_metrics.fetch_wait_time) >= 5 and len(dist2.shuffle_read_metrics.fetch_wait_time) >= 5):
-
+        if (
+            dist1.shuffle_read_metrics
+            and dist2.shuffle_read_metrics
+            and dist1.shuffle_read_metrics.fetch_wait_time
+            and dist2.shuffle_read_metrics.fetch_wait_time
+            and len(dist1.shuffle_read_metrics.fetch_wait_time) >= 5
+            and len(dist2.shuffle_read_metrics.fetch_wait_time) >= 5
+        ):
             fetch_wait_comparison = {}
             median_diff = calculate_difference(
                 dist1.shuffle_read_metrics.fetch_wait_time[2],
                 dist2.shuffle_read_metrics.fetch_wait_time[2],
-                "fetch_wait_time_median"
+                "fetch_wait_time_median",
             )
             if median_diff:
                 fetch_wait_comparison["median"] = median_diff
@@ -4824,7 +5568,7 @@ def compare_stages(
             max_diff = calculate_difference(
                 dist1.shuffle_read_metrics.fetch_wait_time[4],
                 dist2.shuffle_read_metrics.fetch_wait_time[4],
-                "fetch_wait_time_max"
+                "fetch_wait_time_max",
             )
             if max_diff:
                 fetch_wait_comparison["max"] = max_diff
@@ -4833,15 +5577,19 @@ def compare_stages(
                 task_distributions["shuffle_fetch_wait_time"] = fetch_wait_comparison
 
         # Add remote_reqs_duration comparison
-        if (dist1.shuffle_read_metrics and dist2.shuffle_read_metrics and
-            dist1.shuffle_read_metrics.remote_reqs_duration and dist2.shuffle_read_metrics.remote_reqs_duration and
-            len(dist1.shuffle_read_metrics.remote_reqs_duration) >= 5 and len(dist2.shuffle_read_metrics.remote_reqs_duration) >= 5):
-
+        if (
+            dist1.shuffle_read_metrics
+            and dist2.shuffle_read_metrics
+            and dist1.shuffle_read_metrics.remote_reqs_duration
+            and dist2.shuffle_read_metrics.remote_reqs_duration
+            and len(dist1.shuffle_read_metrics.remote_reqs_duration) >= 5
+            and len(dist2.shuffle_read_metrics.remote_reqs_duration) >= 5
+        ):
             remote_reqs_comparison = {}
             median_diff = calculate_difference(
                 dist1.shuffle_read_metrics.remote_reqs_duration[2],
                 dist2.shuffle_read_metrics.remote_reqs_duration[2],
-                "remote_reqs_duration_median"
+                "remote_reqs_duration_median",
             )
             if median_diff:
                 remote_reqs_comparison["median"] = median_diff
@@ -4849,23 +5597,29 @@ def compare_stages(
             max_diff = calculate_difference(
                 dist1.shuffle_read_metrics.remote_reqs_duration[4],
                 dist2.shuffle_read_metrics.remote_reqs_duration[4],
-                "remote_reqs_duration_max"
+                "remote_reqs_duration_max",
             )
             if max_diff:
                 remote_reqs_comparison["max"] = max_diff
 
             if remote_reqs_comparison:
-                task_distributions["shuffle_remote_reqs_duration"] = remote_reqs_comparison
+                task_distributions["shuffle_remote_reqs_duration"] = (
+                    remote_reqs_comparison
+                )
 
-        if (dist1.shuffle_write_metrics and dist2.shuffle_write_metrics and
-            dist1.shuffle_write_metrics.write_bytes and dist2.shuffle_write_metrics.write_bytes and
-            len(dist1.shuffle_write_metrics.write_bytes) >= 5 and len(dist2.shuffle_write_metrics.write_bytes) >= 5):
-
+        if (
+            dist1.shuffle_write_metrics
+            and dist2.shuffle_write_metrics
+            and dist1.shuffle_write_metrics.write_bytes
+            and dist2.shuffle_write_metrics.write_bytes
+            and len(dist1.shuffle_write_metrics.write_bytes) >= 5
+            and len(dist2.shuffle_write_metrics.write_bytes) >= 5
+        ):
             write_comparison = {}
             median_diff = calculate_difference(
                 dist1.shuffle_write_metrics.write_bytes[2],
                 dist2.shuffle_write_metrics.write_bytes[2],
-                "shuffle_write_median"
+                "shuffle_write_median",
             )
             if median_diff:
                 write_comparison["median"] = median_diff
@@ -4873,7 +5627,7 @@ def compare_stages(
             max_diff = calculate_difference(
                 dist1.shuffle_write_metrics.write_bytes[4],
                 dist2.shuffle_write_metrics.write_bytes[4],
-                "shuffle_write_max"
+                "shuffle_write_max",
             )
             if max_diff:
                 write_comparison["max"] = max_diff
@@ -4887,7 +5641,7 @@ def compare_stages(
     # Compare executor-level distributions (median and max)
     executor_distributions = {}
 
-    if (stage1.executor_metrics_distributions and stage2.executor_metrics_distributions):
+    if stage1.executor_metrics_distributions and stage2.executor_metrics_distributions:
         exec_dist1 = stage1.executor_metrics_distributions
         exec_dist2 = stage2.executor_metrics_distributions
 
@@ -4895,8 +5649,16 @@ def compare_stages(
         exec_dist_metrics = [
             ("task_time", exec_dist1.task_time, exec_dist2.task_time),
             ("shuffle_write", exec_dist1.shuffle_write, exec_dist2.shuffle_write),
-            ("memory_bytes_spilled", exec_dist1.memory_bytes_spilled, exec_dist2.memory_bytes_spilled),
-            ("disk_bytes_spilled", exec_dist1.disk_bytes_spilled, exec_dist2.disk_bytes_spilled)
+            (
+                "memory_bytes_spilled",
+                exec_dist1.memory_bytes_spilled,
+                exec_dist2.memory_bytes_spilled,
+            ),
+            (
+                "disk_bytes_spilled",
+                exec_dist1.disk_bytes_spilled,
+                exec_dist2.disk_bytes_spilled,
+            ),
         ]
 
         for metric_name, vals1, vals2 in exec_dist_metrics:
@@ -4904,12 +5666,16 @@ def compare_stages(
                 metric_comparison = {}
 
                 # Compare median (index 2)
-                median_diff = calculate_difference(vals1[2], vals2[2], f"{metric_name}_median")
+                median_diff = calculate_difference(
+                    vals1[2], vals2[2], f"{metric_name}_median"
+                )
                 if median_diff:
                     metric_comparison["median"] = median_diff
 
                 # Compare max (index 4)
-                max_diff = calculate_difference(vals1[4], vals2[4], f"{metric_name}_max")
+                max_diff = calculate_difference(
+                    vals1[4], vals2[4], f"{metric_name}_max"
+                )
                 if max_diff:
                     metric_comparison["max"] = max_diff
 
@@ -4917,7 +5683,9 @@ def compare_stages(
                     executor_distributions[metric_name] = metric_comparison
 
     if executor_distributions:
-        result["significant_differences"]["executor_distributions"] = executor_distributions
+        result["significant_differences"]["executor_distributions"] = (
+            executor_distributions
+        )
 
     # Collect all differences with significance scores for top 5 filtering
     all_differences = []
@@ -4925,41 +5693,47 @@ def compare_stages(
     # Collect stage-level metrics
     if stage_metrics:
         for metric_name, metric_data in stage_metrics.items():
-            all_differences.append({
-                "category": "stage_metrics",
-                "metric_name": metric_name,
-                "full_name": f"stage_metrics.{metric_name}",
-                "significance": metric_data["significance"],
-                "data": metric_data
-            })
+            all_differences.append(
+                {
+                    "category": "stage_metrics",
+                    "metric_name": metric_name,
+                    "full_name": f"stage_metrics.{metric_name}",
+                    "significance": metric_data["significance"],
+                    "data": metric_data,
+                }
+            )
 
     # Collect task distribution metrics
     if task_distributions:
         for metric_name, metric_data in task_distributions.items():
             if isinstance(metric_data, dict):
                 for sub_metric, sub_data in metric_data.items():  # median/max
-                    all_differences.append({
-                        "category": "task_distributions",
-                        "metric_name": metric_name,
-                        "sub_metric": sub_metric,
-                        "full_name": f"task_distributions.{metric_name}.{sub_metric}",
-                        "significance": sub_data["significance"],
-                        "data": sub_data
-                    })
+                    all_differences.append(
+                        {
+                            "category": "task_distributions",
+                            "metric_name": metric_name,
+                            "sub_metric": sub_metric,
+                            "full_name": f"task_distributions.{metric_name}.{sub_metric}",
+                            "significance": sub_data["significance"],
+                            "data": sub_data,
+                        }
+                    )
 
     # Collect executor distribution metrics
     if executor_distributions:
         for metric_name, metric_data in executor_distributions.items():
             if isinstance(metric_data, dict):
                 for sub_metric, sub_data in metric_data.items():  # median/max
-                    all_differences.append({
-                        "category": "executor_distributions",
-                        "metric_name": metric_name,
-                        "sub_metric": sub_metric,
-                        "full_name": f"executor_distributions.{metric_name}.{sub_metric}",
-                        "significance": sub_data["significance"],
-                        "data": sub_data
-                    })
+                    all_differences.append(
+                        {
+                            "category": "executor_distributions",
+                            "metric_name": metric_name,
+                            "sub_metric": sub_metric,
+                            "full_name": f"executor_distributions.{metric_name}.{sub_metric}",
+                            "significance": sub_data["significance"],
+                            "data": sub_data,
+                        }
+                    )
 
     # Sort by significance (highest first) and take top 5
     total_diffs = len(all_differences)
@@ -4976,13 +5750,17 @@ def compare_stages(
 
         if category == "stage_metrics":
             # Stage metrics are single-level
-            filtered_significant_differences[category][diff["metric_name"]] = diff["data"]
+            filtered_significant_differences[category][diff["metric_name"]] = diff[
+                "data"
+            ]
         else:
             # Task and executor distributions have sub-metrics (median/max)
             metric_name = diff["metric_name"]
             if metric_name not in filtered_significant_differences[category]:
                 filtered_significant_differences[category][metric_name] = {}
-            filtered_significant_differences[category][metric_name][diff["sub_metric"]] = diff["data"]
+            filtered_significant_differences[category][metric_name][
+                diff["sub_metric"]
+            ] = diff["data"]
 
     result["significant_differences"] = filtered_significant_differences
     result["summary"]["total_differences_found"] = total_diffs
@@ -5012,8 +5790,10 @@ def merge_consecutive_intervals(comparison_data: list) -> list:
         previous = comparison_data[i - 1]
 
         # Check if executor counts are the same for both apps
-        if (current["app1"]["executor_count"] == previous["app1"]["executor_count"] and
-            current["app2"]["executor_count"] == previous["app2"]["executor_count"]):
+        if (
+            current["app1"]["executor_count"] == previous["app1"]["executor_count"]
+            and current["app2"]["executor_count"] == previous["app2"]["executor_count"]
+        ):
             current_group.append(current)
         else:
             # Process current group and start new group
@@ -5038,9 +5818,11 @@ def merge_consecutive_intervals(comparison_data: list) -> list:
                         "executor_count": first_interval["app2"]["executor_count"]
                     },
                     "differences": {
-                        "executor_count_diff": first_interval["differences"]["executor_count_diff"]
+                        "executor_count_diff": first_interval["differences"][
+                            "executor_count_diff"
+                        ]
                     },
-                    "duration_intervals": len(current_group)
+                    "duration_intervals": len(current_group),
                 }
                 merged_data.append(merged_interval)
 
@@ -5059,16 +5841,14 @@ def merge_consecutive_intervals(comparison_data: list) -> list:
         merged_interval = {
             "interval": f"{first_interval['interval']}-{last_interval['interval']}",
             "timestamp_range": f"{start_time} to {end_time}",
-            "app1": {
-                "executor_count": first_interval["app1"]["executor_count"]
-            },
-            "app2": {
-                "executor_count": first_interval["app2"]["executor_count"]
-            },
+            "app1": {"executor_count": first_interval["app1"]["executor_count"]},
+            "app2": {"executor_count": first_interval["app2"]["executor_count"]},
             "differences": {
-                "executor_count_diff": first_interval["differences"]["executor_count_diff"]
+                "executor_count_diff": first_interval["differences"][
+                    "executor_count_diff"
+                ]
             },
-            "duration_intervals": len(current_group)
+            "duration_intervals": len(current_group),
         }
         merged_data.append(merged_interval)
 
@@ -5082,7 +5862,7 @@ def compare_stage_executor_timeline(
     stage_id1: int,
     stage_id2: int,
     server: Optional[str] = None,
-    interval_minutes: int = 1
+    interval_minutes: int = 1,
 ) -> Dict[str, Any]:
     """
     Compare executor timeline for specific stages between two Spark applications.
@@ -5111,14 +5891,14 @@ def compare_stage_executor_timeline(
             stage_id=stage_id1,
             attempt_id=0,
             details=False,
-            with_summaries=False
+            with_summaries=False,
         )
         stage2 = client.get_stage_attempt(
             app_id=app_id2,
             stage_id=stage_id2,
             attempt_id=0,
             details=False,
-            with_summaries=False
+            with_summaries=False,
         )
 
         # Get executors for both applications
@@ -5132,17 +5912,19 @@ def compare_stage_executor_timeline(
                     "error": f"Stage {stage.stage_id} has no submission time",
                     "stage_info": {
                         "stage_id": stage.stage_id,
-                        "attempt_id": getattr(stage, 'attempt_id', 0),
-                        "name": getattr(stage, 'name', 'unknown'),
+                        "attempt_id": getattr(stage, "attempt_id", 0),
+                        "name": getattr(stage, "name", "unknown"),
                         "submission_time": None,
                         "completion_time": None,
-                        "duration_seconds": 0
+                        "duration_seconds": 0,
                     },
-                    "timeline": []
+                    "timeline": [],
                 }
 
             stage_start = stage.submission_time
-            stage_end = stage.completion_time or stage_start + timedelta(hours=24)  # Default to 24h if not completed
+            stage_end = stage.completion_time or stage_start + timedelta(
+                hours=24
+            )  # Default to 24h if not completed
 
             # Sanity check: ensure stage_end is after stage_start
             if stage_end <= stage_start:
@@ -5171,26 +5953,35 @@ def compare_stage_executor_timeline(
                     executor_start = executor.add_time or stage_start
                     executor_end = executor.remove_time or stage_end
 
-                    if (executor_start <= interval_end and
-                        executor_end >= current_time):
-                        active_executors.append({
-                            "id": executor.id,
-                            "host_port": executor.host_port,
-                            "cores": executor.total_cores or 0,
-                            "memory_mb": (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
-                        })
+                    if executor_start <= interval_end and executor_end >= current_time:
+                        active_executors.append(
+                            {
+                                "id": executor.id,
+                                "host_port": executor.host_port,
+                                "cores": executor.total_cores or 0,
+                                "memory_mb": (executor.max_memory / (1024 * 1024))
+                                if executor.max_memory
+                                else 0,
+                            }
+                        )
                         total_cores += executor.total_cores or 0
-                        total_memory += (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
+                        total_memory += (
+                            (executor.max_memory / (1024 * 1024))
+                            if executor.max_memory
+                            else 0
+                        )
 
-                timeline.append({
-                    "timestamp": current_time.isoformat(),
-                    "interval_start": current_time.isoformat(),
-                    "interval_end": interval_end.isoformat(),
-                    "active_executor_count": len(active_executors),
-                    "total_cores": total_cores,
-                    "total_memory_mb": total_memory,
-                    "active_executors": active_executors
-                })
+                timeline.append(
+                    {
+                        "timestamp": current_time.isoformat(),
+                        "interval_start": current_time.isoformat(),
+                        "interval_end": interval_end.isoformat(),
+                        "active_executor_count": len(active_executors),
+                        "total_cores": total_cores,
+                        "total_memory_mb": total_memory,
+                        "active_executors": active_executors,
+                    }
+                )
 
                 # Break if we've reached the stage end to prevent infinite loop
                 if interval_end >= stage_end:
@@ -5201,11 +5992,16 @@ def compare_stage_executor_timeline(
 
             # Add warning if we hit the interval limit
             if interval_count >= max_intervals:
-                timeline.append({
-                    "warning": f"Timeline truncated at {max_intervals} intervals to prevent excessive memory usage",
-                    "stage_duration_hours": (stage_end - stage_start).total_seconds() / 3600,
-                    "interval_minutes": interval_minutes
-                })
+                timeline.append(
+                    {
+                        "warning": f"Timeline truncated at {max_intervals} intervals to prevent excessive memory usage",
+                        "stage_duration_hours": (
+                            stage_end - stage_start
+                        ).total_seconds()
+                        / 3600,
+                        "interval_minutes": interval_minutes,
+                    }
+                )
 
             return {
                 "stage_info": {
@@ -5213,10 +6009,14 @@ def compare_stage_executor_timeline(
                     "attempt_id": stage.attempt_id,
                     "name": stage.name,
                     "submission_time": stage_start.isoformat() if stage_start else None,
-                    "completion_time": stage_end.isoformat() if stage.completion_time else None,
-                    "duration_seconds": (stage_end - stage_start).total_seconds() if stage_start else 0
+                    "completion_time": stage_end.isoformat()
+                    if stage.completion_time
+                    else None,
+                    "duration_seconds": (stage_end - stage_start).total_seconds()
+                    if stage_start
+                    else 0,
                 },
-                "timeline": timeline
+                "timeline": timeline,
             }
 
         # Build timelines for both stages
@@ -5231,21 +6031,19 @@ def compare_stage_executor_timeline(
             interval1 = timeline1["timeline"][i]
             interval2 = timeline2["timeline"][i]
 
-            executor_diff = interval2["active_executor_count"] - interval1["active_executor_count"]
+            executor_diff = (
+                interval2["active_executor_count"] - interval1["active_executor_count"]
+            )
 
-            comparison_data.append({
-                "interval": i + 1,
-                "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
-                "app1": {
-                    "executor_count": interval1["active_executor_count"]
-                },
-                "app2": {
-                    "executor_count": interval2["active_executor_count"]
-                },
-                "differences": {
-                    "executor_count_diff": executor_diff
+            comparison_data.append(
+                {
+                    "interval": i + 1,
+                    "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
+                    "app1": {"executor_count": interval1["active_executor_count"]},
+                    "app2": {"executor_count": interval2["active_executor_count"]},
+                    "differences": {"executor_count_diff": executor_diff},
                 }
-            })
+            )
 
         # Merge consecutive intervals with same executor counts
         merged_comparison_data = merge_consecutive_intervals(comparison_data)
@@ -5253,22 +6051,26 @@ def compare_stage_executor_timeline(
         # Calculate summary statistics
         original_intervals = len(comparison_data)
         merged_intervals = len(merged_comparison_data)
-        intervals_with_executor_diff = sum(1 for c in merged_comparison_data if c["differences"]["executor_count_diff"] != 0)
-        max_executor_diff = max((abs(c["differences"]["executor_count_diff"]) for c in merged_comparison_data), default=0)
+        intervals_with_executor_diff = sum(
+            1
+            for c in merged_comparison_data
+            if c["differences"]["executor_count_diff"] != 0
+        )
+        max_executor_diff = max(
+            (
+                abs(c["differences"]["executor_count_diff"])
+                for c in merged_comparison_data
+            ),
+            default=0,
+        )
 
         return {
-            "app1_info": {
-                "app_id": app_id1,
-                "stage_details": timeline1["stage_info"]
-            },
-            "app2_info": {
-                "app_id": app_id2,
-                "stage_details": timeline2["stage_info"]
-            },
+            "app1_info": {"app_id": app_id1, "stage_details": timeline1["stage_info"]},
+            "app2_info": {"app_id": app_id2, "stage_details": timeline2["stage_info"]},
             "comparison_config": {
                 "interval_minutes": interval_minutes,
                 "original_intervals_compared": original_intervals,
-                "merged_intervals_shown": merged_intervals
+                "merged_intervals_shown": merged_intervals,
             },
             "timeline_comparison": merged_comparison_data,
             "summary": {
@@ -5276,8 +6078,9 @@ def compare_stage_executor_timeline(
                 "merged_intervals": merged_intervals,
                 "intervals_with_executor_differences": intervals_with_executor_diff,
                 "max_executor_count_difference": max_executor_diff,
-                "stages_overlap": timeline1["stage_info"]["completion_time"] is not None and timeline2["stage_info"]["completion_time"] is not None
-            }
+                "stages_overlap": timeline1["stage_info"]["completion_time"] is not None
+                and timeline2["stage_info"]["completion_time"] is not None,
+            },
         }
 
     except Exception as e:
@@ -5285,16 +6088,13 @@ def compare_stage_executor_timeline(
             "error": f"Failed to compare stage executor timelines: {str(e)}",
             "app1_id": app_id1,
             "app2_id": app_id2,
-            "stage_ids": [stage_id1, stage_id2]
+            "stage_ids": [stage_id1, stage_id2],
         }
 
 
 @mcp.tool()
 def compare_app_executor_timeline(
-    app_id1: str,
-    app_id2: str,
-    server: Optional[str] = None,
-    interval_minutes: int = 1
+    app_id1: str, app_id2: str, server: Optional[str] = None, interval_minutes: int = 1
 ) -> Dict[str, Any]:
     """
     Compare executor timeline patterns between two Spark applications.
@@ -5325,8 +6125,8 @@ def compare_app_executor_timeline(
                 "error": "One or both applications have no attempts",
                 "applications": {
                     "app1": {"id": app_id1, "has_attempts": bool(app1.attempts)},
-                    "app2": {"id": app_id2, "has_attempts": bool(app2.attempts)}
-                }
+                    "app2": {"id": app_id2, "has_attempts": bool(app2.attempts)},
+                },
             }
 
         # Get executors for both applications
@@ -5358,37 +6158,47 @@ def compare_app_executor_timeline(
             # Add executor events
             for executor in executors:
                 if executor.add_time:
-                    timeline_events.append({
-                        "timestamp": executor.add_time,
-                        "type": "executor_add",
-                        "executor_id": executor.id,
-                        "cores": executor.total_cores or 0,
-                        "memory_mb": (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
-                    })
+                    timeline_events.append(
+                        {
+                            "timestamp": executor.add_time,
+                            "type": "executor_add",
+                            "executor_id": executor.id,
+                            "cores": executor.total_cores or 0,
+                            "memory_mb": (executor.max_memory / (1024 * 1024))
+                            if executor.max_memory
+                            else 0,
+                        }
+                    )
 
                 if executor.remove_time:
-                    timeline_events.append({
-                        "timestamp": executor.remove_time,
-                        "type": "executor_remove",
-                        "executor_id": executor.id
-                    })
+                    timeline_events.append(
+                        {
+                            "timestamp": executor.remove_time,
+                            "type": "executor_remove",
+                            "executor_id": executor.id,
+                        }
+                    )
 
             # Add stage events for tracking active stages
             for stage in stages:
                 if stage.submission_time:
-                    timeline_events.append({
-                        "timestamp": stage.submission_time,
-                        "type": "stage_start",
-                        "stage_id": stage.stage_id,
-                        "name": stage.name
-                    })
+                    timeline_events.append(
+                        {
+                            "timestamp": stage.submission_time,
+                            "type": "stage_start",
+                            "stage_id": stage.stage_id,
+                            "name": stage.name,
+                        }
+                    )
 
                 if stage.completion_time:
-                    timeline_events.append({
-                        "timestamp": stage.completion_time,
-                        "type": "stage_end",
-                        "stage_id": stage.stage_id
-                    })
+                    timeline_events.append(
+                        {
+                            "timestamp": stage.completion_time,
+                            "type": "stage_end",
+                            "stage_id": stage.stage_id,
+                        }
+                    )
 
             # Sort events by timestamp
             timeline_events.sort(key=lambda x: x["timestamp"])
@@ -5416,27 +6226,37 @@ def compare_app_executor_timeline(
                     executor_start = executor.add_time or start_time
                     executor_end = executor.remove_time or end_time
 
-                    if (executor_start <= interval_end and executor_end >= current_time):
+                    if executor_start <= interval_end and executor_end >= current_time:
                         active_executor_count += 1
                         total_cores += executor.total_cores or 0
-                        total_memory_mb += (executor.max_memory / (1024 * 1024)) if executor.max_memory else 0
+                        total_memory_mb += (
+                            (executor.max_memory / (1024 * 1024))
+                            if executor.max_memory
+                            else 0
+                        )
 
                 # Count active stages
                 for stage in stages:
                     stage_start = stage.submission_time
                     stage_end = stage.completion_time or end_time
 
-                    if (stage_start and stage_start <= interval_end and stage_end >= current_time):
+                    if (
+                        stage_start
+                        and stage_start <= interval_end
+                        and stage_end >= current_time
+                    ):
                         active_stages.add(stage.stage_id)
 
-                timeline.append({
-                    "interval_start": current_time.isoformat(),
-                    "interval_end": interval_end.isoformat(),
-                    "active_executor_count": active_executor_count,
-                    "total_cores": total_cores,
-                    "total_memory_mb": total_memory_mb,
-                    "active_stages_count": len(active_stages)
-                })
+                timeline.append(
+                    {
+                        "interval_start": current_time.isoformat(),
+                        "interval_end": interval_end.isoformat(),
+                        "active_executor_count": active_executor_count,
+                        "total_cores": total_cores,
+                        "total_memory_mb": total_memory_mb,
+                        "active_stages_count": len(active_stages),
+                    }
+                )
 
                 current_time = interval_end
                 interval_count += 1
@@ -5446,18 +6266,35 @@ def compare_app_executor_timeline(
                     "app_id": app_id,
                     "name": app.name,
                     "start_time": start_time.isoformat() if start_time else None,
-                    "end_time": end_time.isoformat() if app.attempts[0].end_time else None,
-                    "duration_seconds": (end_time - start_time).total_seconds() if start_time else 0
+                    "end_time": end_time.isoformat()
+                    if app.attempts[0].end_time
+                    else None,
+                    "duration_seconds": (end_time - start_time).total_seconds()
+                    if start_time
+                    else 0,
                 },
                 "timeline": timeline,
                 "summary": {
                     "total_executors": len(executors),
                     "total_stages": len(stages),
-                    "peak_executor_count": max((interval["active_executor_count"] for interval in timeline), default=0),
-                    "avg_executor_count": sum(interval["active_executor_count"] for interval in timeline) / len(timeline) if timeline else 0,
-                    "peak_cores": max((interval["total_cores"] for interval in timeline), default=0),
-                    "peak_memory_mb": max((interval["total_memory_mb"] for interval in timeline), default=0)
-                }
+                    "peak_executor_count": max(
+                        (interval["active_executor_count"] for interval in timeline),
+                        default=0,
+                    ),
+                    "avg_executor_count": sum(
+                        interval["active_executor_count"] for interval in timeline
+                    )
+                    / len(timeline)
+                    if timeline
+                    else 0,
+                    "peak_cores": max(
+                        (interval["total_cores"] for interval in timeline), default=0
+                    ),
+                    "peak_memory_mb": max(
+                        (interval["total_memory_mb"] for interval in timeline),
+                        default=0,
+                    ),
+                },
             }
 
         # Build timelines for both applications
@@ -5469,8 +6306,8 @@ def compare_app_executor_timeline(
                 "error": "Could not build timeline for one or both applications",
                 "applications": {
                     "app1": {"id": app_id1, "timeline_built": timeline1 is not None},
-                    "app2": {"id": app_id2, "timeline_built": timeline2 is not None}
-                }
+                    "app2": {"id": app_id2, "timeline_built": timeline2 is not None},
+                },
             }
 
         # Compare timelines interval by interval
@@ -5481,21 +6318,19 @@ def compare_app_executor_timeline(
             interval1 = timeline1["timeline"][i]
             interval2 = timeline2["timeline"][i]
 
-            executor_diff = interval2["active_executor_count"] - interval1["active_executor_count"]
+            executor_diff = (
+                interval2["active_executor_count"] - interval1["active_executor_count"]
+            )
 
-            comparison_data.append({
-                "interval": i + 1,
-                "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
-                "app1": {
-                    "executor_count": interval1["active_executor_count"]
-                },
-                "app2": {
-                    "executor_count": interval2["active_executor_count"]
-                },
-                "differences": {
-                    "executor_count_diff": executor_diff
+            comparison_data.append(
+                {
+                    "interval": i + 1,
+                    "timestamp_range": f"{interval1['interval_start']} to {interval1['interval_end']}",
+                    "app1": {"executor_count": interval1["active_executor_count"]},
+                    "app2": {"executor_count": interval2["active_executor_count"]},
+                    "differences": {"executor_count_diff": executor_diff},
                 }
-            })
+            )
 
         # Merge consecutive intervals with same executor counts
         merged_comparison_data = merge_consecutive_intervals(comparison_data)
@@ -5512,7 +6347,9 @@ def compare_app_executor_timeline(
             if not non_zero_intervals:
                 return {"avg_utilization": 0, "efficiency_score": 0}
 
-            avg_utilization = sum(t["active_executor_count"] for t in non_zero_intervals) / len(non_zero_intervals)
+            avg_utilization = sum(
+                t["active_executor_count"] for t in non_zero_intervals
+            ) / len(non_zero_intervals)
             peak_count = max(t["active_executor_count"] for t in timeline)
 
             # Simple efficiency score: how close to peak utilization on average
@@ -5521,7 +6358,11 @@ def compare_app_executor_timeline(
             return {
                 "avg_utilization": avg_utilization,
                 "efficiency_score": efficiency_score,
-                "resource_waste_intervals": sum(1 for t in timeline if t["active_executor_count"] < avg_utilization * 0.5)
+                "resource_waste_intervals": sum(
+                    1
+                    for t in timeline
+                    if t["active_executor_count"] < avg_utilization * 0.5
+                ),
             }
 
         efficiency1 = calculate_efficiency_metrics(timeline1)
@@ -5536,36 +6377,69 @@ def compare_app_executor_timeline(
         app2_avg = timeline2["summary"]["avg_executor_count"]
 
         if app2_avg > app1_avg * 1.2:
-            recommendations.append({
-                "type": "resource_allocation",
-                "priority": "medium",
-                "issue": f"App2 uses {((app2_avg/app1_avg - 1) * 100):.0f}% more executors on average",
-                "suggestion": "Consider if App2's higher resource allocation provides proportional performance benefits"
-            })
+            recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "medium",
+                    "issue": f"App2 uses {((app2_avg / app1_avg - 1) * 100):.0f}% more executors on average",
+                    "suggestion": "Consider if App2's higher resource allocation provides proportional performance benefits",
+                }
+            )
 
-        if efficiency2.get("efficiency_score", 0) > efficiency1.get("efficiency_score", 0) * 1.1:
-            recommendations.append({
-                "type": "efficiency",
-                "priority": "high",
-                "issue": "App2 shows significantly better executor utilization efficiency",
-                "suggestion": "Apply App2's resource allocation pattern to App1 for better efficiency"
-            })
+        if (
+            efficiency2.get("efficiency_score", 0)
+            > efficiency1.get("efficiency_score", 0) * 1.1
+        ):
+            recommendations.append(
+                {
+                    "type": "efficiency",
+                    "priority": "high",
+                    "issue": "App2 shows significantly better executor utilization efficiency",
+                    "suggestion": "Apply App2's resource allocation pattern to App1 for better efficiency",
+                }
+            )
 
-        if timeline1["app_info"]["duration_seconds"] > timeline2["app_info"]["duration_seconds"] * 1.2:
-            time_savings = timeline1["app_info"]["duration_seconds"] - timeline2["app_info"]["duration_seconds"]
-            recommendations.append({
-                "type": "performance",
-                "priority": "high",
-                "issue": f"App1 takes {time_savings:.0f}s longer to complete",
-                "suggestion": "Analyze App2's parallelization and resource allocation strategy"
-            })
+        if (
+            timeline1["app_info"]["duration_seconds"]
+            > timeline2["app_info"]["duration_seconds"] * 1.2
+        ):
+            time_savings = (
+                timeline1["app_info"]["duration_seconds"]
+                - timeline2["app_info"]["duration_seconds"]
+            )
+            recommendations.append(
+                {
+                    "type": "performance",
+                    "priority": "high",
+                    "issue": f"App1 takes {time_savings:.0f}s longer to complete",
+                    "suggestion": "Analyze App2's parallelization and resource allocation strategy",
+                }
+            )
 
         # Calculate summary statistics for merged data
         original_intervals = len(comparison_data)
         merged_intervals = len(merged_comparison_data)
-        intervals_with_differences = sum(1 for c in merged_comparison_data if c["differences"]["executor_count_diff"] != 0)
-        max_executor_diff = max((abs(c["differences"]["executor_count_diff"]) for c in merged_comparison_data), default=0)
-        avg_executor_diff = sum(abs(c["differences"]["executor_count_diff"]) for c in merged_comparison_data) / merged_intervals if merged_intervals > 0 else 0
+        intervals_with_differences = sum(
+            1
+            for c in merged_comparison_data
+            if c["differences"]["executor_count_diff"] != 0
+        )
+        max_executor_diff = max(
+            (
+                abs(c["differences"]["executor_count_diff"])
+                for c in merged_comparison_data
+            ),
+            default=0,
+        )
+        avg_executor_diff = (
+            sum(
+                abs(c["differences"]["executor_count_diff"])
+                for c in merged_comparison_data
+            )
+            / merged_intervals
+            if merged_intervals > 0
+            else 0
+        )
 
         return {
             "app1_info": timeline1["app_info"],
@@ -5574,18 +6448,12 @@ def compare_app_executor_timeline(
                 "interval_minutes": interval_minutes,
                 "original_intervals_compared": original_intervals,
                 "merged_intervals_shown": merged_intervals,
-                "analysis_type": "App-Level Executor Timeline Comparison"
+                "analysis_type": "App-Level Executor Timeline Comparison",
             },
             "timeline_comparison": merged_comparison_data,
             "resource_efficiency": {
-                "app1": {
-                    **timeline1["summary"],
-                    **efficiency1
-                },
-                "app2": {
-                    **timeline2["summary"],
-                    **efficiency2
-                }
+                "app1": {**timeline1["summary"], **efficiency1},
+                "app2": {**timeline2["summary"], **efficiency2},
             },
             "summary": {
                 "original_intervals": original_intervals,
@@ -5593,23 +6461,31 @@ def compare_app_executor_timeline(
                 "intervals_with_differences": intervals_with_differences,
                 "avg_executor_count_difference": avg_executor_diff,
                 "max_executor_count_difference": max_executor_diff,
-                "app2_more_efficient": efficiency2.get("efficiency_score", 0) > efficiency1.get("efficiency_score", 0),
+                "app2_more_efficient": efficiency2.get("efficiency_score", 0)
+                > efficiency1.get("efficiency_score", 0),
                 "performance_improvement": {
-                    "time_difference_seconds": timeline1["app_info"]["duration_seconds"] - timeline2["app_info"]["duration_seconds"],
-                    "efficiency_improvement_ratio": (efficiency2.get("efficiency_score", 0) / efficiency1.get("efficiency_score", 1)) if efficiency1.get("efficiency_score", 0) > 0 else 1
-                }
+                    "time_difference_seconds": timeline1["app_info"]["duration_seconds"]
+                    - timeline2["app_info"]["duration_seconds"],
+                    "efficiency_improvement_ratio": (
+                        efficiency2.get("efficiency_score", 0)
+                        / efficiency1.get("efficiency_score", 1)
+                    )
+                    if efficiency1.get("efficiency_score", 0) > 0
+                    else 1,
+                },
             },
             "recommendations": recommendations,
             "key_differences": {
                 "peak_executor_difference": app2_peak - app1_peak,
                 "avg_executor_difference": app2_avg - app1_avg,
-                "duration_difference_seconds": timeline2["app_info"]["duration_seconds"] - timeline1["app_info"]["duration_seconds"]
-            }
+                "duration_difference_seconds": timeline2["app_info"]["duration_seconds"]
+                - timeline1["app_info"]["duration_seconds"],
+            },
         }
 
     except Exception as e:
         return {
             "error": f"Failed to compare app executor timelines: {str(e)}",
             "app1_id": app_id1,
-            "app2_id": app_id2
+            "app2_id": app_id2,
         }
