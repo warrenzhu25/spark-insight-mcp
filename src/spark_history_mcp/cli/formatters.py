@@ -423,6 +423,10 @@ class OutputFormatter:
             app1_stage = diff.get("app1_stage", {})
             app2_stage = diff.get("app2_stage", {})
 
+            # Extract stage IDs
+            app1_stage_id = app1_stage.get("stage_id", "N/A")
+            app2_stage_id = app2_stage.get("stage_id", "N/A")
+
             app1_duration = app1_stage.get("duration_seconds", 0)
             app2_duration = app2_stage.get("duration_seconds", 0)
 
@@ -431,6 +435,7 @@ class OutputFormatter:
             slower_app = time_diff.get("slower_application", "unknown")
 
             content = f"[bold]Stage:[/bold] {stage_name}\n"
+            content += f"[bold]Stage IDs:[/bold] App1({app1_stage_id}) vs App2({app2_stage_id})\n"
             content += f"[bold]App1:[/bold] {app1_duration:.1f}s\n"
             content += f"[bold]App2:[/bold] {app2_duration:.1f}s\n"
 
