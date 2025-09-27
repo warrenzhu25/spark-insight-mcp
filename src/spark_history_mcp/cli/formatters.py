@@ -659,6 +659,55 @@ class OutputFormatter:
         }
         return metric_names.get(metric_key, metric_key.replace("_", " ").title())
 
+    def _get_executor_metric_display_name(self, metric_key: str) -> str:
+        """Get user-friendly display name for executor metrics."""
+        executor_metric_names = {
+            "total_executors": "Total Executors",
+            "active_executors": "Active Executors",
+            "memory_used": "Memory Used",
+            "disk_used": "Disk Used",
+            "completed_tasks": "Completed Tasks",
+            "failed_tasks": "Failed Tasks",
+            "total_duration": "Total Duration",
+            "total_gc_time": "GC Time",
+            "total_input_bytes": "Input Data",
+            "total_shuffle_read": "Shuffle Read",
+            "total_shuffle_write": "Shuffle Write",
+        }
+        return executor_metric_names.get(
+            metric_key, metric_key.replace("_", " ").title()
+        )
+
+    def _get_executor_metric_formatter(self, metric_key: str):
+        """Get appropriate formatter function for executor metrics."""
+        # Time-based metrics (in milliseconds)
+        if metric_key in ["total_duration", "total_gc_time"]:
+            return self._format_milliseconds
+        # Byte-based metrics
+        elif metric_key in [
+            "memory_used",
+            "disk_used",
+            "total_input_bytes",
+            "total_shuffle_read",
+            "total_shuffle_write",
+        ]:
+            return self._format_bytes
+        # Count-based metrics (simple numbers)
+        else:
+            return lambda x: str(x)
+
+    def _get_stage_metric_display_name(self, metric_key: str) -> str:
+        """Get user-friendly display name for stage ratio metrics."""
+        stage_metric_names = {
+            "duration_ratio_change": "Total Duration",
+            "executor_runtime_ratio_change": "Executor Runtime",
+            "shuffle_read_ratio_change": "Shuffle Read",
+            "shuffle_write_ratio_change": "Shuffle Write",
+            "input_ratio_change": "Input Data",
+            "output_ratio_change": "Output Data",
+        }
+        return stage_metric_names.get(metric_key, metric_key.replace("_", " ").title())
+
     def _format_stage_performance_metrics(self, data: Dict[str, Any]) -> None:
         """Format stage performance metrics in a comparison table with all available metrics."""
         sig_diff = data.get("significant_differences", {})
@@ -1070,24 +1119,24 @@ class OutputFormatter:
         table.add_column("Change", style="magenta")
 
         # Extract executor metrics
-        app1_metrics = data.get("applications", {}).get("app1", {}).get("executor_metrics", {})
-        app2_metrics = data.get("applications", {}).get("app2", {}).get("executor_metrics", {})
+        app1_metrics = (
+            data.get("applications", {}).get("app1", {}).get("executor_metrics", {})
+        )
+        app2_metrics = (
+            data.get("applications", {}).get("app2", {}).get("executor_metrics", {})
+        )
 
-        # Key executor metrics to display
-        metrics_to_show = [
-            ("total_executors", "Total Executors", lambda x: str(x)),
-            ("completed_tasks", "Completed Tasks", lambda x: str(x)),
-            ("total_duration", "Total Duration", self._format_milliseconds),
-            ("total_input_bytes", "Input Data", self._format_bytes),
-            ("total_shuffle_read", "Shuffle Read", self._format_bytes),
-            ("total_shuffle_write", "Shuffle Write", self._format_bytes),
-        ]
+        # Dynamically show all available executor metrics
+        all_metrics = set(app1_metrics.keys()) | set(app2_metrics.keys())
 
-        for metric_key, display_name, formatter_func in metrics_to_show:
+        for metric_key in sorted(all_metrics):
             app1_val = app1_metrics.get(metric_key, 0)
             app2_val = app2_metrics.get(metric_key, 0)
 
             if app1_val is not None and app2_val is not None:
+                display_name = self._get_executor_metric_display_name(metric_key)
+                formatter_func = self._get_executor_metric_formatter(metric_key)
+
                 app1_display = formatter_func(app1_val)
                 app2_display = formatter_func(app2_val)
 
@@ -1109,7 +1158,9 @@ class OutputFormatter:
         exec_comp = data.get("executor_comparison", {})
         if "task_completion_ratio_change" in exec_comp:
             change = exec_comp["task_completion_ratio_change"]
-            table.add_row("Task Completion Efficiency", "Baseline", "Comparison", change)
+            table.add_row(
+                "Task Completion Efficiency", "Baseline", "Comparison", change
+            )
 
         # Add efficiency ratios
         eff_ratios = data.get("efficiency_ratios", {})
@@ -1118,7 +1169,9 @@ class OutputFormatter:
             eff_metrics = data.get("efficiency_metrics", {})
             app1_tpe = eff_metrics.get("app1_tasks_per_executor", 0)
             app2_tpe = eff_metrics.get("app2_tasks_per_executor", 0)
-            table.add_row("Tasks per Executor", f"{app1_tpe:.1f}", f"{app2_tpe:.1f}", change)
+            table.add_row(
+                "Tasks per Executor", f"{app1_tpe:.1f}", f"{app2_tpe:.1f}", change
+            )
 
         if table.rows:
             console.print(table)
@@ -1152,26 +1205,76 @@ class OutputFormatter:
         app1_jobs = app1_data.get("job_stats", {})
         app2_jobs = app2_data.get("job_stats", {})
 
-        # Success rates
+        # Success rates from application data
         app1_success = app1_data.get("success_rate", 0)
         app2_success = app2_data.get("success_rate", 0)
-        table.add_row("Success Rate", f"{app1_success:.1%}", f"{app2_success:.1%}",
-                     "Same" if app1_success == app2_success else f"{((app2_success - app1_success) * 100):.1f}%")
+        if app1_success > 0 or app2_success > 0:
+            table.add_row(
+                "Success Rate",
+                f"{app1_success:.1%}",
+                f"{app2_success:.1%}",
+                "Same"
+                if app1_success == app2_success
+                else f"{((app2_success - app1_success) * 100):.1f}%",
+            )
 
-        # Job comparison metrics
-        job_comp = data.get("job_comparison", {})
+        # Dynamic job statistics from job_stats
+        for metric_key in sorted(set(app1_jobs.keys()) | set(app2_jobs.keys())):
+            app1_val = app1_jobs.get(metric_key, 0)
+            app2_val = app2_jobs.get(metric_key, 0)
+
+            if (
+                app1_val is not None
+                and app2_val is not None
+                and (app1_val > 0 or app2_val > 0)
+            ):
+                display_name = self._get_stage_metric_display_name(metric_key)
+
+                # Format based on metric type
+                if "duration" in metric_key or "time" in metric_key:
+                    app1_display = self._format_milliseconds(app1_val)
+                    app2_display = self._format_milliseconds(app2_val)
+                elif "bytes" in metric_key or "size" in metric_key:
+                    app1_display = self._format_bytes(app1_val)
+                    app2_display = self._format_bytes(app2_val)
+                else:
+                    app1_display = str(app1_val)
+                    app2_display = str(app2_val)
+
+                # Calculate change
+                if app1_val > 0:
+                    change_pct = ((app2_val - app1_val) / app1_val) * 100
+                    change = (
+                        f"+{change_pct:.1f}%"
+                        if change_pct >= 0
+                        else f"{change_pct:.1f}%"
+                    )
+                else:
+                    change = "N/A"
+
+                table.add_row(display_name, app1_display, app2_display, change)
+
+        # Job comparison analysis metrics
         timing = data.get("timing_analysis", {})
 
-        if "avg_duration_ratio" in job_comp:
-            ratio = job_comp["avg_duration_ratio"]
-            if "avg_duration_difference_seconds" in timing:
-                diff_sec = timing["avg_duration_difference_seconds"]
-                app1_avg = abs(diff_sec) / (1 - ratio) if ratio != 1 else 0
-                app2_avg = app1_avg + diff_sec
-                table.add_row("Average Job Duration",
-                             self._format_milliseconds(app1_avg * 1000),
-                             self._format_milliseconds(app2_avg * 1000),
-                             f"{timing.get('avg_duration_improvement_percent', 0):.1f}%")
+        # Add timing analysis if available
+        if timing:
+            for timing_key in sorted(timing.keys()):
+                timing_val = timing[timing_key]
+                if timing_key.endswith("_seconds") and timing_val != 0:
+                    display_name = (
+                        timing_key.replace("_", " ").replace("seconds", "").title()
+                    )
+                    table.add_row(
+                        display_name, "Baseline", "Comparison", f"{timing_val:.1f}s"
+                    )
+                elif timing_key.endswith("_percent") and timing_val != 0:
+                    display_name = (
+                        timing_key.replace("_", " ").replace("percent", "").title()
+                    )
+                    table.add_row(
+                        display_name, "Baseline", "Comparison", f"{timing_val:.1f}%"
+                    )
 
         if table.rows:
             console.print(table)
@@ -1201,32 +1304,38 @@ class OutputFormatter:
         # Stage comparison metrics
         stage_comp = data.get("stage_comparison", {})
 
-        metrics_mapping = [
-            ("duration_ratio_change", "Total Duration", None),
-            ("executor_runtime_ratio_change", "Executor Runtime", None),
-            ("shuffle_read_ratio_change", "Shuffle Read", None),
-            ("shuffle_write_ratio_change", "Shuffle Write", None),
-            ("input_ratio_change", "Input Data", None),
-        ]
-
-        for metric_key, display_name, _ in metrics_mapping:
-            if metric_key in stage_comp:
+        # Dynamically show all available stage comparison metrics
+        for metric_key in sorted(stage_comp.keys()):
+            if metric_key.endswith("_change"):
+                display_name = self._get_stage_metric_display_name(metric_key)
                 change = stage_comp[metric_key]
+
                 # Extract base metric name to get the ratio
                 base_key = metric_key.replace("_change", "")
                 ratio = stage_comp.get(base_key, 0)
 
                 # Calculate approximate values (simplified)
                 if ratio > 0:
-                    table.add_row(display_name, "Baseline", f"{ratio:.1%} of App1", change)
+                    table.add_row(
+                        display_name, "Baseline", f"{ratio:.1%} of App1", change
+                    )
 
         # Efficiency analysis
         eff_analysis = data.get("efficiency_analysis", {})
-        if "app1_avg_tasks_per_stage" in eff_analysis and "app2_avg_tasks_per_stage" in eff_analysis:
+        if (
+            "app1_avg_tasks_per_stage" in eff_analysis
+            and "app2_avg_tasks_per_stage" in eff_analysis
+        ):
             app1_tasks = eff_analysis["app1_avg_tasks_per_stage"]
             app2_tasks = eff_analysis["app2_avg_tasks_per_stage"]
-            change = f"{((app2_tasks - app1_tasks) / app1_tasks * 100):.1f}%" if app1_tasks > 0 else "N/A"
-            table.add_row("Avg Tasks per Stage", f"{app1_tasks:.1f}", f"{app2_tasks:.1f}", change)
+            change = (
+                f"{((app2_tasks - app1_tasks) / app1_tasks * 100):.1f}%"
+                if app1_tasks > 0
+                else "N/A"
+            )
+            table.add_row(
+                "Avg Tasks per Stage", f"{app1_tasks:.1f}", f"{app2_tasks:.1f}", change
+            )
 
         if table.rows:
             console.print(table)
@@ -1285,7 +1394,9 @@ class OutputFormatter:
         if has_data and table.rows:
             console.print(table)
         else:
-            console.print(f"[yellow]No resource allocation data available for comparison[/yellow]")
+            console.print(
+                "[yellow]No resource allocation data available for comparison[/yellow]"
+            )
 
 
 def create_progress(description: str = "Processing...") -> Progress:
