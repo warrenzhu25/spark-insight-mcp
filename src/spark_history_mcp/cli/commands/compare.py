@@ -267,6 +267,171 @@ def create_mock_context(client):
     return MockContext(client)
 
 
+def extract_stage_menu_options(comparison_data):
+    """Extract stage differences for interactive menu."""
+    stage_dive = comparison_data.get("stage_deep_dive", {})
+    differences = stage_dive.get("top_stage_differences", [])
+
+    options = []
+    for i, diff in enumerate(differences[:3], 1):
+        app1_stage = diff.get("app1_stage", {})
+        app2_stage = diff.get("app2_stage", {})
+        app1_id = app1_stage.get("stage_id")
+        app2_id = app2_stage.get("stage_id")
+        stage_name = diff.get("stage_name", "Unknown")[:35]  # Truncate for display
+
+        if app1_id is not None and app2_id is not None:
+            options.append((i, app1_id, app2_id, stage_name))
+
+    return options
+
+
+def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, ctx):
+    """Show interactive navigation menu after comparison."""
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+    except ImportError:
+        # Fallback to simple text menu if Rich not available
+        console = None
+
+    # Extract stage options
+    stage_options = extract_stage_menu_options(comparison_data)
+
+    if not stage_options:
+        click.echo("No stage differences available for interactive navigation.")
+        return
+
+    # Build menu content
+    menu_lines = ["Press a key for detailed analysis:", ""]
+
+    for i, app1_id, app2_id, stage_name in stage_options:
+        menu_lines.append(f"[{i}] Analyze Stage #{i} (App1:{app1_id} vs App2:{app2_id})")
+        menu_lines.append(f"    {stage_name}")
+        menu_lines.append("")
+
+    menu_lines.extend([
+        "[t] Compare Application Timeline",
+        "[q] Quit / Continue",
+    ])
+
+    # Display menu
+    if console:
+        content = "\n".join(menu_lines)
+        console.print(Panel(content, title="Next Steps", border_style="green"))
+    else:
+        click.echo("\n" + "="*50)
+        click.echo("Next Steps")
+        click.echo("="*50)
+        for line in menu_lines:
+            click.echo(line)
+        click.echo("="*50)
+
+    # Get user input
+    try:
+        try:
+            choice = click.getchar().lower()
+            click.echo()  # Add newline after input
+        except OSError:
+            # Fallback to regular input if getchar() fails
+            choice = click.prompt("Enter choice", type=str, default="q").lower()
+
+        # Handle user selection
+        if choice == 'q':
+            return
+        elif choice == 't':
+            # Execute timeline comparison
+            execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice.isdigit():
+            choice_num = int(choice)
+            # Find matching stage option
+            for i, app1_stage_id, app2_stage_id, _ in stage_options:
+                if i == choice_num:
+                    execute_stage_comparison(app1_stage_id, app2_stage_id, server, formatter, ctx)
+                    break
+            else:
+                click.echo(f"Invalid choice: {choice}")
+        else:
+            click.echo(f"Invalid choice: {choice}")
+
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nExiting interactive mode.")
+
+
+def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
+    """Execute stage comparison command."""
+    try:
+        click.echo(f"Analyzing stages {stage_id1} vs {stage_id2}...")
+
+        # Load comparison context to get app IDs
+        context = load_comparison_context()
+        if not context:
+            click.echo("Error: No comparison context found.")
+            return
+
+        app_id1, app_id2, _ = context
+
+        # Import and execute stage comparison
+        import spark_history_mcp.tools.tools as tools_module
+        from spark_history_mcp.tools.tools import compare_stages
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        original_get_context = getattr(tools_module.mcp, "get_context", None)
+        tools_module.mcp.get_context = lambda: create_mock_context(client)
+
+        try:
+            comparison_data = compare_stages(
+                app_id1=app_id1,
+                app_id2=app_id2,
+                stage_id1=stage_id1,
+                stage_id2=stage_id2,
+                server=server
+            )
+            formatter.output(
+                comparison_data,
+                f"Stage Comparison: {stage_id1} vs {stage_id2}"
+            )
+        finally:
+            if original_get_context:
+                tools_module.mcp.get_context = original_get_context
+
+    except Exception as e:
+        click.echo(f"Error executing stage comparison: {e}")
+
+
+def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
+    """Execute timeline comparison command."""
+    try:
+        click.echo("Analyzing application timeline...")
+
+        # Import and execute timeline comparison
+        import spark_history_mcp.tools.tools as tools_module
+        from spark_history_mcp.tools.tools import compare_app_executor_timeline
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        original_get_context = getattr(tools_module.mcp, "get_context", None)
+        tools_module.mcp.get_context = lambda: create_mock_context(client)
+
+        try:
+            comparison_data = compare_app_executor_timeline(
+                app_id1=app_id1,
+                app_id2=app_id2,
+                server=server,
+                interval_minutes=1
+            )
+            formatter.output(
+                comparison_data,
+                f"Timeline Comparison: {app_id1} vs {app_id2}"
+            )
+        finally:
+            if original_get_context:
+                tools_module.mcp.get_context = original_get_context
+
+    except Exception as e:
+        click.echo(f"Error executing timeline comparison: {e}")
+
+
 if CLI_AVAILABLE:
 
     @click.group(name="compare")
@@ -292,6 +457,12 @@ if CLI_AVAILABLE:
         default="human",
         help="Output format",
     )
+    @click.option(
+        "--interactive",
+        "-i",
+        is_flag=True,
+        help="Show interactive navigation menu after comparison",
+    )
     @click.pass_context
     def apps(
         ctx,
@@ -300,6 +471,7 @@ if CLI_AVAILABLE:
         server: Optional[str],
         top_n: int,
         format: str,
+        interactive: bool,
     ):
         """
         Compare performance between two applications and set comparison context.
@@ -357,9 +529,13 @@ if CLI_AVAILABLE:
 
                 if not ctx.obj.get("quiet", False):
                     click.echo(f"\n✓ Comparison context saved: {app_id1} vs {app_id2}")
-                    click.echo(
-                        "Use 'compare stages', 'compare timeline', etc. for detailed analysis"
-                    )
+                    if interactive and format == "human":
+                        # Show interactive menu for further navigation
+                        show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, ctx)
+                    else:
+                        click.echo(
+                            "Use 'compare stages', 'compare timeline', etc. for detailed analysis"
+                        )
 
             finally:
                 if original_get_context:
