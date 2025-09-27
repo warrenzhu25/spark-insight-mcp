@@ -616,12 +616,28 @@ class OutputFormatter:
             )
         )
 
+    def _get_metric_display_name(self, metric_key: str) -> str:
+        """Get user-friendly display name for metrics."""
+        metric_names = {
+            "duration": "Duration",
+            "executor_run_time": "Runtime",
+            "shuffle_read_bytes": "Shuffle Read",
+            "shuffle_fetch_wait_time": "Fetch Wait Time",
+            "shuffle_remote_reqs_duration": "Remote Requests",
+            "shuffle_write_bytes": "Shuffle Write",
+            "task_time": "Task Time",
+            "peak_execution_memory": "Peak Memory",
+            "jvm_gc_time": "GC Time",
+        }
+        return metric_names.get(metric_key, metric_key.replace("_", " ").title())
+
     def _format_stage_performance_metrics(self, data: Dict[str, Any]) -> None:
-        """Format stage performance metrics in a comparison table."""
+        """Format stage performance metrics in a comparison table with all available metrics."""
         sig_diff = data.get("significant_differences", {})
         task_dist = sig_diff.get("task_distributions", {})
+        exec_dist = sig_diff.get("executor_distributions", {})
 
-        if not task_dist:
+        if not task_dist and not exec_dist:
             return
 
         table = Table(title="Performance Metrics Comparison")
@@ -630,33 +646,52 @@ class OutputFormatter:
         table.add_column("App2", style="blue")
         table.add_column("Change", style="magenta")
 
-        # Extract and format key metrics
-        metrics_to_show = [
-            ("executor_run_time", "Runtime"),
-            ("duration", "Duration"),
-        ]
+        # Add all task distribution metrics dynamically
+        for metric_key in task_dist.keys():
+            metric_data = task_dist[metric_key]
+            display_name = self._get_metric_display_name(metric_key)
 
-        for metric_key, display_name in metrics_to_show:
-            if metric_key in task_dist:
-                metric_data = task_dist[metric_key]
+            # Use median values for primary comparison
+            if "median" in metric_data:
+                median_data = metric_data["median"]
 
-                # Use median values for primary comparison
-                if "median" in metric_data:
-                    median_data = metric_data["median"]
+                # Format values based on metric type
+                if metric_key in ["shuffle_read_bytes", "shuffle_write_bytes"]:
+                    app1_val = self._format_bytes(median_data.get("stage1", 0))
+                    app2_val = self._format_bytes(median_data.get("stage2", 0))
+                else:
                     app1_val = self._format_milliseconds(median_data.get("stage1", 0))
                     app2_val = self._format_milliseconds(median_data.get("stage2", 0))
-                    change = median_data.get("change", "N/A")
 
-                    table.add_row(f"Median {display_name}", app1_val, app2_val, change)
+                change = median_data.get("change", "N/A")
+                table.add_row(f"Median {display_name}", app1_val, app2_val, change)
 
-                # Show max values too if significantly different
-                if "max" in metric_data:
-                    max_data = metric_data["max"]
+            # Show max values too if available
+            if "max" in metric_data:
+                max_data = metric_data["max"]
+
+                # Format values based on metric type
+                if metric_key in ["shuffle_read_bytes", "shuffle_write_bytes"]:
+                    app1_val = self._format_bytes(max_data.get("stage1", 0))
+                    app2_val = self._format_bytes(max_data.get("stage2", 0))
+                else:
                     app1_val = self._format_milliseconds(max_data.get("stage1", 0))
                     app2_val = self._format_milliseconds(max_data.get("stage2", 0))
-                    change = max_data.get("change", "N/A")
 
-                    table.add_row(f"Max {display_name}", app1_val, app2_val, change)
+                change = max_data.get("change", "N/A")
+                table.add_row(f"Max {display_name}", app1_val, app2_val, change)
+
+        # Add executor distribution metrics if available
+        for metric_key in exec_dist.keys():
+            metric_data = exec_dist[metric_key]
+            display_name = f"Executor {self._get_metric_display_name(metric_key)}"
+
+            if "median" in metric_data:
+                median_data = metric_data["median"]
+                app1_val = self._format_milliseconds(median_data.get("stage1", 0))
+                app2_val = self._format_milliseconds(median_data.get("stage2", 0))
+                change = median_data.get("change", "N/A")
+                table.add_row(f"Median {display_name}", app1_val, app2_val, change)
 
         if table.rows:
             console.print(table)
