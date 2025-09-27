@@ -316,8 +316,10 @@ class OutputFormatter:
         # Look for key patterns that indicate this is a comparison result
         comparison_keys = {
             "applications",
-            "aggregated_overview",
-            "stage_deep_dive",
+            "aggregated_overview",  # Old structure
+            "stage_deep_dive",      # Old structure
+            "performance_comparison",  # New structure
+            "key_recommendations",     # New structure
             "recommendations",
             "environment_comparison",
             "sql_execution_plans",
@@ -377,10 +379,16 @@ class OutputFormatter:
         # 2. Performance Metrics table FIRST (overall picture)
         if "aggregated_overview" in data:
             self._format_performance_metrics(data["aggregated_overview"])
+        elif "performance_comparison" in data:
+            # Handle new structure
+            self._format_performance_metrics(data["performance_comparison"])
 
         # 3. Stage Differences table SECOND (detailed breakdown)
         if "stage_deep_dive" in data:
             self._format_stage_differences(data["stage_deep_dive"])
+        elif "performance_comparison" in data and "stages" in data["performance_comparison"]:
+            # Handle new structure - stages are now nested under performance_comparison
+            self._format_stage_differences(data["performance_comparison"]["stages"])
 
     def _format_comparison_header(self, applications: Dict[str, Any]) -> None:
         """Format the applications being compared."""
@@ -403,46 +411,56 @@ class OutputFormatter:
         """Format key insights and summary."""
         summary_items = []
 
-        # Extract key metrics from aggregated overview
+        # Extract key metrics from aggregated overview or performance comparison
+        overview = None
         if "aggregated_overview" in data:
             overview = data["aggregated_overview"]
+        elif "performance_comparison" in data:
+            overview = data["performance_comparison"]
 
-            # Task completion ratio
-            if "executor_comparison" in overview:
-                exec_comp = overview["executor_comparison"]
+        if overview:
+            # Task completion ratio - handle both old and new structure
+            executor_data = overview.get("executor_comparison") or overview.get("executors", {})
+            if executor_data:
+                exec_comp = executor_data
                 if "task_completion_ratio_change" in exec_comp:
                     change = exec_comp["task_completion_ratio_change"]
                     summary_items.append(f"• Task completion efficiency: {change}")
 
-        # Stage performance issues
+        # Stage performance issues - handle both old and new structure
+        stage_dive = None
         if "stage_deep_dive" in data:
             stage_dive = data["stage_deep_dive"]
-            if "top_stage_differences" in stage_dive:
-                differences = stage_dive["top_stage_differences"]
-                if differences:
-                    max_diff = max(
-                        (
-                            diff.get("time_difference", {}).get("absolute_seconds", 0)
-                            for diff in differences
-                        ),
-                        default=0,
-                    )
-                    if max_diff > 60:  # More than 1 minute difference
-                        count = sum(
-                            1
-                            for diff in differences
-                            if diff.get("time_difference", {}).get(
-                                "absolute_seconds", 0
-                            )
+        elif "performance_comparison" in data and "stages" in data["performance_comparison"]:
+            stage_dive = data["performance_comparison"]["stages"]
+
+        if stage_dive and "top_stage_differences" in stage_dive:
+            differences = stage_dive["top_stage_differences"]
+            if differences:
+                max_diff = max(
+                    (
+                        diff.get("time_difference", {}).get("absolute_seconds", 0)
+                        for diff in differences
+                    ),
+                    default=0,
+                )
+                if max_diff > 60:  # More than 1 minute difference
+                    count = sum(
+                        1
+                        for diff in differences
+                        if diff.get("time_difference", {}).get(
+                            "absolute_seconds", 0
+                        )
                             > 60
                         )
-                        summary_items.append(
-                            f"• Found {count} stages with >60s time difference"
+                    summary_items.append(
+                        f"• Found {count} stages with >60s time difference"
                         )
 
-        # Add recommendations summary
-        if "recommendations" in data:
-            rec_count = len(data["recommendations"])
+        # Add recommendations summary - handle both old and new structure
+        recommendations = data.get("recommendations") or data.get("key_recommendations", [])
+        if recommendations:
+            rec_count = len(recommendations)
             if rec_count > 0:
                 summary_items.append(
                     f"• {rec_count} optimization recommendations available"

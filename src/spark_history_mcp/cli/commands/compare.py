@@ -269,8 +269,12 @@ def create_mock_context(client):
 
 def extract_stage_menu_options(comparison_data):
     """Extract stage differences for interactive menu."""
-    stage_dive = comparison_data.get("stage_deep_dive", {})
-    differences = stage_dive.get("top_stage_differences", [])
+    # Handle both old and new structure
+    stage_dive = comparison_data.get("stage_deep_dive")
+    if not stage_dive and "performance_comparison" in comparison_data:
+        stage_dive = comparison_data["performance_comparison"].get("stages", {})
+
+    differences = stage_dive.get("top_stage_differences", []) if stage_dive else []
 
     options = []
     for i, diff in enumerate(differences[:3], 1):

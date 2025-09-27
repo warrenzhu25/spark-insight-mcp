@@ -4892,46 +4892,31 @@ def compare_app_stages_aggregated(
 
 
 @mcp.tool()
-def compare_app_performance(
+def find_top_stage_differences(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    top_n: int = 3,
+    top_n: int = 5,
     similarity_threshold: float = 0.6,
-    include_raw_data: bool = False,
-    filter_auto_generated: bool = True,
-    significance_threshold: float = 0.2,
-    show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
-    Comprehensive performance comparison between two Spark applications.
+    Find the top N stages with the most significant time differences between two Spark applications.
 
-    Provides both high-level aggregated analysis and stage-level metric comparison.
-    First analyzes overall application metrics (resources, jobs, executors, aggregated stages),
-    then identifies the top N stages with the most significant time differences for stage-level analysis.
-
-    This analysis focuses on stage-level metrics (duration, task counts, I/O, shuffle, memory)
-    without detailed task-level distributions or executor-level analysis for cleaner, faster results.
+    Identifies matching stages between applications based on name similarity and returns
+    the stages with the largest time differences along with detailed performance comparisons.
 
     Args:
         app_id1: First Spark application ID
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
-        top_n: Number of top stage differences to return for detailed analysis (default: 3)
+        top_n: Number of top stage differences to return (default: 5)
         similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
-        include_raw_data: Include full raw metrics in output for debugging (default: False)
-        filter_auto_generated: Whether to filter out auto-generated configurations (default: True)
-        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
-        show_only_significant: When True, filter out metrics below significance threshold (default: True)
 
     Returns:
         Dictionary containing:
-        - aggregated_overview: Application-level executor and stage metrics
-        - stage_deep_dive: Top N stages with most time difference and stage-level metric comparisons
-        - recommendations: Enhanced recommendations covering both application and stage levels
-
-        When include_raw_data=False (default): Streamlined output with stage-level metrics only
-        When include_raw_data=True: Includes additional raw stage metrics for investigation
+        - applications: Basic info about both applications
+        - top_stage_differences: List of top N stages with biggest time differences
+          Each entry includes stage details, time differences, and performance metrics
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
@@ -4951,28 +4936,6 @@ def compare_app_performance(
                 "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)},
             },
         }
-
-    # PHASE 1: AGGREGATED APPLICATION OVERVIEW
-    # Use specialized comparison tools for aggregated overview
-    try:
-        executor_comparison = compare_app_executors(
-            app_id1, app_id2, server, significance_threshold, show_only_significant
-        )
-    except Exception as e:
-        executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
-
-    try:
-        stage_comparison = compare_app_stages_aggregated(
-            app_id1, app_id2, server, significance_threshold, show_only_significant
-        )
-    except Exception as e:
-        stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
-
-    # Create streamlined aggregated overview using specialized tools
-    aggregated_overview = {
-        "executor_comparison": executor_comparison,
-        "stage_comparison": stage_comparison,
-    }
 
     # Find matching stages between applications
     stage_matches = _find_matching_stages(stages1, stages2, similarity_threshold)
@@ -5026,7 +4989,7 @@ def compare_app_performance(
         stage_differences, key=lambda x: x["time_difference_seconds"], reverse=True
     )[:top_n]
 
-    # Get detailed summaries for top different stages
+    # Get detailed comparisons for top different stages
     detailed_comparisons = []
 
     for diff in top_differences:
@@ -5078,12 +5041,7 @@ def compare_app_performance(
             },
         }
 
-        # Apply significance filtering to stage metrics comparison
-        filtered_stage_metrics = _filter_stage_metrics_comparison(
-            stage_metric_comparison, significance_threshold, show_only_significant
-        )
-
-        # Build stage comparison with stage-level metrics only
+        # Build stage comparison
         stage_comparison = {
             "stage_name": stage1.name,
             "similarity_score": diff["similarity"],
@@ -5104,53 +5062,117 @@ def compare_app_performance(
                 "percentage": diff["time_difference_percent"],
                 "slower_application": diff["slower_app"],
             },
-            "stage_metrics_comparison": filtered_stage_metrics["metrics"],
-            "metrics_filtering_summary": {
-                "filtering_applied": filtered_stage_metrics["filtering_applied"],
-                "significance_threshold": filtered_stage_metrics[
-                    "significance_threshold"
-                ],
-                "category_summary": filtered_stage_metrics["category_summary"],
-            },
+            "stage_metrics_comparison": stage_metric_comparison,
         }
-
-        # Conditionally add raw data for debugging/investigation
-        if include_raw_data:
-            stage_comparison["raw_data"] = {
-                "app1_stage_metrics": {
-                    "num_tasks": stage1.num_tasks,
-                    "num_failed_tasks": stage1.num_failed_tasks,
-                    "executor_run_time_ms": stage1.executor_run_time,
-                    "memory_spilled_bytes": stage1.memory_bytes_spilled,
-                    "disk_spilled_bytes": stage1.disk_bytes_spilled,
-                    "shuffle_read_bytes": stage1.shuffle_read_bytes,
-                    "shuffle_write_bytes": stage1.shuffle_write_bytes,
-                    "input_bytes": stage1.input_bytes,
-                    "output_bytes": stage1.output_bytes,
-                },
-                "app2_stage_metrics": {
-                    "num_tasks": stage2.num_tasks,
-                    "num_failed_tasks": stage2.num_failed_tasks,
-                    "executor_run_time_ms": stage2.executor_run_time,
-                    "memory_spilled_bytes": stage2.memory_bytes_spilled,
-                    "disk_spilled_bytes": stage2.disk_bytes_spilled,
-                    "shuffle_read_bytes": stage2.shuffle_read_bytes,
-                    "shuffle_write_bytes": stage2.shuffle_write_bytes,
-                    "input_bytes": stage2.input_bytes,
-                    "output_bytes": stage2.output_bytes,
-                },
-            }
 
         detailed_comparisons.append(stage_comparison)
 
-    # Generate summary statistics
-    total_time_diff = sum(d["time_difference_seconds"] for d in top_differences)
-    avg_time_diff = total_time_diff / len(top_differences) if top_differences else 0
-    max_time_diff = (
-        max(d["time_difference_seconds"] for d in top_differences)
-        if top_differences
-        else 0
-    )
+    return {
+        "applications": {
+            "app1": {"id": app_id1, "name": app1.name},
+            "app2": {"id": app_id2, "name": app2.name},
+        },
+        "top_stage_differences": detailed_comparisons,
+    }
+
+
+@mcp.tool()
+def compare_app_performance(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+    top_n: int = 3,
+) -> Dict[str, Any]:
+    """
+    Streamlined performance comparison between two Spark applications.
+
+    Provides a clean, focused analysis of performance differences including executor efficiency,
+    stage-level comparisons, environment configuration differences, and prioritized recommendations.
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        top_n: Number of top stage differences to return for analysis (default: 3)
+
+    Returns:
+        Dictionary containing:
+        - applications: Basic info about both applications
+        - performance_comparison:
+          - executors: Key executor efficiency metrics and comparisons
+          - stages: Top N stages with largest time differences and performance metrics
+        - environment_comparison: Configuration and environment differences
+        - key_recommendations: Up to 5 highest priority (critical/high/medium) recommendations
+
+    Uses optimized defaults:
+    - similarity_threshold: 0.6 for stage matching
+    - significance_threshold: 0.2 for metric filtering
+    - filter_auto_generated: True for cleaner environment comparison
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    # Get application info
+    app1 = client.get_application(app_id1)
+    app2 = client.get_application(app_id2)
+
+    # PHASE 1: AGGREGATED APPLICATION OVERVIEW
+    # Use specialized comparison tools for aggregated overview with hardcoded defaults
+    try:
+        executor_comparison = compare_app_executors(
+            app_id1, app_id2, server, significance_threshold=0.2, show_only_significant=True
+        )
+    except Exception as e:
+        executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
+
+    try:
+        stage_comparison = compare_app_stages_aggregated(
+            app_id1, app_id2, server, significance_threshold=0.2, show_only_significant=True
+        )
+    except Exception as e:
+        stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
+
+    # Create streamlined aggregated overview using specialized tools
+    aggregated_overview = {
+        "executor_comparison": executor_comparison,
+        "stage_comparison": stage_comparison,
+    }
+
+    # PHASE 2: STAGE-LEVEL DEEP DIVE ANALYSIS
+    # Use the new find_top_stage_differences tool for stage analysis
+    try:
+        stage_analysis = find_top_stage_differences(
+            app_id1, app_id2, server, top_n, similarity_threshold=0.6
+        )
+    except Exception as e:
+        stage_analysis = {
+            "error": f"Failed to analyze stage differences: {str(e)}",
+            "applications": {
+                "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
+                "app2": {"id": app_id2, "name": getattr(app2, 'name', 'Unknown')},
+            },
+        }
+
+    # If stage analysis failed, return early
+    if "error" in stage_analysis:
+        return {
+            "applications": stage_analysis["applications"],
+            "aggregated_overview": aggregated_overview,
+            "stage_deep_dive": stage_analysis,
+            "error": stage_analysis["error"],
+        }
+
+    # Extract stage differences for recommendations logic
+    detailed_comparisons = stage_analysis.get("top_stage_differences", [])
+
+    # Calculate summary statistics for compatibility
+    if detailed_comparisons:
+        time_diffs = [comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons]
+        total_time_diff = sum(time_diffs)
+        avg_time_diff = total_time_diff / len(time_diffs)
+        max_time_diff = max(time_diffs)
+    else:
+        total_time_diff = avg_time_diff = max_time_diff = 0
 
     # Enhanced recommendations combining both application and stage-level insights
     recommendations = []
@@ -5209,9 +5231,9 @@ def compare_app_performance(
     # Check for stages with large time differences
     large_diff_threshold = 60  # seconds
     large_diff_stages = [
-        d
-        for d in top_differences
-        if d["time_difference_seconds"] > large_diff_threshold
+        comp
+        for comp in detailed_comparisons
+        if comp.get("time_difference", {}).get("absolute_seconds", 0) > large_diff_threshold
     ]
 
     if large_diff_stages:
@@ -5220,7 +5242,7 @@ def compare_app_performance(
                 "type": "stage_performance",
                 "priority": "high",
                 "issue": f"Found {len(large_diff_stages)} stages with >60s time difference",
-                "suggestion": f"Investigate {'app1' if large_diff_stages[0]['slower_app'] == 'app1' else 'app2'} for potential performance issues in specific stages",
+                "suggestion": f"Investigate {large_diff_stages[0]['time_difference']['slower_application']} for potential performance issues in specific stages",
             }
         )
 
@@ -5245,9 +5267,9 @@ def compare_app_performance(
             }
         )
 
-    # Environment and configuration comparison
+    # Environment and configuration comparison (using default filter_auto_generated=True)
     environment_comparison = _compare_environments(
-        client, app_id1, app_id2, filter_auto_generated
+        client, app_id1, app_id2, filter_auto_generated=True
     )
 
     # SQL execution plans comparison
@@ -5261,40 +5283,38 @@ def compare_app_performance(
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
 
+    # Extract simplified executor summary
+    executor_summary = {}
+    if isinstance(executor_comparison, dict) and "error" not in executor_comparison:
+        # Extract key metrics from executor comparison
+        executor_summary = {
+            "memory_efficiency": executor_comparison.get("memory_efficiency", {}),
+            "task_efficiency": executor_comparison.get("task_efficiency", {}),
+            "gc_efficiency": executor_comparison.get("gc_efficiency", {}),
+            "summary": executor_comparison.get("summary", {})
+        }
+    else:
+        executor_summary = executor_comparison
+
+    # Filter recommendations to top 5, high/medium priority only
+    filtered_recommendations = []
+    for rec in recommendations:
+        if rec.get("priority") in ["critical", "high", "medium"]:
+            filtered_recommendations.append(rec)
+        if len(filtered_recommendations) >= 5:
+            break
+
     return {
         "applications": {
             "app1": {"id": app_id1, "name": app1.name},
             "app2": {"id": app_id2, "name": app2.name},
         },
-        "aggregated_overview": aggregated_overview,
+        "performance_comparison": {
+            "executors": executor_summary,
+            "stages": stage_analysis,
+        },
         "environment_comparison": environment_comparison,
-        "sql_execution_plans": sql_plans_comparison,
-        "stage_deep_dive": {
-            "analysis_parameters": {
-                "top_n": top_n,
-                "similarity_threshold": similarity_threshold,
-                "significance_threshold": significance_threshold,
-                "show_only_significant": show_only_significant,
-                "total_stages_app1": len(stages1),
-                "total_stages_app2": len(stages2),
-                "matched_stages": len(stage_matches),
-            },
-            "top_stage_differences": detailed_comparisons,
-            "stage_summary": {
-                "total_time_difference_seconds": total_time_diff,
-                "average_time_difference_seconds": avg_time_diff,
-                "maximum_time_difference_seconds": max_time_diff,
-                "stages_analyzed": len(top_differences),
-            },
-        },
-        "recommendations": recommendations,
-        "filtering_summary": {
-            "enabled": show_only_significant,
-            "threshold": significance_threshold,
-            "description": f"{'Filtering applied' if show_only_significant else 'No filtering applied'} - showing metrics with ≥{significance_threshold * 100:.0f}% difference from baseline"
-            if show_only_significant
-            else "All metrics shown regardless of significance",
-        },
+        "key_recommendations": filtered_recommendations,
     }
 
 
