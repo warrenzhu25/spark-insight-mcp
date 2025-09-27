@@ -398,6 +398,10 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
             formatter.output(
                 comparison_data, f"Stage Comparison: {stage_id1} vs {stage_id2}"
             )
+
+            # Show post-stage menu if in human format and comparison context exists
+            if formatter.format == "human" and load_comparison_context():
+                show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx)
         finally:
             if original_get_context:
                 tools_module.mcp.get_context = original_get_context
@@ -432,6 +436,103 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
 
     except Exception as e:
         click.echo(f"Error executing timeline comparison: {e}")
+
+
+def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, ctx):
+    """Execute stage-specific timeline comparison."""
+    try:
+        click.echo(f"Analyzing stage {stage_id1} vs {stage_id2} timeline...")
+
+        # Load comparison context to get app IDs
+        context = load_comparison_context()
+        if not context:
+            click.echo("Error: No comparison context found.")
+            return
+
+        app_id1, app_id2, _ = context
+
+        # Import and execute stage timeline comparison
+        import spark_history_mcp.tools.tools as tools_module
+        from spark_history_mcp.tools.tools import compare_stage_executor_timeline
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        original_get_context = getattr(tools_module.mcp, "get_context", None)
+        tools_module.mcp.get_context = lambda: create_mock_context(client)
+
+        try:
+            comparison_data = compare_stage_executor_timeline(
+                app_id1=app_id1,
+                app_id2=app_id2,
+                stage_id1=stage_id1,
+                stage_id2=stage_id2,
+                server=server,
+                interval_minutes=1
+            )
+            formatter.output(
+                comparison_data,
+                f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
+            )
+        finally:
+            if original_get_context:
+                tools_module.mcp.get_context = original_get_context
+
+    except Exception as e:
+        click.echo(f"Error executing stage timeline comparison: {e}")
+
+
+def show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx):
+    """Show follow-up options after stage comparison completion."""
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+    except ImportError:
+        # Fallback to simple text menu if Rich not available
+        console = None
+
+    # Build menu content
+    menu_lines = ["Choose your next analysis:", ""]
+    menu_lines.extend([
+        "\\[t] Compare Application Timeline",
+        f"\\[s] Compare Stage {stage_id1} Timeline Patterns",
+        "\\[q] Continue",
+    ])
+
+    # Display menu
+    if console:
+        content = "\n".join(menu_lines)
+        console.print(Panel(content, title="What's Next?", border_style="green"))
+    else:
+        click.echo("\n" + "="*50)
+        click.echo("What's Next?")
+        click.echo("="*50)
+        for line in menu_lines:
+            click.echo(line)
+        click.echo("="*50)
+
+    # Get user input
+    try:
+        try:
+            choice = click.getchar().lower()
+            click.echo()  # Add newline after input
+        except OSError:
+            # Fallback to regular input if getchar() fails
+            choice = click.prompt("Enter choice", type=str, default="q").lower()
+
+        # Handle user selection
+        if choice == 'q':
+            return
+        elif choice == 't':
+            # Execute application timeline comparison
+            execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == 's':
+            # Execute stage timeline comparison
+            execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, ctx)
+        else:
+            click.echo(f"Invalid choice: {choice}")
+
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nExiting interactive mode.")
 
 
 if CLI_AVAILABLE:
@@ -614,6 +715,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stage Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
+
+                # Show post-stage menu if in human format and comparison context exists
+                if format == "human" and load_comparison_context():
+                    show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, final_server, formatter, ctx)
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
