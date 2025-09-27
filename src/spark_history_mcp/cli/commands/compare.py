@@ -291,6 +291,7 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
     try:
         from rich.console import Console
         from rich.panel import Panel
+
         console = Console()
     except ImportError:
         # Fallback to simple text menu if Rich not available
@@ -307,26 +308,30 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
     menu_lines = ["Press a key for detailed analysis:", ""]
 
     for i, app1_id, app2_id, stage_name in stage_options:
-        menu_lines.append(f"[{i}] Analyze Stage #{i} (App1:{app1_id} vs App2:{app2_id})")
+        menu_lines.append(
+            f"[{i}] Analyze Stage #{i} (App1:{app1_id} vs App2:{app2_id})"
+        )
         menu_lines.append(f"    {stage_name}")
         menu_lines.append("")
 
-    menu_lines.extend([
-        "[t] Compare Application Timeline",
-        "[q] Quit / Continue",
-    ])
+    menu_lines.extend(
+        [
+            "\\[t] Compare Application Timeline",  # Escape brackets for Rich
+            "\\[q] Quit / Continue",
+        ]
+    )
 
     # Display menu
     if console:
         content = "\n".join(menu_lines)
         console.print(Panel(content, title="Next Steps", border_style="green"))
     else:
-        click.echo("\n" + "="*50)
+        click.echo("\n" + "=" * 50)
         click.echo("Next Steps")
-        click.echo("="*50)
+        click.echo("=" * 50)
         for line in menu_lines:
             click.echo(line)
-        click.echo("="*50)
+        click.echo("=" * 50)
 
     # Get user input
     try:
@@ -338,9 +343,9 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
             choice = click.prompt("Enter choice", type=str, default="q").lower()
 
         # Handle user selection
-        if choice == 'q':
+        if choice == "q":
             return
-        elif choice == 't':
+        elif choice == "t":
             # Execute timeline comparison
             execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice.isdigit():
@@ -348,7 +353,9 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
             # Find matching stage option
             for i, app1_stage_id, app2_stage_id, _ in stage_options:
                 if i == choice_num:
-                    execute_stage_comparison(app1_stage_id, app2_stage_id, server, formatter, ctx)
+                    execute_stage_comparison(
+                        app1_stage_id, app2_stage_id, server, formatter, ctx
+                    )
                     break
             else:
                 click.echo(f"Invalid choice: {choice}")
@@ -386,11 +393,10 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
                 app_id2=app_id2,
                 stage_id1=stage_id1,
                 stage_id2=stage_id2,
-                server=server
+                server=server,
             )
             formatter.output(
-                comparison_data,
-                f"Stage Comparison: {stage_id1} vs {stage_id2}"
+                comparison_data, f"Stage Comparison: {stage_id1} vs {stage_id2}"
             )
         finally:
             if original_get_context:
@@ -415,14 +421,10 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
 
         try:
             comparison_data = compare_app_executor_timeline(
-                app_id1=app_id1,
-                app_id2=app_id2,
-                server=server,
-                interval_minutes=1
+                app_id1=app_id1, app_id2=app_id2, server=server, interval_minutes=1
             )
             formatter.output(
-                comparison_data,
-                f"Timeline Comparison: {app_id1} vs {app_id2}"
+                comparison_data, f"Timeline Comparison: {app_id1} vs {app_id2}"
             )
         finally:
             if original_get_context:
@@ -531,7 +533,9 @@ if CLI_AVAILABLE:
                     click.echo(f"\n✓ Comparison context saved: {app_id1} vs {app_id2}")
                     if interactive and format == "human":
                         # Show interactive menu for further navigation
-                        show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, ctx)
+                        show_interactive_menu(
+                            comparison_data, app_id1, app_id2, server, formatter, ctx
+                        )
                     else:
                         click.echo(
                             "Use 'compare stages', 'compare timeline', etc. for detailed analysis"
