@@ -24,6 +24,7 @@ from spark_history_mcp.tools.tools import (
     compare_app_performance,
     compare_stage_executor_timeline,
     compare_stages,
+    get_app_summary,
     get_application,
     get_application_insights,
     get_client_or_default,
@@ -3562,3 +3563,182 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         # Should return stage dependencies using timing-based analysis
         self.assertIsInstance(result, dict)
         self.assertIn(1, result)  # Should have stage 1
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_app_summary_success(self, mock_get_client):
+        """Test get_app_summary with valid application data"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Mock application data
+        mock_app = MagicMock(spec=ApplicationInfo)
+        mock_app.id = "app-123"
+        mock_app.name = "Test Application"
+        mock_app.cores_per_executor = 2
+
+        # Mock attempt data
+        mock_attempt = MagicMock(spec=ApplicationAttemptInfo)
+        mock_attempt.duration = 300000  # 5 minutes in milliseconds
+        mock_attempt.start_time = datetime(2024, 1, 1, 10, 0, 0)
+        mock_attempt.end_time = datetime(2024, 1, 1, 10, 5, 0)
+        mock_app.attempts = [mock_attempt]
+
+        # Mock stage data
+        mock_stage1 = MagicMock(spec=StageData)
+        mock_stage1.stage_id = 1
+        mock_stage1.status = "COMPLETE"
+        mock_stage1.executor_run_time = 120000  # 2 minutes
+        mock_stage1.executor_cpu_time = 100000000000  # 100 seconds in nanoseconds
+        mock_stage1.jvm_gc_time = 5000  # 5 seconds
+        mock_stage1.input_bytes = 1073741824  # 1 GB
+        mock_stage1.output_bytes = 536870912  # 0.5 GB
+        mock_stage1.shuffle_read_bytes = 268435456  # 0.25 GB
+        mock_stage1.shuffle_write_bytes = 134217728  # 0.125 GB
+        mock_stage1.memory_bytes_spilled = 0
+        mock_stage1.disk_bytes_spilled = 0
+        mock_stage1.num_failed_tasks = 0
+        mock_stage1.num_tasks = 10
+
+        mock_stage2 = MagicMock(spec=StageData)
+        mock_stage2.stage_id = 2
+        mock_stage2.status = "COMPLETE"
+        mock_stage2.executor_run_time = 180000  # 3 minutes
+        mock_stage2.executor_cpu_time = 150000000000  # 150 seconds in nanoseconds
+        mock_stage2.jvm_gc_time = 3000  # 3 seconds
+        mock_stage2.input_bytes = 536870912  # 0.5 GB
+        mock_stage2.output_bytes = 268435456  # 0.25 GB
+        mock_stage2.shuffle_read_bytes = 134217728  # 0.125 GB
+        mock_stage2.shuffle_write_bytes = 67108864  # 0.0625 GB
+        mock_stage2.memory_bytes_spilled = 67108864  # 0.0625 GB
+        mock_stage2.disk_bytes_spilled = 33554432  # 0.03125 GB
+        mock_stage2.num_failed_tasks = 1
+        mock_stage2.num_tasks = 8
+
+        stages = [mock_stage1, mock_stage2]
+
+        # Mock executor data
+        mock_executor = MagicMock(spec=ExecutorSummary)
+        mock_executor.id = "1"
+        mock_executor.add_time = datetime(2024, 1, 1, 10, 0, 0)
+        mock_executor.remove_time = datetime(2024, 1, 1, 10, 5, 0)
+
+        executors = [mock_executor]
+
+        # Setup client returns
+        mock_client.get_application.return_value = mock_app
+        mock_client.list_stages.return_value = stages
+        mock_client.list_all_executors.return_value = executors
+
+        # Call the function
+        result = get_app_summary("app-123")
+
+        # Verify basic structure
+        self.assertIsInstance(result, dict)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertEqual(result["application_name"], "Test Application")
+
+        # Verify time metrics
+        self.assertEqual(result["application_duration_minutes"], 5.0)  # 300000ms = 5 minutes
+        self.assertEqual(result["total_executor_runtime_minutes"], 5.0)  # (120000 + 180000)ms = 5 minutes
+        self.assertAlmostEqual(result["executor_cpu_time_minutes"], 4.17, places=1)  # 250 seconds = (100+150) seconds = 4.17 minutes
+        self.assertAlmostEqual(result["jvm_gc_time_minutes"], 0.13, places=2)  # (5+3) seconds = 8 seconds = 0.13 minutes
+        self.assertGreater(result["executor_utilization_percent"], 0)
+
+        # Verify data processing metrics
+        self.assertAlmostEqual(result["input_data_size_gb"], 1.5, places=2)  # 1 + 0.5 GB
+        self.assertAlmostEqual(result["output_data_size_gb"], 0.75, places=2)  # 0.5 + 0.25 GB
+        self.assertAlmostEqual(result["shuffle_read_size_gb"], 0.375, places=3)  # 0.25 + 0.125 GB
+        self.assertAlmostEqual(result["shuffle_write_size_gb"], 0.188, places=3)  # 0.125 + 0.0625 GB
+        self.assertAlmostEqual(result["memory_spilled_gb"], 0.062, places=2)  # 0.0625 GB rounded
+        self.assertAlmostEqual(result["disk_spilled_gb"], 0.031, places=3)  # 0.03125 GB
+
+        # Verify performance metrics
+        self.assertEqual(result["failed_tasks"], 1)
+
+        # Verify additional context
+        self.assertEqual(result["total_stages"], 2)
+        self.assertEqual(result["completed_stages"], 2)
+        self.assertEqual(result["failed_stages"], 0)
+
+        # Verify client calls
+        mock_client.get_application.assert_called_once_with("app-123")
+        mock_client.list_stages.assert_called_once_with(app_id="app-123", with_summaries=True)
+        mock_client.list_all_executors.assert_called_once_with(app_id="app-123")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_app_summary_no_attempts(self, mock_get_client):
+        """Test get_app_summary with application that has no attempts"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Mock application with no attempts
+        mock_app = MagicMock(spec=ApplicationInfo)
+        mock_app.id = "app-123"
+        mock_app.name = "Test Application"
+        mock_app.attempts = []
+
+        mock_client.get_application.return_value = mock_app
+
+        # Call the function
+        result = get_app_summary("app-123")
+
+        # Verify error response
+        self.assertIn("error", result)
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertIn("No application attempts found", result["error"])
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_app_summary_with_server(self, mock_get_client):
+        """Test get_app_summary with specific server parameter"""
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Mock minimal application data for successful response
+        mock_app = MagicMock(spec=ApplicationInfo)
+        mock_app.id = "app-123"
+        mock_app.name = "Test Application"
+        mock_app.cores_per_executor = 1
+
+        mock_attempt = MagicMock(spec=ApplicationAttemptInfo)
+        mock_attempt.duration = 60000  # 1 minute
+        mock_attempt.start_time = datetime(2024, 1, 1, 10, 0, 0)
+        mock_attempt.end_time = datetime(2024, 1, 1, 10, 1, 0)
+        mock_app.attempts = [mock_attempt]
+
+        mock_client.get_application.return_value = mock_app
+        mock_client.list_stages.return_value = []
+        mock_client.list_all_executors.return_value = []
+
+        # Call the function with server parameter
+        result = get_app_summary("app-123", server="test-server")
+
+        # Verify successful call
+        self.assertNotIn("error", result)
+        self.assertEqual(result["application_id"], "app-123")
+
+        # Verify client called with correct server
+        mock_get_client.assert_called_once()
+        args, kwargs = mock_get_client.call_args
+        self.assertEqual(len(args), 2)  # context and server
+        self.assertEqual(args[1], "test-server")
+
+    @patch("spark_history_mcp.tools.tools.get_client_or_default")
+    def test_get_app_summary_client_error(self, mock_get_client):
+        """Test get_app_summary when client throws an exception"""
+        # Setup mock client to throw exception
+        mock_client = MagicMock()
+        mock_client.get_application.side_effect = Exception("Network error")
+        mock_get_client.return_value = mock_client
+
+        # Call the function
+        result = get_app_summary("app-123")
+
+        # Verify error response
+        self.assertIn("error", result)
+        self.assertEqual(result["application_id"], "app-123")
+        self.assertIn("Failed to generate app summary", result["error"])
+        self.assertIn("Network error", result["error"])
