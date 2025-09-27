@@ -427,44 +427,57 @@ class OutputFormatter:
             )
 
     def _format_stage_differences(self, stage_deep_dive: Dict[str, Any]) -> None:
-        """Format top stage differences in a readable way."""
+        """Format top stage differences in a table format."""
         if "top_stage_differences" not in stage_deep_dive:
             return
 
         differences = stage_deep_dive["top_stage_differences"][:3]  # Show top 3
 
-        for i, diff in enumerate(differences, 1):
-            stage_name = diff.get("stage_name", "Unknown Stage")[
-                :50
-            ]  # Truncate long names
-            time_diff = diff.get("time_difference", {})
+        if not differences:
+            return
 
+        # Create table
+        table = Table(title="Stage Differences")
+        table.add_column("Stage", style="cyan")
+        table.add_column("App1", style="blue")
+        table.add_column("App2", style="blue")
+        table.add_column("Diff", style="magenta")
+
+        for diff in differences:
+            stage_name = diff.get("stage_name", "Unknown Stage")
+            # Truncate stage name for display
+            if len(stage_name) > 25:
+                stage_name = stage_name[:22] + "..."
+
+            time_diff = diff.get("time_difference", {})
             app1_stage = diff.get("app1_stage", {})
             app2_stage = diff.get("app2_stage", {})
 
-            # Extract stage IDs
+            # Extract stage IDs and durations
             app1_stage_id = app1_stage.get("stage_id", "N/A")
             app2_stage_id = app2_stage.get("stage_id", "N/A")
-
             app1_duration = app1_stage.get("duration_seconds", 0)
             app2_duration = app2_stage.get("duration_seconds", 0)
 
-            absolute_diff = time_diff.get("absolute_seconds", 0)
+            # Format stage column with stage IDs
+            stage_display = f"{stage_name} ({app1_stage_id} vs {app2_stage_id})"
+
+            # Format durations
+            app1_display = f"{app1_duration:.1f}s"
+            app2_display = f"{app2_duration:.1f}s"
+
+            # Format difference - show only percentage
             percentage = time_diff.get("percentage", 0)
             slower_app = time_diff.get("slower_application", "unknown")
 
-            content = f"[bold]Stage:[/bold] {stage_name}\n"
-            content += f"[bold]Stage IDs:[/bold] App1({app1_stage_id}) vs App2({app2_stage_id})\n"
-            content += f"[bold]App1:[/bold] {app1_duration:.1f}s\n"
-            content += f"[bold]App2:[/bold] {app2_duration:.1f}s\n"
-
             if slower_app == "app1":
-                content += f"[bold red]Difference:[/bold red] +{absolute_diff:.1f}s ({percentage:.1f}% slower)"
+                diff_display = f"[red]+{percentage:.0f}%[/red]"
             else:
-                content += f"[bold green]Difference:[/bold green] -{absolute_diff:.1f}s ({percentage:.1f}% faster)"
+                diff_display = f"[green]-{percentage:.0f}%[/green]"
 
-            title = f"Stage Difference #{i}"
-            console.print(Panel(content, title=title, border_style="yellow"))
+            table.add_row(stage_display, app1_display, app2_display, diff_display)
+
+        console.print(table)
 
     def _format_performance_metrics(self, overview: Dict[str, Any]) -> None:
         """Format key performance metrics in a table."""
