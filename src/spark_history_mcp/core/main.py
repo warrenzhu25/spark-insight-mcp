@@ -25,6 +25,7 @@ def detect_cli_command():
         "show",
         "jobs",
         "stages",
+        "summary",
         "insights",
         "bottlenecks",
         "auto-scaling",

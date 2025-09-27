@@ -23,6 +23,9 @@ spark-mcp --cli apps list --limit 10
 # Show application details
 spark-mcp --cli apps show app-20231201-123456
 
+# Get application performance summary
+spark-mcp --cli apps summary app-20231201-123456
+
 # Get comprehensive insights
 spark-mcp --cli analyze insights app-20231201-123456
 

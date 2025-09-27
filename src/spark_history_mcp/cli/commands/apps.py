@@ -319,6 +319,103 @@ if CLI_AVAILABLE:
         except Exception as e:
             raise click.ClickException(f"Error listing stages for {app_id}: {e}")
 
+    @apps.command("summary")
+    @click.argument("app_id")
+    @click.option("--server", "-s", help="Server name to use")
+    @click.option(
+        "--format",
+        "-f",
+        type=click.Choice(["human", "json", "table"]),
+        default="human",
+        help="Output format",
+    )
+    @click.pass_context
+    def summary_app(ctx, app_id: str, server: Optional[str], format: str):
+        """Get comprehensive performance summary for a specific application."""
+        config_path = ctx.obj["config_path"]
+        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+
+        # Field labels for human-readable output
+        FIELD_LABELS = {
+            # Remove redundant fields (already in title)
+            "application_id": None,  # Skip - in title
+            "application_name": None,  # Skip - in title
+            "analysis_timestamp": None,  # Skip - not needed in display
+
+            # Time metrics
+            "application_duration_minutes": "Duration (Min)",
+            "total_executor_runtime_minutes": "Executor Runtime (Min)",
+            "executor_cpu_time_minutes": "CPU Time (Min)",
+            "jvm_gc_time_minutes": "GC Time (Min)",
+            "executor_utilization_percent": "Executor Utilization (%)",
+
+            # Data processing metrics
+            "input_data_size_gb": "Input Data (GB)",
+            "output_data_size_gb": "Output Data (GB)",
+            "shuffle_read_size_gb": "Shuffle Read (GB)",
+            "shuffle_write_size_gb": "Shuffle Write (GB)",
+            "memory_spilled_gb": "Memory Spilled (GB)",
+            "disk_spilled_gb": "Disk Spilled (GB)",
+
+            # Performance metrics
+            "shuffle_read_wait_time_minutes": "Shuffle Read Wait (Min)",
+            "shuffle_write_time_minutes": "Shuffle Write Time (Min)",
+            "failed_tasks": "Failed Tasks",
+
+            # Stage metrics
+            "total_stages": "Total Stages",
+            "completed_stages": "Completed Stages",
+            "failed_stages": "Failed Stages"
+        }
+
+        try:
+            client = get_spark_client(config_path, server)
+
+            from spark_history_mcp.tools.tools import get_app_summary
+
+            # Create mock context
+            class MockContext:
+                def __init__(self, client):
+                    self.request_context = MockRequestContext(client)
+
+            class MockRequestContext:
+                def __init__(self, client):
+                    self.lifespan_context = MockLifespanContext(client)
+
+            class MockLifespanContext:
+                def __init__(self, client):
+                    self.default_client = client
+                    self.clients = {"default": client}
+
+            import spark_history_mcp.tools.tools as tools_module
+
+            original_get_context = getattr(tools_module.mcp, "get_context", None)
+            tools_module.mcp.get_context = lambda: MockContext(client)
+
+            try:
+                summary_data = get_app_summary(app_id, server=server)
+
+                # Extract application name for title
+                app_name = summary_data.get("application_name", "Unknown Application")
+                title = f"Application Summary - {app_name} ({app_id})"
+
+                # Transform for human/table formats, keep original for JSON
+                if format != "json":
+                    display_data = {}
+                    for key, value in summary_data.items():
+                        readable_label = FIELD_LABELS.get(key, key)
+                        if readable_label is not None:  # Skip None values (redundant fields)
+                            display_data[readable_label] = value
+                    formatter.output(display_data, title)
+                else:
+                    formatter.output(summary_data, title)
+            finally:
+                if original_get_context:
+                    tools_module.mcp.get_context = original_get_context
+
+        except Exception as e:
+            raise click.ClickException(f"Error getting summary for application {app_id}: {e}")
+
 else:
     # Fallback when CLI dependencies not available
     def apps():
