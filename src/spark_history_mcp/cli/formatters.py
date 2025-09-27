@@ -508,7 +508,7 @@ class OutputFormatter:
         console.print(table)
 
     def _format_performance_metrics(self, overview: Dict[str, Any]) -> None:
-        """Format key performance metrics in a table."""
+        """Format all available performance metrics dynamically."""
         if "executor_comparison" not in overview and "stage_comparison" not in overview:
             return
 
@@ -518,7 +518,7 @@ class OutputFormatter:
         table.add_column("App2", style="blue")
         table.add_column("Change", style="magenta")
 
-        # Executor metrics
+        # Dynamic executor metrics
         if "executor_comparison" in overview:
             exec_data = overview["executor_comparison"]
             if "applications" in exec_data:
@@ -526,51 +526,51 @@ class OutputFormatter:
                 app1_metrics = apps.get("app1", {}).get("executor_metrics", {})
                 app2_metrics = apps.get("app2", {}).get("executor_metrics", {})
 
-                # Total tasks
-                if (
-                    "completed_tasks" in app1_metrics
-                    and "completed_tasks" in app2_metrics
-                ):
-                    app1_tasks = app1_metrics["completed_tasks"]
-                    app2_tasks = app2_metrics["completed_tasks"]
-                    change = exec_data.get("task_completion_ratio_change", "N/A")
-                    table.add_row(
-                        "Total Tasks", str(app1_tasks), str(app2_tasks), change
-                    )
+                # Dynamically show key executor metrics for overview
+                key_executor_metrics = ["completed_tasks", "total_input_bytes", "total_duration"]
 
-        # Stage metrics
+                for metric_key in key_executor_metrics:
+                    if metric_key in app1_metrics and metric_key in app2_metrics:
+                        app1_val = app1_metrics[metric_key]
+                        app2_val = app2_metrics[metric_key]
+
+                        display_name = self._get_executor_metric_display_name(metric_key)
+                        formatter_func = self._get_executor_metric_formatter(metric_key)
+
+                        app1_display = formatter_func(app1_val)
+                        app2_display = formatter_func(app2_val)
+
+                        # Get change from executor comparison analysis
+                        if metric_key == "completed_tasks":
+                            change = exec_data.get("task_completion_ratio_change", "N/A")
+                        else:
+                            # Calculate change percentage for other metrics
+                            if app1_val > 0:
+                                change_pct = ((app2_val - app1_val) / app1_val) * 100
+                                change = f"+{change_pct:.1f}%" if change_pct >= 0 else f"{change_pct:.1f}%"
+                            else:
+                                change = "N/A"
+
+                        table.add_row(display_name, app1_display, app2_display, change)
+
+        # Dynamic stage comparison ratios - show ALL available ratios
         if "stage_comparison" in overview:
             stage_data = overview["stage_comparison"]
-            if "applications" in stage_data:
-                apps = stage_data["applications"]
-                app1_metrics = apps.get("app1", {}).get("stage_metrics", {})
-                app2_metrics = apps.get("app2", {}).get("stage_metrics", {})
+            stage_comparison = stage_data.get("stage_comparison", {})
 
-                # Input bytes
-                if (
-                    "total_input_bytes" in app1_metrics
-                    and "total_input_bytes" in app2_metrics
-                ):
-                    app1_input = self._format_bytes(app1_metrics["total_input_bytes"])
-                    app2_input = self._format_bytes(app2_metrics["total_input_bytes"])
-                    change = stage_data.get("stage_comparison", {}).get(
-                        "input_ratio_change", "N/A"
-                    )
-                    table.add_row("Input Data", app1_input, app2_input, change)
+            # Dynamically iterate through all ratio change metrics
+            for metric_key in sorted(stage_comparison.keys()):
+                if metric_key.endswith("_ratio_change"):
+                    change = stage_comparison[metric_key]
+                    display_name = self._get_stage_metric_display_name(metric_key)
 
-                # Duration
-                if (
-                    "total_stage_duration" in app1_metrics
-                    and "total_stage_duration" in app2_metrics
-                ):
-                    app1_duration = f"{app1_metrics['total_stage_duration']:.1f}s"
-                    app2_duration = f"{app2_metrics['total_stage_duration']:.1f}s"
-                    change = stage_data.get("stage_comparison", {}).get(
-                        "duration_ratio_change", "N/A"
-                    )
-                    table.add_row(
-                        "Total Duration", app1_duration, app2_duration, change
-                    )
+                    # Get the base ratio to calculate approximate values
+                    base_key = metric_key.replace("_change", "")
+                    ratio = stage_comparison.get(base_key, 0)
+
+                    if ratio > 0:
+                        # For ratio-based metrics, show as baseline vs ratio
+                        table.add_row(display_name, "Baseline", f"{ratio:.1%} of App1", change)
 
         if table.rows:
             console.print(table)
