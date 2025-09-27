@@ -400,8 +400,10 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
             )
 
             # Show post-stage menu if in human format and comparison context exists
-            if formatter.format == "human" and load_comparison_context():
-                show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx)
+            if formatter.format_type == "human" and load_comparison_context():
+                show_post_stage_menu(
+                    app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
+                )
         finally:
             if original_get_context:
                 tools_module.mcp.get_context = original_get_context
@@ -466,11 +468,10 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
                 stage_id1=stage_id1,
                 stage_id2=stage_id2,
                 server=server,
-                interval_minutes=1
+                interval_minutes=1,
             )
             formatter.output(
-                comparison_data,
-                f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
+                comparison_data, f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
             )
         finally:
             if original_get_context:
@@ -480,11 +481,14 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
         click.echo(f"Error executing stage timeline comparison: {e}")
 
 
-def show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx):
+def show_post_stage_menu(
+    app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
+):
     """Show follow-up options after stage comparison completion."""
     try:
         from rich.console import Console
         from rich.panel import Panel
+
         console = Console()
     except ImportError:
         # Fallback to simple text menu if Rich not available
@@ -492,23 +496,25 @@ def show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, server, formatt
 
     # Build menu content
     menu_lines = ["Choose your next analysis:", ""]
-    menu_lines.extend([
-        "\\[t] Compare Application Timeline",
-        f"\\[s] Compare Stage {stage_id1} Timeline Patterns",
-        "\\[q] Continue",
-    ])
+    menu_lines.extend(
+        [
+            "\\[t] Compare Application Timeline",
+            f"\\[s] Compare Stage {stage_id1} Timeline Patterns",
+            "\\[q] Continue",
+        ]
+    )
 
     # Display menu
     if console:
         content = "\n".join(menu_lines)
         console.print(Panel(content, title="What's Next?", border_style="green"))
     else:
-        click.echo("\n" + "="*50)
+        click.echo("\n" + "=" * 50)
         click.echo("What's Next?")
-        click.echo("="*50)
+        click.echo("=" * 50)
         for line in menu_lines:
             click.echo(line)
-        click.echo("="*50)
+        click.echo("=" * 50)
 
     # Get user input
     try:
@@ -520,14 +526,16 @@ def show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, server, formatt
             choice = click.prompt("Enter choice", type=str, default="q").lower()
 
         # Handle user selection
-        if choice == 'q':
+        if choice == "q":
             return
-        elif choice == 't':
+        elif choice == "t":
             # Execute application timeline comparison
             execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
-        elif choice == 's':
+        elif choice == "s":
             # Execute stage timeline comparison
-            execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, ctx)
+            execute_stage_timeline_comparison(
+                stage_id1, stage_id2, server, formatter, ctx
+            )
         else:
             click.echo(f"Invalid choice: {choice}")
 
@@ -718,7 +726,15 @@ if CLI_AVAILABLE:
 
                 # Show post-stage menu if in human format and comparison context exists
                 if format == "human" and load_comparison_context():
-                    show_post_stage_menu(app_id1, app_id2, stage_id1, stage_id2, final_server, formatter, ctx)
+                    show_post_stage_menu(
+                        app_id1,
+                        app_id2,
+                        stage_id1,
+                        stage_id2,
+                        final_server,
+                        formatter,
+                        ctx,
+                    )
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
