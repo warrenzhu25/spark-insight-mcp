@@ -334,25 +334,25 @@ class OutputFormatter:
     def _format_comparison_result(
         self, data: Dict[str, Any], title: Optional[str] = None
     ) -> None:
-        """Format comparison result data in a structured, readable way."""
-        # 1. Applications Header
+        """Format comparison result data in a clean, focused way."""
+        # 1. Highlighted app names header with separator
         if "applications" in data:
-            self._format_comparison_header(data["applications"])
+            app1_data = data["applications"].get("app1", {})
+            app2_data = data["applications"].get("app2", {})
+            app1_name = app1_data.get("name", app1_data.get("id", "App1"))
+            app2_name = app2_data.get("name", app2_data.get("id", "App2"))
 
-        # 2. Executive Summary
-        self._format_executive_summary(data)
+            console.print(f"[cyan]{app1_name}[/cyan] vs [cyan]{app2_name}[/cyan]")
+            console.print("─" * 80)
+            console.print()  # Empty line for spacing
 
-        # 3. Top Stage Differences
-        if "stage_deep_dive" in data:
-            self._format_stage_differences(data["stage_deep_dive"])
-
-        # 4. Performance Metrics
+        # 2. Performance Metrics table FIRST (overall picture)
         if "aggregated_overview" in data:
             self._format_performance_metrics(data["aggregated_overview"])
 
-        # 5. Recommendations
-        if "recommendations" in data:
-            self._format_recommendations(data["recommendations"])
+        # 3. Stage Differences table SECOND (detailed breakdown)
+        if "stage_deep_dive" in data:
+            self._format_stage_differences(data["stage_deep_dive"])
 
     def _format_comparison_header(self, applications: Dict[str, Any]) -> None:
         """Format the applications being compared."""

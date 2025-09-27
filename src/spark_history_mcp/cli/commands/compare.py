@@ -633,10 +633,7 @@ if CLI_AVAILABLE:
                 comparison_data = compare_app_performance(
                     app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n
                 )
-                formatter.output(
-                    comparison_data,
-                    f"Performance Comparison: {app_id1} vs {app_id2}",
-                )
+                formatter.output(comparison_data)
 
                 if not ctx.obj.get("quiet", False):
                     click.echo(f"\n✓ Comparison context saved: {app_id1} vs {app_id2}")
