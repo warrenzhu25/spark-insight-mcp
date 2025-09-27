@@ -624,14 +624,14 @@ if CLI_AVAILABLE:
             save_comparison_context(app_id1, app_id2, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_performance
+            from spark_history_mcp.tools.tools import compare_application_metrics
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
 
             try:
-                comparison_data = compare_app_performance(
-                    app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n
+                comparison_data = compare_application_metrics(
+                    app_id1=app_id1, app_id2=app_id2, server=server
                 )
                 formatter.output(comparison_data)
 

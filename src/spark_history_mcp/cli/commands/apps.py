@@ -175,8 +175,8 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            # Use the existing MCP tool function
-            from spark_history_mcp.tools.tools import get_application
+            # Use the new standardized MCP tool function
+            from spark_history_mcp.tools.tools import get_application_metrics
 
             # Create mock context (same as above)
             class MockContext:
@@ -198,8 +198,8 @@ if CLI_AVAILABLE:
             tools_module.mcp.get_context = lambda: MockContext(client)
 
             try:
-                app = get_application(app_id, server=server)
-                formatter.output(app, f"Application {app_id}")
+                app_metrics = get_application_metrics(app_id, server=server)
+                formatter.output(app_metrics, f"Application {app_id}")
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context

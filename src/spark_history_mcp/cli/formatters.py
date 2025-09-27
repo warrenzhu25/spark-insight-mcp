@@ -86,13 +86,20 @@ class OutputFormatter:
                 print(tabulate(table_data, headers=headers, tablefmt="grid"))
             return
 
-        # Single object
-        if hasattr(data, "model_dump"):
+        # Single object - check for standardized formats first
+        if isinstance(data, dict):
+            if self._is_standardized_comparison_result(data):
+                self._output_table_comparison(data, title)
+                return
+            elif self._is_standardized_metrics_result(data):
+                self._output_table_metrics(data, title)
+                return
+            else:
+                obj_data = data
+        elif hasattr(data, "model_dump"):
             obj_data = data.model_dump()
         elif hasattr(data, "__dict__"):
             obj_data = data.__dict__
-        elif isinstance(data, dict):
-            obj_data = data
         else:
             print(str(data))
             return
@@ -119,22 +126,28 @@ class OutputFormatter:
         elif isinstance(data, StageData):
             self._format_stage(data)
         elif isinstance(data, dict):
-            if self._is_comparison_result(data):
-                self._format_comparison_result(data, title)
-            elif self._is_stage_comparison_result(data):
-                self._format_stage_comparison_result(data, title)
-            elif self._is_timeline_comparison_result(data):
-                self._format_timeline_comparison_result(data, title)
-            elif self._is_executor_comparison_result(data):
-                self._format_executor_comparison_result(data, title)
-            elif self._is_job_comparison_result(data):
-                self._format_job_comparison_result(data, title)
-            elif self._is_aggregated_stage_comparison_result(data):
-                self._format_aggregated_stage_comparison_result(data, title)
-            elif self._is_resource_comparison_result(data):
-                self._format_resource_comparison_result(data, title)
+            if self._is_standardized_comparison_result(data):
+                self._format_standardized_comparison_result(data, title)
+            elif self._is_standardized_metrics_result(data):
+                self._format_standardized_metrics_result(data, title)
             else:
-                self._format_dict(data)
+                # Fallback to existing specific formatters for backward compatibility
+                if self._is_comparison_result(data):
+                    self._format_comparison_result(data, title)
+                elif self._is_stage_comparison_result(data):
+                    self._format_stage_comparison_result(data, title)
+                elif self._is_timeline_comparison_result(data):
+                    self._format_timeline_comparison_result(data, title)
+                elif self._is_executor_comparison_result(data):
+                    self._format_executor_comparison_result(data, title)
+                elif self._is_job_comparison_result(data):
+                    self._format_job_comparison_result(data, title)
+                elif self._is_aggregated_stage_comparison_result(data):
+                    self._format_aggregated_stage_comparison_result(data, title)
+                elif self._is_resource_comparison_result(data):
+                    self._format_resource_comparison_result(data, title)
+                else:
+                    self._format_dict(data)
         else:
             console.print(str(data))
 
@@ -527,14 +540,20 @@ class OutputFormatter:
                 app2_metrics = apps.get("app2", {}).get("executor_metrics", {})
 
                 # Dynamically show key executor metrics for overview
-                key_executor_metrics = ["completed_tasks", "total_input_bytes", "total_duration"]
+                key_executor_metrics = [
+                    "completed_tasks",
+                    "total_input_bytes",
+                    "total_duration",
+                ]
 
                 for metric_key in key_executor_metrics:
                     if metric_key in app1_metrics and metric_key in app2_metrics:
                         app1_val = app1_metrics[metric_key]
                         app2_val = app2_metrics[metric_key]
 
-                        display_name = self._get_executor_metric_display_name(metric_key)
+                        display_name = self._get_executor_metric_display_name(
+                            metric_key
+                        )
                         formatter_func = self._get_executor_metric_formatter(metric_key)
 
                         app1_display = formatter_func(app1_val)
@@ -542,12 +561,18 @@ class OutputFormatter:
 
                         # Get change from executor comparison analysis
                         if metric_key == "completed_tasks":
-                            change = exec_data.get("task_completion_ratio_change", "N/A")
+                            change = exec_data.get(
+                                "task_completion_ratio_change", "N/A"
+                            )
                         else:
                             # Calculate change percentage for other metrics
                             if app1_val > 0:
                                 change_pct = ((app2_val - app1_val) / app1_val) * 100
-                                change = f"+{change_pct:.1f}%" if change_pct >= 0 else f"{change_pct:.1f}%"
+                                change = (
+                                    f"+{change_pct:.1f}%"
+                                    if change_pct >= 0
+                                    else f"{change_pct:.1f}%"
+                                )
                             else:
                                 change = "N/A"
 
@@ -570,7 +595,9 @@ class OutputFormatter:
 
                     if ratio > 0:
                         # For ratio-based metrics, show as baseline vs ratio
-                        table.add_row(display_name, "Baseline", f"{ratio:.1%} of App1", change)
+                        table.add_row(
+                            display_name, "Baseline", f"{ratio:.1%} of App1", change
+                        )
 
         if table.rows:
             console.print(table)
@@ -1026,6 +1053,21 @@ class OutputFormatter:
             bytes_value /= 1024.0
         return f"{bytes_value:.1f}PB"
 
+    def _format_duration(self, duration_ms: int) -> str:
+        """Format duration in human readable format."""
+        if duration_ms < 1000:
+            return f"{duration_ms}ms"
+        elif duration_ms < 60000:
+            return f"{duration_ms / 1000:.1f}s"
+        elif duration_ms < 3600000:
+            minutes = duration_ms // 60000
+            seconds = (duration_ms % 60000) // 1000
+            return f"{minutes}m {seconds}s"
+        else:
+            hours = duration_ms // 3600000
+            minutes = (duration_ms % 3600000) // 60000
+            return f"{hours}h {minutes}m"
+
     def _format_dict(self, data: Dict[str, Any]) -> None:
         """Format dictionary data."""
         # For complex nested dictionaries, use a more sophisticated approach
@@ -1397,6 +1439,204 @@ class OutputFormatter:
             console.print(
                 "[yellow]No resource allocation data available for comparison[/yellow]"
             )
+
+    def _is_standardized_metrics_result(self, data: Dict[str, Any]) -> bool:
+        """
+        Check if data is a standardized metrics result (flat dict with metric names as keys).
+
+        Standardized format: Dict[str, Any] where key = metric name, value = metric value
+        """
+        if not isinstance(data, dict) or len(data) == 0:
+            return False
+
+        # Check if all values are simple types (not tuples or complex objects)
+        for value in data.values():
+            if isinstance(value, tuple):
+                return False  # This would be a comparison result
+            if isinstance(value, dict) and len(value) > 5:
+                return False  # Complex nested dict
+
+        return True
+
+    def _is_standardized_comparison_result(self, data: Dict[str, Any]) -> bool:
+        """
+        Check if data is a standardized comparison result.
+
+        Standardized format: Dict[str, Tuple[Any, Any, float]] where value = (left, right, percent_change)
+        """
+        if not isinstance(data, dict) or len(data) == 0:
+            return False
+
+        # Check if at least some values are 3-tuples (left, right, percentage)
+        tuple_count = 0
+        for value in data.values():
+            if isinstance(value, tuple) and len(value) == 3:
+                tuple_count += 1
+
+        # If more than half the values are 3-tuples, it's likely a standardized comparison
+        return tuple_count >= len(data) * 0.5
+
+    def _format_standardized_metrics_result(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
+        """
+        Format standardized metrics result as a simple key-value table.
+
+        Format: Dict[str, Any] where key = metric name, value = metric value
+        """
+        if title:
+            console.print(f"\n[bold blue]{title}[/bold blue]")
+
+        table = Table(title="Metrics")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+
+        for key, value in data.items():
+            # Format values nicely
+            if isinstance(value, (int, float)):
+                if "bytes" in key.lower():
+                    formatted_value = self._format_bytes(value)
+                elif "time" in key.lower() or "duration" in key.lower():
+                    formatted_value = self._format_duration(value)
+                else:
+                    formatted_value = f"{value:,}"
+            elif value is None:
+                formatted_value = "N/A"
+            else:
+                formatted_value = str(value)
+
+            table.add_row(key, formatted_value)
+
+        console.print(table)
+
+    def _format_standardized_comparison_result(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
+        """
+        Format standardized comparison result as a comparison table.
+
+        Format: Dict[str, Tuple[Any, Any, float]] where value = (left, right, percent_change)
+        """
+        if title:
+            console.print(f"\n[bold blue]{title}[/bold blue]")
+
+        table = Table(title="Comparison")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Left", style="blue")
+        table.add_column("Right", style="blue")
+        table.add_column("Change %", style="magenta")
+
+        for key, value in data.items():
+            if isinstance(value, tuple) and len(value) == 3:
+                left_val, right_val, percent_change = value
+
+                # Format values nicely
+                if isinstance(left_val, (int, float)) and isinstance(
+                    right_val, (int, float)
+                ):
+                    if "bytes" in key.lower():
+                        left_formatted = self._format_bytes(left_val)
+                        right_formatted = self._format_bytes(right_val)
+                    elif "time" in key.lower() or "duration" in key.lower():
+                        left_formatted = self._format_duration(left_val)
+                        right_formatted = self._format_duration(right_val)
+                    else:
+                        left_formatted = f"{left_val:,}"
+                        right_formatted = f"{right_val:,}"
+                else:
+                    left_formatted = str(left_val) if left_val is not None else "N/A"
+                    right_formatted = str(right_val) if right_val is not None else "N/A"
+
+                # Format percentage change with color
+                if percent_change > 0:
+                    change_formatted = f"[red]+{percent_change:.1f}%[/red]"
+                elif percent_change < 0:
+                    change_formatted = f"[green]{percent_change:.1f}%[/green]"
+                else:
+                    change_formatted = "0.0%"
+
+                table.add_row(key, left_formatted, right_formatted, change_formatted)
+            else:
+                # Fallback for non-tuple values
+                table.add_row(key, str(value), "N/A", "N/A")
+
+        console.print(table)
+
+    def _output_table_metrics(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
+        """Format standardized metrics result as a simple table using tabulate."""
+        if title:
+            print(f"\n{title}")
+            print("-" * len(title))
+
+        rows = []
+        for key, value in data.items():
+            # Format values nicely
+            if isinstance(value, (int, float)):
+                if "bytes" in key.lower():
+                    formatted_value = self._format_bytes(value)
+                elif "time" in key.lower() or "duration" in key.lower():
+                    formatted_value = self._format_duration(value)
+                else:
+                    formatted_value = f"{value:,}"
+            elif value is None:
+                formatted_value = "N/A"
+            else:
+                formatted_value = str(value)
+
+            rows.append([key, formatted_value])
+
+        print(tabulate(rows, headers=["Metric", "Value"], tablefmt="grid"))
+
+    def _output_table_comparison(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
+        """Format standardized comparison result as a comparison table using tabulate."""
+        if title:
+            print(f"\n{title}")
+            print("-" * len(title))
+
+        rows = []
+        for key, value in data.items():
+            if isinstance(value, tuple) and len(value) == 3:
+                left_val, right_val, percent_change = value
+
+                # Format values nicely
+                if isinstance(left_val, (int, float)) and isinstance(
+                    right_val, (int, float)
+                ):
+                    if "bytes" in key.lower():
+                        left_formatted = self._format_bytes(left_val)
+                        right_formatted = self._format_bytes(right_val)
+                    elif "time" in key.lower() or "duration" in key.lower():
+                        left_formatted = self._format_duration(left_val)
+                        right_formatted = self._format_duration(right_val)
+                    else:
+                        left_formatted = f"{left_val:,}"
+                        right_formatted = f"{right_val:,}"
+                else:
+                    left_formatted = str(left_val) if left_val is not None else "N/A"
+                    right_formatted = str(right_val) if right_val is not None else "N/A"
+
+                # Format percentage change
+                if percent_change > 0:
+                    change_formatted = f"+{percent_change:.1f}%"
+                elif percent_change < 0:
+                    change_formatted = f"{percent_change:.1f}%"
+                else:
+                    change_formatted = "0.0%"
+
+                rows.append([key, left_formatted, right_formatted, change_formatted])
+            else:
+                # Fallback for non-tuple values
+                rows.append([key, str(value), "N/A", "N/A"])
+
+        print(
+            tabulate(
+                rows, headers=["Metric", "Left", "Right", "Change %"], tablefmt="grid"
+            )
+        )
 
 
 def create_progress(description: str = "Processing...") -> Progress:

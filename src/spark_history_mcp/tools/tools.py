@@ -12,6 +12,7 @@ from spark_history_mcp.models.mcp_types import (
 from spark_history_mcp.models.spark_types import (
     ApplicationInfo,
     ExecutionData,
+    ExecutorSummary,
     JobData,
     JobExecutionStatus,
     SQLExecutionStatus,
@@ -19,6 +20,225 @@ from spark_history_mcp.models.spark_types import (
     StageStatus,
     TaskMetricDistributions,
 )
+
+
+def extract_application_metrics(app: ApplicationInfo) -> Dict[str, Any]:
+    """Extract standardized metrics from ApplicationInfo object."""
+    # Get the latest attempt info
+    latest_attempt = app.attempts[-1] if app.attempts else None
+
+    return {
+        "app_id": app.id,
+        "app_name": app.name,
+        "duration_ms": latest_attempt.duration if latest_attempt else 0,
+        "start_time": latest_attempt.start_time.isoformat()
+        if latest_attempt and latest_attempt.start_time
+        else None,
+        "end_time": latest_attempt.end_time.isoformat()
+        if latest_attempt and latest_attempt.end_time
+        else None,
+        "spark_user": latest_attempt.spark_user if latest_attempt else None,
+        "app_spark_version": latest_attempt.app_spark_version
+        if latest_attempt
+        else None,
+        "cores_granted": app.cores_granted or 0,
+        "max_cores": app.max_cores or 0,
+        "cores_per_executor": app.cores_per_executor or 0,
+        "memory_per_executor_mb": app.memory_per_executor_mb or 0,
+        "completed": latest_attempt.completed if latest_attempt else False,
+        "last_updated": latest_attempt.last_updated.isoformat()
+        if latest_attempt and latest_attempt.last_updated
+        else None,
+    }
+
+
+def extract_stage_metrics(stage: StageData) -> Dict[str, Any]:
+    """Extract standardized metrics from StageData object."""
+    return {
+        "stage_id": stage.stage_id,
+        "stage_name": getattr(stage, "name", f"Stage {stage.stage_id}"),
+        "status": stage.status if isinstance(stage.status, str) else str(stage.status),
+        "num_tasks": stage.num_tasks or 0,
+        "num_active_tasks": stage.num_active_tasks or 0,
+        "num_complete_tasks": stage.num_complete_tasks or 0,
+        "num_failed_tasks": stage.num_failed_tasks or 0,
+        "num_killed_tasks": stage.num_killed_tasks or 0,
+        "executor_run_time_ms": stage.executor_run_time or 0,
+        "executor_cpu_time_ms": stage.executor_cpu_time or 0,
+        "submission_time": stage.submission_time.isoformat()
+        if stage.submission_time
+        else None,
+        "first_task_launched_time": stage.first_task_launched_time.isoformat()
+        if stage.first_task_launched_time
+        else None,
+        "completion_time": stage.completion_time.isoformat()
+        if stage.completion_time
+        else None,
+        "input_bytes": getattr(stage, "input_bytes", 0) or 0,
+        "input_records": getattr(stage, "input_records", 0) or 0,
+        "output_bytes": getattr(stage, "output_bytes", 0) or 0,
+        "output_records": getattr(stage, "output_records", 0) or 0,
+        "shuffle_read_bytes": getattr(stage, "shuffle_read_bytes", 0) or 0,
+        "shuffle_read_records": getattr(stage, "shuffle_read_records", 0) or 0,
+        "shuffle_write_bytes": getattr(stage, "shuffle_write_bytes", 0) or 0,
+        "shuffle_write_records": getattr(stage, "shuffle_write_records", 0) or 0,
+        "memory_bytes_spilled": getattr(stage, "memory_bytes_spilled", 0) or 0,
+        "disk_bytes_spilled": getattr(stage, "disk_bytes_spilled", 0) or 0,
+    }
+
+
+def extract_executor_metrics(executor: ExecutorSummary) -> Dict[str, Any]:
+    """Extract standardized metrics from ExecutorSummary object."""
+    return {
+        "executor_id": executor.id,
+        "host_port": executor.host_port,
+        "is_active": executor.is_active,
+        "rdd_blocks": executor.rdd_blocks or 0,
+        "memory_used": executor.memory_used or 0,
+        "disk_used": executor.disk_used or 0,
+        "total_cores": executor.total_cores or 0,
+        "max_tasks": executor.max_tasks or 0,
+        "active_tasks": executor.active_tasks or 0,
+        "failed_tasks": executor.failed_tasks or 0,
+        "completed_tasks": executor.completed_tasks or 0,
+        "total_tasks": executor.total_tasks or 0,
+        "total_duration": executor.total_duration or 0,
+        "total_gc_time": executor.total_gc_time or 0,
+        "total_input_bytes": executor.total_input_bytes or 0,
+        "total_shuffle_read": executor.total_shuffle_read or 0,
+        "total_shuffle_write": executor.total_shuffle_write or 0,
+        "is_blacklisted": executor.is_blacklisted,
+        "max_memory": executor.max_memory or 0,
+        "add_time": executor.add_time.isoformat() if executor.add_time else None,
+        "remove_time": executor.remove_time.isoformat()
+        if executor.remove_time
+        else None,
+        "remove_reason": executor.remove_reason,
+        "executor_logs": executor.executor_logs,
+        "memory_metrics": executor.memory_metrics,
+        "blacklisted_in_stages": executor.blacklisted_in_stages or [],
+        "peak_memory_metrics": executor.peak_memory_metrics,
+        "attributes": executor.attributes or {},
+        "resources": executor.resources or {},
+        "resource_profile_id": executor.resource_profile_id or 0,
+    }
+
+
+def extract_task_metrics(task_metrics: TaskMetricDistributions) -> Dict[str, Any]:
+    """Extract standardized metrics from TaskMetricDistributions object."""
+    metrics = {}
+
+    if task_metrics.quantiles:
+        # Extract executor run time metrics
+        if task_metrics.executor_run_time:
+            for i, quantile in enumerate(task_metrics.quantiles):
+                metrics[f"executor_run_time_p{int(quantile * 100)}"] = (
+                    task_metrics.executor_run_time[i]
+                )
+
+        # Extract executor CPU time metrics
+        if task_metrics.executor_cpu_time:
+            for i, quantile in enumerate(task_metrics.quantiles):
+                metrics[f"executor_cpu_time_p{int(quantile * 100)}"] = (
+                    task_metrics.executor_cpu_time[i]
+                )
+
+        # Extract memory bytes spilled metrics
+        if task_metrics.memory_bytes_spilled:
+            for i, quantile in enumerate(task_metrics.quantiles):
+                metrics[f"memory_bytes_spilled_p{int(quantile * 100)}"] = (
+                    task_metrics.memory_bytes_spilled[i]
+                )
+
+        # Extract disk bytes spilled metrics
+        if task_metrics.disk_bytes_spilled:
+            for i, quantile in enumerate(task_metrics.quantiles):
+                metrics[f"disk_bytes_spilled_p{int(quantile * 100)}"] = (
+                    task_metrics.disk_bytes_spilled[i]
+                )
+
+        # Extract input metrics
+        if task_metrics.input_metrics and task_metrics.input_metrics.bytes_read:
+            for i, quantile in enumerate(task_metrics.quantiles):
+                metrics[f"input_bytes_read_p{int(quantile * 100)}"] = (
+                    task_metrics.input_metrics.bytes_read[i]
+                )
+
+        # Extract output metrics
+        if task_metrics.output_metrics and task_metrics.output_metrics.bytes_written:
+            for i, quantile in enumerate(task_metrics.quantiles):
+                metrics[f"output_bytes_written_p{int(quantile * 100)}"] = (
+                    task_metrics.output_metrics.bytes_written[i]
+                )
+
+        # Extract shuffle read metrics
+        if task_metrics.shuffle_read_metrics:
+            if task_metrics.shuffle_read_metrics.read_bytes:
+                for i, quantile in enumerate(task_metrics.quantiles):
+                    metrics[f"shuffle_read_bytes_p{int(quantile * 100)}"] = (
+                        task_metrics.shuffle_read_metrics.read_bytes[i]
+                    )
+            if task_metrics.shuffle_read_metrics.read_records:
+                for i, quantile in enumerate(task_metrics.quantiles):
+                    metrics[f"shuffle_read_records_p{int(quantile * 100)}"] = (
+                        task_metrics.shuffle_read_metrics.read_records[i]
+                    )
+
+        # Extract shuffle write metrics
+        if task_metrics.shuffle_write_metrics:
+            if task_metrics.shuffle_write_metrics.write_bytes:
+                for i, quantile in enumerate(task_metrics.quantiles):
+                    metrics[f"shuffle_write_bytes_p{int(quantile * 100)}"] = (
+                        task_metrics.shuffle_write_metrics.write_bytes[i]
+                    )
+            if task_metrics.shuffle_write_metrics.write_records:
+                for i, quantile in enumerate(task_metrics.quantiles):
+                    metrics[f"shuffle_write_records_p{int(quantile * 100)}"] = (
+                        task_metrics.shuffle_write_metrics.write_records[i]
+                    )
+
+    return metrics
+
+
+def calculate_percentage_change(left_value: Any, right_value: Any) -> float:
+    """Calculate percentage change between two values."""
+    if left_value is None or right_value is None:
+        return 0.0
+
+    # Handle string values (no percentage calculation)
+    if isinstance(left_value, str) or isinstance(right_value, str):
+        return 0.0
+
+    # Handle numeric values
+    try:
+        left_num = float(left_value)
+        right_num = float(right_value)
+
+        if left_num == 0:
+            return 100.0 if right_num != 0 else 0.0
+
+        return ((right_num - left_num) / left_num) * 100.0
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def create_comparison_metrics(
+    left_metrics: Dict[str, Any], right_metrics: Dict[str, Any]
+) -> Dict[str, Tuple[Any, Any, float]]:
+    """Create standardized comparison metrics from two metric dictionaries."""
+    comparison = {}
+
+    # Get all unique metric keys from both dictionaries
+    all_keys = set(left_metrics.keys()) | set(right_metrics.keys())
+
+    for key in all_keys:
+        left_value = left_metrics.get(key)
+        right_value = right_metrics.get(key)
+        percentage_change = calculate_percentage_change(left_value, right_value)
+
+        comparison[key] = (left_value, right_value, percentage_change)
+
+    return comparison
 
 
 def get_client_or_default(ctx, server_name: Optional[str] = None):
@@ -6489,3 +6709,281 @@ def compare_app_executor_timeline(
             "app1_id": app_id1,
             "app2_id": app_id2,
         }
+
+
+# ============================================================================
+# STANDARDIZED OUTPUT FORMAT TOOLS
+# ============================================================================
+# These tools provide standardized output format:
+# - Single element tools return: Dict[str, Any] where key = metric name, value = metric value
+# - Comparison tools return: Dict[str, Tuple[Any, Any, float]] where value = (left, right, percent_change)
+
+
+@mcp.tool()
+def get_application_metrics(
+    app_id: str, server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get standardized metrics for a specific Spark application.
+
+    Returns a flat dictionary with metric names as keys and metric values as values.
+
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and metric values as values
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    app = client.get_application(app_id)
+    return extract_application_metrics(app)
+
+
+@mcp.tool()
+def get_stage_metrics(
+    app_id: str,
+    stage_id: int,
+    attempt_id: Optional[int] = None,
+    server: Optional[str] = None,
+    with_summaries: bool = False,
+) -> Dict[str, Any]:
+    """
+    Get standardized metrics for a specific stage.
+
+    Returns a flat dictionary with metric names as keys and metric values as values.
+
+    Args:
+        app_id: The Spark application ID
+        stage_id: The stage ID
+        attempt_id: Optional stage attempt ID (if not provided, returns the latest attempt)
+        server: Optional server name to use (uses default if not specified)
+        with_summaries: Whether to include summary metrics
+
+    Returns:
+        Dictionary with metric names as keys and metric values as values
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    if attempt_id is not None:
+        stage_data = client.get_stage_attempt(
+            app_id=app_id,
+            stage_id=stage_id,
+            attempt_id=attempt_id,
+            details=False,
+            with_summaries=with_summaries,
+        )
+    else:
+        stages = client.list_stage_attempts(
+            app_id=app_id,
+            stage_id=stage_id,
+            details=False,
+            with_summaries=with_summaries,
+        )
+
+        if not stages:
+            raise ValueError(f"No stage found with ID {stage_id}")
+
+        if isinstance(stages, list):
+            stage_data = max(stages, key=lambda s: s.attempt_id)
+        else:
+            stage_data = stages
+
+    if with_summaries and (
+        not hasattr(stage_data, "task_metrics_distributions")
+        or stage_data.task_metrics_distributions is None
+    ):
+        task_summary = client.get_stage_task_summary(
+            app_id=app_id,
+            stage_id=stage_id,
+            attempt_id=stage_data.attempt_id,
+        )
+        stage_data.task_metrics_distributions = task_summary
+
+    return extract_stage_metrics(stage_data)
+
+
+@mcp.tool()
+def get_executor_metrics(
+    app_id: str, executor_id: str, server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get standardized metrics for a specific executor.
+
+    Returns a flat dictionary with metric names as keys and metric values as values.
+
+    Args:
+        app_id: The Spark application ID
+        executor_id: The executor ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and metric values as values
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    executor = client.get_executor(app_id, executor_id)
+    if not executor:
+        raise ValueError(f"Executor {executor_id} not found in application {app_id}")
+
+    return extract_executor_metrics(executor)
+
+
+@mcp.tool()
+def get_executor_summary_metrics(
+    app_id: str, server: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get standardized aggregated executor metrics for an application.
+
+    Returns a flat dictionary with metric names as keys and metric values as values.
+
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and metric values as values
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    # Get aggregated executor summary (this already returns a dict)
+    exec_summary = get_executor_summary(app_id, server)
+    return exec_summary
+
+
+@mcp.tool()
+def get_stage_task_summary_metrics(
+    app_id: str,
+    stage_id: int,
+    attempt_id: int = 0,
+    server: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get standardized task metric distributions for a stage.
+
+    Returns a flat dictionary with metric names as keys and metric values as values.
+
+    Args:
+        app_id: The Spark application ID
+        stage_id: The stage ID
+        attempt_id: The stage attempt ID (default: 0)
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and metric values as values
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    task_metrics = client.get_stage_task_summary(app_id, stage_id, attempt_id)
+    return extract_task_metrics(task_metrics)
+
+
+@mcp.tool()
+def compare_application_metrics(
+    app_id1: str, app_id2: str, server: Optional[str] = None
+) -> Dict[str, Tuple[Any, Any, float]]:
+    """
+    Compare standardized metrics between two Spark applications.
+
+    Returns a dictionary where each key is a metric name and each value is a tuple of
+    (left_value, right_value, percentage_change).
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and (left, right, percent_change) tuples as values
+    """
+    left_metrics = get_application_metrics(app_id1, server)
+    right_metrics = get_application_metrics(app_id2, server)
+    return create_comparison_metrics(left_metrics, right_metrics)
+
+
+@mcp.tool()
+def compare_stage_metrics(
+    app_id1: str,
+    stage_id1: int,
+    app_id2: str,
+    stage_id2: int,
+    server: Optional[str] = None,
+) -> Dict[str, Tuple[Any, Any, float]]:
+    """
+    Compare standardized metrics between two stages.
+
+    Returns a dictionary where each key is a metric name and each value is a tuple of
+    (left_value, right_value, percentage_change).
+
+    Args:
+        app_id1: First Spark application ID
+        stage_id1: First stage ID
+        app_id2: Second Spark application ID
+        stage_id2: Second stage ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and (left, right, percent_change) tuples as values
+    """
+    left_metrics = get_stage_metrics(app_id1, stage_id1, server=server)
+    right_metrics = get_stage_metrics(app_id2, stage_id2, server=server)
+    return create_comparison_metrics(left_metrics, right_metrics)
+
+
+@mcp.tool()
+def compare_executor_metrics(
+    app_id1: str,
+    executor_id1: str,
+    app_id2: str,
+    executor_id2: str,
+    server: Optional[str] = None,
+) -> Dict[str, Tuple[Any, Any, float]]:
+    """
+    Compare standardized metrics between two executors.
+
+    Returns a dictionary where each key is a metric name and each value is a tuple of
+    (left_value, right_value, percentage_change).
+
+    Args:
+        app_id1: First Spark application ID
+        executor_id1: First executor ID
+        app_id2: Second Spark application ID
+        executor_id2: Second executor ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and (left, right, percent_change) tuples as values
+    """
+    left_metrics = get_executor_metrics(app_id1, executor_id1, server)
+    right_metrics = get_executor_metrics(app_id2, executor_id2, server)
+    return create_comparison_metrics(left_metrics, right_metrics)
+
+
+@mcp.tool()
+def compare_executor_summary_metrics(
+    app_id1: str, app_id2: str, server: Optional[str] = None
+) -> Dict[str, Tuple[Any, Any, float]]:
+    """
+    Compare standardized aggregated executor metrics between two applications.
+
+    Returns a dictionary where each key is a metric name and each value is a tuple of
+    (left_value, right_value, percentage_change).
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary with metric names as keys and (left, right, percent_change) tuples as values
+    """
+    left_metrics = get_executor_summary_metrics(app_id1, server)
+    right_metrics = get_executor_summary_metrics(app_id2, server)
+    return create_comparison_metrics(left_metrics, right_metrics)
