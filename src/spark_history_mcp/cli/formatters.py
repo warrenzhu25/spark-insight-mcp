@@ -323,7 +323,12 @@ class OutputFormatter:
 
     def _is_timeline_comparison_result(self, data: Dict[str, Any]) -> bool:
         """Detect if data is a timeline comparison result structure."""
-        timeline_keys = {"app1_info", "app2_info", "timeline_comparison", "resource_efficiency"}
+        timeline_keys = {
+            "app1_info",
+            "app2_info",
+            "timeline_comparison",
+            "resource_efficiency",
+        }
         return len(timeline_keys.intersection(data.keys())) >= 3
 
     def _format_comparison_result(
@@ -557,7 +562,9 @@ class OutputFormatter:
                 )
             )
 
-    def _format_stage_comparison_result(self, data: Dict[str, Any], title: Optional[str] = None) -> None:
+    def _format_stage_comparison_result(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
         """Format stage comparison result in a structured, readable way."""
         # 1. Stage Info Header
         self._format_stage_info_header(data)
@@ -588,7 +595,13 @@ class OutputFormatter:
         content += f"[bold]App2:[/bold] {app2_id}\n"
         content += f"[bold]Status:[/bold] {stage_status} ✓"
 
-        console.print(Panel(content, title=f"Stage Comparison: {stage_id} vs {stage_id}", border_style="blue"))
+        console.print(
+            Panel(
+                content,
+                title=f"Stage Comparison: {stage_id} vs {stage_id}",
+                border_style="blue",
+            )
+        )
 
     def _format_stage_performance_metrics(self, data: Dict[str, Any]) -> None:
         """Format stage performance metrics in a comparison table."""
@@ -645,7 +658,9 @@ class OutputFormatter:
         # Number of differences found
         total_diffs = summary.get("total_differences_found", 0)
         if total_diffs > 0:
-            summary_items.append(f"• {total_diffs} significant performance differences found")
+            summary_items.append(
+                f"• {total_diffs} significant performance differences found"
+            )
 
         # Key performance insight
         task_dist = sig_diff.get("task_distributions", {})
@@ -655,7 +670,9 @@ class OutputFormatter:
                 if change.startswith("-"):
                     summary_items.append(f"• App2 is {change[1:]} faster than App1")
                 else:
-                    summary_items.append(f"• App1 is {change[1:] if change.startswith('+') else change} faster than App2")
+                    summary_items.append(
+                        f"• App1 is {change[1:] if change.startswith('+') else change} faster than App2"
+                    )
 
         # Stage status
         stage_comp = data.get("stage_comparison", {})
@@ -665,7 +682,9 @@ class OutputFormatter:
 
         if summary_items:
             content = "\n".join(summary_items)
-            console.print(Panel(content, title="Performance Summary", border_style="green"))
+            console.print(
+                Panel(content, title="Performance Summary", border_style="green")
+            )
 
     def _format_milliseconds(self, ms_value: float) -> str:
         """Format milliseconds to human readable duration."""
@@ -679,7 +698,9 @@ class OutputFormatter:
                 minutes = seconds / 60
                 return f"{minutes:.1f}m"
 
-    def _format_timeline_comparison_result(self, data: Dict[str, Any], title: Optional[str] = None) -> None:
+    def _format_timeline_comparison_result(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
         """Format timeline comparison result in a structured, readable way."""
         # 1. Application Overview Header
         self._format_timeline_overview_header(data)
@@ -705,10 +726,26 @@ class OutputFormatter:
         app2_duration = app2_info.get("duration_seconds", 0)
 
         # Format timestamps
-        app1_start = app1_info.get("start_time", "")[:19] if app1_info.get("start_time") else "Unknown"
-        app1_end = app1_info.get("end_time", "")[:19] if app1_info.get("end_time") else "Unknown"
-        app2_start = app2_info.get("start_time", "")[:19] if app2_info.get("start_time") else "Unknown"
-        app2_end = app2_info.get("end_time", "")[:19] if app2_info.get("end_time") else "Unknown"
+        app1_start = (
+            app1_info.get("start_time", "")[:19]
+            if app1_info.get("start_time")
+            else "Unknown"
+        )
+        app1_end = (
+            app1_info.get("end_time", "")[:19]
+            if app1_info.get("end_time")
+            else "Unknown"
+        )
+        app2_start = (
+            app2_info.get("start_time", "")[:19]
+            if app2_info.get("start_time")
+            else "Unknown"
+        )
+        app2_end = (
+            app2_info.get("end_time", "")[:19]
+            if app2_info.get("end_time")
+            else "Unknown"
+        )
 
         # Calculate performance difference
         duration_diff = app1_duration - app2_duration
@@ -717,7 +754,9 @@ class OutputFormatter:
             if duration_diff > 0:
                 perf_text = f"App2 is {duration_diff:.1f}s ({perf_pct:.1f}%) faster"
             else:
-                perf_text = f"App1 is {abs(duration_diff):.1f}s ({perf_pct:.1f}%) faster"
+                perf_text = (
+                    f"App1 is {abs(duration_diff):.1f}s ({perf_pct:.1f}%) faster"
+                )
         else:
             perf_text = "Performance comparison unavailable"
 
@@ -727,7 +766,9 @@ class OutputFormatter:
         content += f"Duration: {app2_duration:.1f}s ({app2_start} → {app2_end})\n\n"
         content += f"[bold]Performance:[/bold] {perf_text}"
 
-        console.print(Panel(content, title="Application Timeline Comparison", border_style="blue"))
+        console.print(
+            Panel(content, title="Application Timeline Comparison", border_style="blue")
+        )
 
     def _format_timeline_intervals_table(self, data: Dict[str, Any]) -> None:
         """Format timeline intervals in a table."""
@@ -753,15 +794,21 @@ class OutputFormatter:
                 end_time = time_range.split(" to ")[1][-8:]
                 time_display = f"{start_time} → {end_time}"
             else:
-                time_display = time_range[:20] + "..." if len(time_range) > 20 else time_range
+                time_display = (
+                    time_range[:20] + "..." if len(time_range) > 20 else time_range
+                )
 
             app1_execs = interval_data.get("app1", {}).get("executor_count", 0)
             app2_execs = interval_data.get("app2", {}).get("executor_count", 0)
             diff = interval_data.get("differences", {}).get("executor_count_diff", 0)
 
-            diff_display = f"+{diff}" if diff > 0 else str(diff) if diff != 0 else "Same"
+            diff_display = (
+                f"+{diff}" if diff > 0 else str(diff) if diff != 0 else "Same"
+            )
 
-            table.add_row(interval, time_display, str(app1_execs), str(app2_execs), diff_display)
+            table.add_row(
+                interval, time_display, str(app1_execs), str(app2_execs), diff_display
+            )
 
         console.print(table)
 
@@ -808,31 +855,43 @@ class OutputFormatter:
         intervals = summary.get("original_intervals", 0)
         merged = summary.get("merged_intervals", 0)
         if intervals > 0:
-            summary_items.append(f"• Analyzed {intervals} time intervals (merged to {merged})")
+            summary_items.append(
+                f"• Analyzed {intervals} time intervals (merged to {merged})"
+            )
 
         # Performance improvement
         perf_improvement = summary.get("performance_improvement", {})
         time_diff = perf_improvement.get("time_difference_seconds", 0)
         if time_diff != 0:
             if time_diff > 0:
-                summary_items.append(f"• App2 completed {time_diff:.1f}s faster than App1")
+                summary_items.append(
+                    f"• App2 completed {time_diff:.1f}s faster than App1"
+                )
             else:
-                summary_items.append(f"• App1 completed {abs(time_diff):.1f}s faster than App2")
+                summary_items.append(
+                    f"• App1 completed {abs(time_diff):.1f}s faster than App2"
+                )
 
         # Resource usage
         max_diff = summary.get("max_executor_count_difference", 0)
         if max_diff == 0:
-            summary_items.append("• Both applications used identical peak executor counts")
+            summary_items.append(
+                "• Both applications used identical peak executor counts"
+            )
         else:
             summary_items.append(f"• Peak executor difference: {max_diff}")
 
         # Recommendations count
         if recommendations:
-            summary_items.append(f"• {len(recommendations)} optimization recommendations available")
+            summary_items.append(
+                f"• {len(recommendations)} optimization recommendations available"
+            )
 
         if summary_items:
             content = "\n".join(summary_items)
-            console.print(Panel(content, title="Timeline Analysis Summary", border_style="yellow"))
+            console.print(
+                Panel(content, title="Timeline Analysis Summary", border_style="yellow")
+            )
 
     def _format_bytes(self, bytes_value: int) -> str:
         """Format bytes in human readable format."""
