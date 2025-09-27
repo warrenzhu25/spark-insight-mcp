@@ -5001,7 +5001,7 @@ def find_top_stage_differences(
             try:
                 value = getattr(stage, attr, default)
                 return value if value is not None else default
-            except:
+            except Exception:
                 return default
 
         stage_metric_comparison = {
@@ -5101,6 +5101,7 @@ def compare_app_performance(
         - performance_comparison:
           - executors: Key executor efficiency metrics and comparisons
           - stages: Top N stages with largest time differences and performance metrics
+        - app_summary_diff: Application-level aggregated metrics comparison with percentage changes
         - environment_comparison: Configuration and environment differences
         - key_recommendations: Up to 5 highest priority (critical/high/medium) recommendations
 
@@ -5304,6 +5305,17 @@ def compare_app_performance(
         if len(filtered_recommendations) >= 5:
             break
 
+    # Get app summary comparison using the new tool
+    try:
+        app_summary_diff = compare_app_summaries(app_id1, app_id2, server)
+    except Exception as e:
+        app_summary_diff = {
+            "error": f"Failed to get app summary comparison: {str(e)}",
+            "app1_summary": {"id": app_id1},
+            "app2_summary": {"id": app_id2},
+            "diff": {},
+        }
+
     return {
         "applications": {
             "app1": {"id": app_id1, "name": app1.name},
@@ -5313,8 +5325,74 @@ def compare_app_performance(
             "executors": executor_summary,
             "stages": stage_analysis,
         },
+        "app_summary_diff": app_summary_diff,
         "environment_comparison": environment_comparison,
         "key_recommendations": filtered_recommendations,
+    }
+
+
+@mcp.tool()
+def compare_app_summaries(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Compare application-level summary metrics between two Spark applications.
+
+    Provides a clean comparison of aggregated stage metrics including execution times,
+    resource usage, data processing volumes, and percentage changes between applications.
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        server: Optional server name to use (uses default if not specified)
+
+    Returns:
+        Dictionary containing:
+        - app1_summary: Aggregated metrics for first application
+        - app2_summary: Aggregated metrics for second application
+        - diff: Percentage changes (app2 vs app1) for key metrics
+    """
+    ctx = mcp.get_context()
+    get_client_or_default(ctx, server)
+
+    # Get app summaries for both applications
+    app1_summary = get_app_summary(app_id1, server)
+    app2_summary = get_app_summary(app_id2, server)
+
+    # Define non-comparable fields to exclude from comparison
+    exclude_fields = {"application_id", "application_name", "analysis_timestamp"}
+
+    # Filter to only comparable numeric metrics, using exact field names from get_app_summary
+    app1_metrics = {k: v for k, v in app1_summary.items()
+                   if k not in exclude_fields and isinstance(v, (int, float))}
+    app2_metrics = {k: v for k, v in app2_summary.items()
+                   if k not in exclude_fields and isinstance(v, (int, float))}
+
+    # Add application IDs for identification
+    app1_metrics["application_id"] = app1_summary.get("application_id", app_id1)
+    app2_metrics["application_id"] = app2_summary.get("application_id", app_id2)
+
+    # Calculate percentage changes (app2 vs app1)
+    def calculate_percentage_change(val1, val2):
+        if val1 == 0:
+            return "N/A" if val2 == 0 else "+∞"
+        change = ((val2 - val1) / val1) * 100
+        return f"{change:+.1f}%"
+
+    # Dynamically calculate percentage changes for all comparable metrics
+    diff = {}
+    for metric_name in app1_metrics:
+        if metric_name in app2_metrics and metric_name != "application_id":
+            diff[f"{metric_name}_change"] = calculate_percentage_change(
+                app1_metrics[metric_name], app2_metrics[metric_name]
+            )
+
+    return {
+        "app1_summary": app1_metrics,
+        "app2_summary": app2_metrics,
+        "diff": diff,
     }
 
 

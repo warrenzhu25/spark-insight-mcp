@@ -319,6 +319,7 @@ class OutputFormatter:
             "aggregated_overview",  # Old structure
             "stage_deep_dive",      # Old structure
             "performance_comparison",  # New structure
+            "app_summary_diff",     # New structure
             "key_recommendations",     # New structure
             "recommendations",
             "environment_comparison",
@@ -389,6 +390,111 @@ class OutputFormatter:
         elif "performance_comparison" in data and "stages" in data["performance_comparison"]:
             # Handle new structure - stages are now nested under performance_comparison
             self._format_stage_differences(data["performance_comparison"]["stages"])
+
+        # 4. App Summary Diff table THIRD (aggregated metrics comparison)
+        if "app_summary_diff" in data:
+            self._format_app_summary_diff(data["app_summary_diff"])
+
+    def _format_app_summary_diff(self, app_summary_diff: Dict[str, Any]) -> None:
+        """Format application summary differences in a table format."""
+        if "diff" not in app_summary_diff:
+            return
+
+        diff_data = app_summary_diff["diff"]
+        app1_summary = app_summary_diff.get("app1_summary", {})
+        app2_summary = app_summary_diff.get("app2_summary", {})
+
+        # Create table
+        table = Table(title="Application Metrics Comparison")
+        table.add_column("Metric", style="cyan")
+        table.add_column("App1", style="blue")
+        table.add_column("App2", style="blue")
+        table.add_column("Change", style="magenta")
+
+        # Define metric display preferences for formatting
+        metric_display_config = {
+            # Time metrics
+            "application_duration_minutes": ("App Duration (min)", "time"),
+            "total_executor_runtime_minutes": ("Executor Runtime (min)", "time"),
+            "executor_cpu_time_minutes": ("CPU Time (min)", "time"),
+            "jvm_gc_time_minutes": ("GC Time (min)", "time"),
+            "shuffle_read_wait_time_minutes": ("Shuffle Read Wait (min)", "time"),
+            "shuffle_write_time_minutes": ("Shuffle Write Time (min)", "time"),
+
+            # Size metrics (GB)
+            "input_data_size_gb": ("Input Data (GB)", "size"),
+            "output_data_size_gb": ("Output Data (GB)", "size"),
+            "shuffle_read_size_gb": ("Shuffle Read (GB)", "size"),
+            "shuffle_write_size_gb": ("Shuffle Write (GB)", "size"),
+            "memory_spilled_gb": ("Memory Spilled (GB)", "size"),
+            "disk_spilled_gb": ("Disk Spilled (GB)", "size"),
+
+            # Percentage metrics
+            "executor_utilization_percent": ("Executor Utilization (%)", "percent"),
+
+            # Count metrics
+            "total_stages": ("Total Stages", "count"),
+            "completed_stages": ("Completed Stages", "count"),
+            "failed_stages": ("Failed Stages", "count"),
+            "failed_tasks": ("Failed Tasks", "count"),
+        }
+
+        # Get all metrics dynamically, excluding application_id
+        all_metrics = [key for key in app1_summary.keys() if key != "application_id"]
+
+        # Sort metrics by category for better display
+        priority_order = ["application_duration_minutes", "total_executor_runtime_minutes",
+                         "executor_cpu_time_minutes", "executor_utilization_percent",
+                         "input_data_size_gb", "output_data_size_gb",
+                         "shuffle_read_size_gb", "shuffle_write_size_gb",
+                         "total_stages", "completed_stages", "failed_tasks"]
+
+        # Sort: priority metrics first, then remaining alphabetically
+        sorted_metrics = []
+        for metric in priority_order:
+            if metric in all_metrics:
+                sorted_metrics.append(metric)
+        for metric in sorted(all_metrics):
+            if metric not in sorted_metrics:
+                sorted_metrics.append(metric)
+
+        for field_name in sorted_metrics:
+            # Get display configuration or use field name as fallback
+            if field_name in metric_display_config:
+                display_name, format_type = metric_display_config[field_name]
+            else:
+                # Auto-generate display name from field name
+                display_name = field_name.replace("_", " ").title()
+                format_type = "default"
+
+            app1_val = app1_summary.get(field_name, 0)
+            app2_val = app2_summary.get(field_name, 0)
+
+            # Format values based on type
+            if format_type == "size":
+                app1_str = f"{app1_val:.2f}"
+                app2_str = f"{app2_val:.2f}"
+            elif format_type == "time":
+                app1_str = f"{app1_val:.2f}"
+                app2_str = f"{app2_val:.2f}"
+            elif format_type == "percent":
+                app1_str = f"{app1_val:.1f}"
+                app2_str = f"{app2_val:.1f}"
+            elif isinstance(app1_val, float):
+                app1_str = f"{app1_val:.2f}"
+                app2_str = f"{app2_val:.2f}"
+            else:
+                app1_str = str(app1_val)
+                app2_str = str(app2_val)
+
+            # Get change percentage dynamically
+            change_key = f"{field_name}_change"
+            change_str = diff_data.get(change_key, "N/A")
+
+            table.add_row(display_name, app1_str, app2_str, change_str)
+
+        console.print()  # Empty line for spacing
+        console.print(table)
 
     def _format_comparison_header(self, applications: Dict[str, Any]) -> None:
         """Format the applications being compared."""
