@@ -449,16 +449,8 @@ class OutputFormatter:
                          "shuffle_read_size_gb", "shuffle_write_size_gb",
                          "total_stages", "completed_stages", "failed_tasks"]
 
-        # Sort: priority metrics first, then remaining alphabetically
-        sorted_metrics = []
-        for metric in priority_order:
-            if metric in all_metrics:
-                sorted_metrics.append(metric)
-        for metric in sorted(all_metrics):
-            if metric not in sorted_metrics:
-                sorted_metrics.append(metric)
-
-        for field_name in sorted_metrics:
+        # Metrics are already sorted by the MCP tool, use existing order
+        for field_name in all_metrics:
             # Get display configuration or use field name as fallback
             if field_name in metric_display_config:
                 display_name, format_type = metric_display_config[field_name]
@@ -683,7 +675,9 @@ class OutputFormatter:
             stage_comparison = stage_data.get("stage_comparison", {})
 
             # Dynamically iterate through all ratio change metrics
-            for metric_key in sorted(stage_comparison.keys()):
+            # Sort stage comparison metrics by difference ratio (descending)
+            # Metrics are already sorted by the MCP tool, use existing order
+            for metric_key in stage_comparison.keys():
                 if metric_key.endswith("_ratio_change"):
                     change = stage_comparison[metric_key]
                     display_name = self._get_stage_metric_display_name(metric_key)
@@ -848,7 +842,8 @@ class OutputFormatter:
         table.add_column("App2", style="blue")
         table.add_column("Change", style="magenta")
 
-        # Add stage-level metrics first (from our new dynamic approach)
+        # Sort stage-level metrics by difference ratio (descending)
+        # Metrics are already sorted by the MCP tool, use existing order
         for metric_key in stage_metrics.keys():
             metric_data = stage_metrics[metric_key]
             display_name = self._get_metric_display_name(metric_key)
@@ -867,7 +862,7 @@ class OutputFormatter:
             change = metric_data.get("change", "N/A")
             table.add_row(display_name, app1_val, app2_val, change)
 
-        # Add all task distribution metrics dynamically
+        # Metrics are already sorted by the MCP tool, use existing order
         for metric_key in task_dist.keys():
             metric_data = task_dist[metric_key]
             display_name = self._get_metric_display_name(metric_key)
@@ -902,7 +897,7 @@ class OutputFormatter:
                 change = max_data.get("change", "N/A")
                 table.add_row(f"Max {display_name}", app1_val, app2_val, change)
 
-        # Add executor distribution metrics if available
+        # Metrics are already sorted by the MCP tool, use existing order
         for metric_key in exec_dist.keys():
             metric_data = exec_dist[metric_key]
             display_name = f"Executor {self._get_metric_display_name(metric_key)}"
@@ -1162,6 +1157,7 @@ class OutputFormatter:
                 Panel(content, title="Timeline Analysis Summary", border_style="yellow")
             )
 
+
     def _format_bytes(self, bytes_value: int) -> str:
         """Format bytes in human readable format."""
         for unit in ["B", "KB", "MB", "GB", "TB"]:
@@ -1270,10 +1266,11 @@ class OutputFormatter:
             data.get("applications", {}).get("app2", {}).get("executor_metrics", {})
         )
 
-        # Dynamically show all available executor metrics
+        # Dynamically show all available executor metrics, sorted by difference ratio
         all_metrics = set(app1_metrics.keys()) | set(app2_metrics.keys())
 
-        for metric_key in sorted(all_metrics):
+        # Metrics are already sorted by the MCP tool, use existing order
+        for metric_key in all_metrics:
             app1_val = app1_metrics.get(metric_key, 0)
             app2_val = app2_metrics.get(metric_key, 0)
 
@@ -1362,8 +1359,9 @@ class OutputFormatter:
                 else f"{((app2_success - app1_success) * 100):.1f}%",
             )
 
-        # Dynamic job statistics from job_stats
-        for metric_key in sorted(set(app1_jobs.keys()) | set(app2_jobs.keys())):
+        # Metrics are already sorted by the MCP tool, use existing order
+        all_job_metrics = set(app1_jobs.keys()) | set(app2_jobs.keys())
+        for metric_key in all_job_metrics:
             app1_val = app1_jobs.get(metric_key, 0)
             app2_val = app2_jobs.get(metric_key, 0)
 
@@ -1448,8 +1446,8 @@ class OutputFormatter:
         # Stage comparison metrics
         stage_comp = data.get("stage_comparison", {})
 
-        # Dynamically show all available stage comparison metrics
-        for metric_key in sorted(stage_comp.keys()):
+        # Metrics are already sorted by the MCP tool, use existing order
+        for metric_key in stage_comp.keys():
             if metric_key.endswith("_change"):
                 display_name = self._get_stage_metric_display_name(metric_key)
                 change = stage_comp[metric_key]
@@ -1518,6 +1516,7 @@ class OutputFormatter:
             ("max_executors", "Max Executors"),
         ]
 
+        # Metrics are already sorted by the MCP tool, use existing order
         has_data = False
         for metric_key, display_name in resource_metrics:
             app1_val = app1_data.get(metric_key)

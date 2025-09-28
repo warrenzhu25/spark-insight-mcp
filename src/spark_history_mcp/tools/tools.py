@@ -19,6 +19,7 @@ from spark_history_mcp.models.spark_types import (
     StageStatus,
     TaskMetricDistributions,
 )
+from spark_history_mcp.utils.sorting import sort_comparison_data
 
 
 def get_client_or_default(ctx, server_name: Optional[str] = None):
@@ -4220,11 +4221,14 @@ def compare_app_resources(
                 }
             )
 
-        return {
+        result = {
             "applications": {"app1": app1_info, "app2": app2_info},
             "resource_comparison": resource_comparison,
             "recommendations": recommendations,
         }
+
+        # Sort the result by ratios (descending)
+        return sort_comparison_data(result, sort_key="ratio")
 
     except Exception as e:
         return {
@@ -4419,7 +4423,7 @@ def compare_app_executors(
             efficiency_ratios, significance_threshold, show_only_significant
         )
 
-        return {
+        result = {
             "applications": {
                 "app1": {"id": app_id1, "executor_metrics": exec_summary1},
                 "app2": {"id": app_id2, "executor_metrics": exec_summary2},
@@ -4450,6 +4454,9 @@ def compare_app_executors(
                 "significance_threshold": significance_threshold,
             },
         }
+
+        # Sort the result by ratios (descending)
+        return sort_comparison_data(result, sort_key="ratio")
 
     except Exception as e:
         return {
@@ -4576,7 +4583,7 @@ def compare_app_jobs(
                 }
             )
 
-        return {
+        result = {
             "applications": {
                 "app1": {
                     "id": app_id1,
@@ -4593,6 +4600,9 @@ def compare_app_jobs(
             "timing_analysis": timing_analysis,
             "recommendations": recommendations,
         }
+
+        # Sort the result by ratios (descending)
+        return sort_comparison_data(result, sort_key="ratio")
 
     except Exception as e:
         return {
@@ -4847,7 +4857,7 @@ def compare_app_stages_aggregated(
             efficiency_ratios, significance_threshold, show_only_significant
         )
 
-        return {
+        result = {
             "applications": {
                 "app1": {"id": app_id1, "stage_metrics": stage_metrics1},
                 "app2": {"id": app_id2, "stage_metrics": stage_metrics2},
@@ -4876,6 +4886,9 @@ def compare_app_stages_aggregated(
                 "significance_threshold": significance_threshold,
             },
         }
+
+        # Sort the result by ratios (descending)
+        return sort_comparison_data(result, sort_key="ratio")
 
     except Exception as e:
         return {
@@ -5309,7 +5322,7 @@ def compare_app_performance(
             "diff": {},
         }
 
-    return {
+    result = {
         "applications": {
             "app1": {"id": app_id1, "name": app1.name},
             "app2": {"id": app_id2, "name": app2.name},
@@ -5322,6 +5335,9 @@ def compare_app_performance(
         "environment_comparison": environment_comparison,
         "key_recommendations": filtered_recommendations,
     }
+
+    # Sort the result by mixed metrics (change percentages and ratios)
+    return sort_comparison_data(result, sort_key="mixed")
 
 
 @mcp.tool()
@@ -5382,11 +5398,14 @@ def compare_app_summaries(
                 app1_metrics[metric_name], app2_metrics[metric_name]
             )
 
-    return {
+    result = {
         "app1_summary": app1_metrics,
         "app2_summary": app2_metrics,
         "diff": diff,
     }
+
+    # Sort the result by difference percentage (descending)
+    return sort_comparison_data(result, sort_key="change")
 
 
 @mcp.tool()
