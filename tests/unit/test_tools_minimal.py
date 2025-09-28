@@ -379,6 +379,74 @@ def test_build_dependencies_from_dag_data_and_get_stage_dependency():
     assert isinstance(out, dict)
 
 
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_get_app_summary_basic(mock_get_context):
+    from spark_history_mcp.tools.tools import get_app_summary
+    c = MagicMock()
+    mock_get_context.return_value = make_ctx(c)
+    # Application with one attempt
+    now = datetime.now()
+    attempt = SimpleNamespace(start_time=now, end_time=now + timedelta(minutes=5), duration=5*60*1000)
+    app = SimpleNamespace(name='AppX', attempts=[attempt], cores_per_executor=2)
+    c.get_application.return_value = app
+    # Stages with minimal numeric attributes used by summary
+    st1 = SimpleNamespace(
+        status='COMPLETE', executor_run_time=60_000, executor_cpu_time=30_000_000_000,
+        jvm_gc_time=5_000, input_bytes=10_000_000, output_bytes=5_000_000,
+        shuffle_read_bytes=2_000_000, shuffle_write_bytes=1_000_000,
+        memory_bytes_spilled=0, disk_bytes_spilled=0, num_failed_tasks=0,
+        num_tasks=10, task_metrics_distributions=None
+    )
+    c.list_stages.return_value = [st1]
+    # Executors
+    ex1 = SimpleNamespace(add_time=now, remove_time=now + timedelta(minutes=4), total_cores=2, max_memory=512*1024*1024)
+    c.list_all_executors.return_value = [ex1]
+
+    out = get_app_summary('app')
+    assert out['application_id'] == 'app'
+    assert out['application_name'] == 'AppX'
+    assert out['application_duration_minutes'] > 0
+    assert 'input_data_size_gb' in out
+
+
+@patch('spark_history_mcp.tools.tools.get_app_summary')
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_compare_app_summaries_basic(mock_get_context, mock_get_app_summary):
+    from spark_history_mcp.tools.tools import compare_app_summaries
+    mock_get_context.return_value = make_ctx(MagicMock())
+    s1 = {
+        'application_id': 'a1', 'application_name': 'A1', 'analysis_timestamp': 't',
+        'application_duration_minutes': 10.0, 'total_executor_runtime_minutes': 5.0,
+        'executor_cpu_time_minutes': 3.0
+    }
+    s2 = {
+        'application_id': 'a2', 'application_name': 'A2', 'analysis_timestamp': 't',
+        'application_duration_minutes': 20.0, 'total_executor_runtime_minutes': 4.0,
+        'executor_cpu_time_minutes': 6.0
+    }
+    mock_get_app_summary.side_effect = [s1, s2]
+    out = compare_app_summaries('a1','a2', significance_threshold=0.05)
+    assert 'app1_summary' in out and 'app2_summary' in out and 'diff' in out
+    assert any(k.endswith('_change') for k in out['diff'].keys())
+
+
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_compare_stages_basic(mock_get_context):
+    from spark_history_mcp.tools.tools import compare_stages
+    c = MagicMock()
+    mock_get_context.return_value = make_ctx(c)
+    # Stages with names, status, and times to compute duration
+    now = datetime.now()
+    st1 = SimpleNamespace(name='S1', status='COMPLETE', completion_time=now + timedelta(seconds=20), first_task_launched_time=now, task_metrics_distributions=None, executor_metrics_distributions=None)
+    st2 = SimpleNamespace(name='S2', status='COMPLETE', completion_time=now + timedelta(seconds=30), first_task_launched_time=now, task_metrics_distributions=None, executor_metrics_distributions=None)
+    c.get_stage_attempt.side_effect = [st1, st2]
+    out = compare_stages('a1','a2', 1, 2, significance_threshold=0.1)
+    assert 'stage_comparison' in out
+    # Should include a duration difference
+    diffs = out.get('significant_differences', {}).get('stage_metrics', {})
+    assert 'duration_seconds' in diffs
+
+
 @patch('spark_history_mcp.tools.tools.get_executor_summary')
 @patch('spark_history_mcp.tools.tools.list_slowest_jobs')
 @patch('spark_history_mcp.tools.tools.list_slowest_stages')
