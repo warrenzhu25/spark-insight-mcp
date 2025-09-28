@@ -413,3 +413,18 @@ def test_get_job_bottlenecks_with_recommendations(mock_get_context, mock_slowest
     res = get_job_bottlenecks('app', top_n=1)
     rec_types = [r['type'] for r in res['recommendations']]
     assert 'memory' in rec_types or 'reliability' in rec_types
+
+
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_get_stage_task_summary(mock_get_context):
+    from spark_history_mcp.tools.tools import get_stage_task_summary
+    c = MagicMock()
+    mock_get_context.return_value = make_ctx(c)
+    # Mock return value (can be any object; function passes through)
+    summary_obj = SimpleNamespace(quantiles=[0.5, 0.9], duration=[10, 20])
+    c.get_stage_task_summary.return_value = summary_obj
+
+    out = get_stage_task_summary(app_id='app', stage_id=7, attempt_id=2)
+    assert out is summary_obj
+    args, kwargs = c.get_stage_task_summary.call_args
+    assert kwargs['app_id'] == 'app' and kwargs['stage_id'] == 7 and kwargs['attempt_id'] == 2
