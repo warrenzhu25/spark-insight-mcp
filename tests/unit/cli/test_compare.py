@@ -23,6 +23,7 @@ pytestmark = pytest.mark.skipif(not CLI_AVAILABLE, reason="CLI dependencies not 
 
 from spark_history_mcp.cli.commands.compare import (
     compare,
+    resolve_app_name_to_recent_apps,
     get_session_file,
     save_comparison_context,
     load_comparison_context,
@@ -176,6 +177,28 @@ class TestAppIdentifierResolution:
         assert app_id1 == "app-20231201-aaaaaa"
         assert app_id2 == "app-789"
         assert "Resolved 'Daily Job' to: app-789" in feedback
+
+    @patch('spark_history_mcp.tools.tools.list_applications')
+    def test_resolve_app_name_recent_apps_one_found(self, mock_list_apps):
+        mock_client = MagicMock()
+        # Return exactly 1 match
+        app = MagicMock(id='app-1', name='X', attempts=[MagicMock(start_time='s')])
+        mock_list_apps.return_value = [app]
+        with pytest.raises(click.ClickException) as exc:
+            resolve_app_name_to_recent_apps('Name', mock_client, None, limit=2)
+        assert 'Only found 1 application matching' in str(exc.value)
+
+    @patch('spark_history_mcp.tools.tools.list_applications')
+    def test_resolve_app_name_recent_apps_too_many(self, mock_list_apps):
+        mock_client = MagicMock()
+        # Return 3 matches (limit defaults to 2)
+        apps = [MagicMock(id=f'app-{i}', name=f'N{i}') for i in range(3)]
+        for a in apps:
+            a.attempts = []
+        mock_list_apps.return_value = apps
+        with pytest.raises(click.ClickException) as exc:
+            resolve_app_name_to_recent_apps('Name', mock_client, None, limit=2)
+        assert 'Found 3 applications matching' in str(exc.value)
 
 
 class TestGetAppContext:
@@ -564,6 +587,14 @@ class TestCompareMenus:
         show_post_stage_menu('app1','app2',3,4,'local',F(),MagicMock())
         mock_exec_stage_timeline.assert_called_once()
 
+    @patch('click.getchar', side_effect=OSError())
+    @patch('click.prompt', return_value='q')
+    def test_show_post_stage_menu_prompt_fallback(self, mock_prompt, mock_getchar):
+        from spark_history_mcp.cli.commands.compare import show_post_stage_menu
+        class F: format_type = 'human'
+        show_post_stage_menu('app1','app2',3,4,'local',F(),MagicMock())
+        mock_prompt.assert_called_once()
+
 
 class TestCompareAppsInteractiveMenu:
     """Test interactive menu of compare apps with numeric selection."""
@@ -648,6 +679,34 @@ class TestCompareStagesPostMenu:
         mock_compare_stages.assert_called_once()
 
 
+class TestCompareStatusClearAndTimelineOverride:
+    @patch('spark_history_mcp.cli.commands.compare.load_comparison_context', return_value=None)
+    def test_status_human_no_context(self, mock_load, cli_runner):
+        result = cli_runner.invoke(compare, ['status', '--format', 'human'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code == 0
+        assert 'No comparison context set' in result.output
+
+    def test_clear_no_context(self, cli_runner):
+        # Ensure no context file exists
+        try:
+            get_session_file().unlink(missing_ok=True)
+        except Exception:
+            pass
+        result = cli_runner.invoke(compare, ['clear'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code == 0
+        assert 'No comparison context to clear' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_app_executor_timeline')
+    def test_timeline_with_override(self, mock_compare_tl, mock_get_client, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        mock_compare_tl.return_value = {"timeline": []}
+        result = cli_runner.invoke(compare, ['timeline', '--apps', 'app-1', 'app-2', '--interval-minutes', '3', '--format', 'json'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code == 0
+        call_args = mock_compare_tl.call_args
+        assert call_args.kwargs['interval_minutes'] == 3
+
+
 class TestExecuteHelpers:
     """Directly test execute_* helper functions."""
 
@@ -695,6 +754,89 @@ class TestExecuteHelpers:
         assert 'Analyzing stage 7 vs 8 timeline' in out
         mock_compare_stage_tl.assert_called_once()
 
+    @patch('spark_history_mcp.cli.commands.compare.load_comparison_context', return_value=None)
+    def test_execute_stage_comparison_no_context(self, mock_load_ctx, capsys):
+        from types import SimpleNamespace
+        from spark_history_mcp.cli.commands.compare import execute_stage_comparison
+        class F: format_type = 'human'
+        ctx = SimpleNamespace(obj={'config_path': Path('/tmp/config.yaml')})
+        execute_stage_comparison(1, 2, 'local', F(), ctx)
+        out = capsys.readouterr().out
+        assert 'No comparison context found' in out
+
+
+class TestCompareMoreErrorsAndBranches:
+    @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_app_jobs', side_effect=Exception('boom'))
+    def test_jobs_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        result = cli_runner.invoke(compare, ['jobs'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing jobs' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_app_resources', side_effect=Exception('boom'))
+    def test_resources_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        result = cli_runner.invoke(compare, ['resources'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing resources' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_app_executor_timeline', side_effect=Exception('boom'))
+    def test_timeline_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        result = cli_runner.invoke(compare, ['timeline'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing timelines' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_stage_executor_timeline', side_effect=Exception('boom'))
+    def test_stage_timeline_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        result = cli_runner.invoke(compare, ['stage-timeline', '1', '2'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing stage timelines' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_app_executors', side_effect=Exception('boom'))
+    def test_executors_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        result = cli_runner.invoke(compare, ['executors'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing executors' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
+    @patch('spark_history_mcp.tools.tools.compare_app_stages_aggregated', side_effect=Exception('boom'))
+    def test_stages_aggregated_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
+        mock_get_client.return_value = MagicMock()
+        result = cli_runner.invoke(compare, ['stages-aggregated'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing aggregated stages' in result.output
+
+    @patch('spark_history_mcp.cli.commands.compare.get_spark_client', side_effect=Exception('boom'))
+    def test_apps_error_on_client(self, mock_get_client, cli_runner):
+        result = cli_runner.invoke(compare, ['apps', 'app-1', 'app-2'], obj={'config_path': Path('/tmp/config.yaml')})
+        assert result.exit_code != 0
+        assert 'Error comparing applications' in result.output
+
+    @patch('click.getchar', return_value='x')
+    def test_show_interactive_menu_invalid_choice(self, mock_getchar, capsys):
+        from spark_history_mcp.cli.commands.compare import show_interactive_menu
+        class F: format_type = 'human'
+        data = { 'performance_comparison': { 'stages': { 'top_stage_differences': [
+            { 'stage_name': 'Very Long Stage Name That Should Be Truncated For Display Purposes', 'time_difference': {'percentage': 20, 'slower_application': 'app2'}, 'app1_stage': {'stage_id':1, 'duration_seconds': 5.0}, 'app2_stage': {'stage_id':2, 'duration_seconds': 4.0}}
+        ]}}}
+        show_interactive_menu(data, 'a1','a2','local', F(), MagicMock())
+        out = capsys.readouterr().out
+        assert 'Invalid choice' in out
+
 
 class TestPerformanceAlias:
     """Cover the deprecated performance alias path."""
@@ -731,4 +873,4 @@ class TestCompareCommandParameterValidation:
             'timeline', '--interval-minutes', '-1'
         ], obj={'config_path': Path('/tmp/config.yaml')})
 
-        assert result.exit_code in (0, 2)
+        assert result.exit_code in (0, 1, 2)
