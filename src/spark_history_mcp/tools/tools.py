@@ -20,6 +20,28 @@ from spark_history_mcp.models.spark_types import (
     TaskMetricDistributions,
 )
 from spark_history_mcp.utils.sorting import sort_comparison_data
+from spark_history_mcp.tools.common import (
+    DEFAULT_INTERVAL_MINUTES,
+    MAX_INTERVALS,
+)
+from spark_history_mcp.tools.fetchers import (
+    fetch_app,
+    fetch_jobs,
+    fetch_stages,
+    fetch_executors,
+    fetch_stage_attempt,
+    fetch_stage_attempts,
+)
+from spark_history_mcp.tools.timelines import (
+    build_stage_executor_timeline,
+    build_app_executor_timeline,
+    merge_consecutive_intervals,
+)
+from spark_history_mcp.tools.metrics import summarize_app
+from spark_history_mcp.tools.matching import match_stages, name_similarity
+from spark_history_mcp.tools.common import get_config
+from spark_history_mcp.tools.recommendations import dedupe as dedupe_recs, prioritize as prioritize_recs
+from spark_history_mcp.tools.schema import validate_output, CompareAppPerformanceOutput
 
 
 def get_client_or_default(ctx, server_name: Optional[str] = None):
@@ -67,10 +89,8 @@ def get_application(app_id: str, server: Optional[str] = None) -> ApplicationInf
     Returns:
         ApplicationInfo object containing application details
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    return client.get_application(app_id)
+    # Use shared fetcher to avoid duplicating client resolution and enable caching
+    return fetch_app(app_id=app_id, server=server)
 
 
 @mcp.tool()
@@ -173,15 +193,8 @@ def list_jobs(
     Returns:
         List of JobData objects for the application
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    # Convert string status values to JobExecutionStatus enum if provided
-    job_statuses = None
-    if status:
-        job_statuses = [JobExecutionStatus.from_string(s) for s in status]
-
-    return client.list_jobs(app_id=app_id, status=job_statuses)
+    # Delegate to fetchers (centralized enum conversion and optional caching)
+    return fetch_jobs(app_id=app_id, server=server, status=status)
 
 
 @mcp.tool()
@@ -205,17 +218,15 @@ def list_slowest_jobs(
     Returns:
         List of JobData objects for the slowest jobs, or empty list if no jobs found
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
+    cfg = get_config()
     # Get all jobs
-    jobs = client.list_jobs(app_id=app_id)
+    jobs = fetch_jobs(app_id=app_id, server=server)
 
     if not jobs:
         return []
 
     # Filter out running jobs if not included
-    if not include_running:
+    if not include_running and not cfg.include_running_defaults:
         jobs = [job for job in jobs if job.status != JobExecutionStatus.RUNNING.value]
 
     if not jobs:
@@ -251,18 +262,9 @@ def list_stages(
     Returns:
         List of StageData objects for the application
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    # Convert string status values to StageStatus enum if provided
-    stage_statuses = None
-    if status:
-        stage_statuses = [StageStatus.from_string(s) for s in status]
-
-    return client.list_stages(
-        app_id=app_id,
-        status=stage_statuses,
-        with_summaries=with_summaries,
+    # Delegate to fetchers (centralized enum conversion and optional caching)
+    return fetch_stages(
+        app_id=app_id, server=server, status=status, with_summaries=with_summaries
     )
 
 
@@ -287,13 +289,11 @@ def list_slowest_stages(
     Returns:
         List of StageData objects for the slowest stages, or empty list if no stages found
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    stages = client.list_stages(app_id=app_id)
+    cfg = get_config()
+    stages = fetch_stages(app_id=app_id, server=server)
 
     # Filter out running stages if not included. This avoids using the `details` param which can significantly slow down the execution time
-    if not include_running:
+    if not include_running and not cfg.include_running_defaults:
         stages = [stage for stage in stages if stage.status != "RUNNING"]
 
     if not stages:
@@ -330,41 +330,32 @@ def get_stage(
     Returns:
         StageData object containing stage information
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     if attempt_id is not None:
-        # Get specific attempt
-        stage_data = client.get_stage_attempt(
+        stage_data = fetch_stage_attempt(
             app_id=app_id,
             stage_id=stage_id,
             attempt_id=attempt_id,
-            details=False,
+            server=server,
             with_summaries=with_summaries,
         )
     else:
-        # Get all attempts and use the latest one
-        stages = client.list_stage_attempts(
+        stages = fetch_stage_attempts(
             app_id=app_id,
             stage_id=stage_id,
-            details=False,
+            server=server,
             with_summaries=with_summaries,
         )
-
         if not stages:
             raise ValueError(f"No stage found with ID {stage_id}")
-
-        # If multiple attempts exist, get the one with the highest attempt_id
-        if isinstance(stages, list):
-            stage_data = max(stages, key=lambda s: s.attempt_id)
-        else:
-            stage_data = stages
+        stage_data = max(stages, key=lambda s: s.attempt_id) if isinstance(stages, list) else stages
 
     # If summaries were requested but metrics distributions are missing, fetch them separately
     if with_summaries and (
         not hasattr(stage_data, "task_metrics_distributions")
         or stage_data.task_metrics_distributions is None
     ):
+        ctx = mcp.get_context()
+        client = get_client_or_default(ctx, server)
         task_summary = client.get_stage_task_summary(
             app_id=app_id,
             stage_id=stage_id,
@@ -414,13 +405,16 @@ def list_executors(
     Returns:
         List of ExecutorSummary objects containing executor information
     """
+    if include_inactive:
+        return fetch_executors(app_id=app_id, server=server, include_inactive=True)
+    # Fallback to client active-only API if needed; otherwise reuse full list and filter
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
-
-    if include_inactive:
-        return client.list_all_executors(app_id=app_id)
-    else:
+    try:
         return client.list_executors(app_id=app_id)
+    except Exception:
+        # If active-only is not available, filter from all
+        return [e for e in fetch_executors(app_id=app_id, server=server) if getattr(e, 'is_active', False)]
 
 
 @mcp.tool()
@@ -439,11 +433,8 @@ def get_executor(app_id: str, executor_id: str, server: Optional[str] = None):
     Returns:
         ExecutorSummary object containing executor details or None if not found
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Get all executors and find the one with matching ID
-    executors = client.list_all_executors(app_id=app_id)
+    executors = fetch_executors(app_id=app_id, server=server)
 
     for executor in executors:
         if executor.id == executor_id:
@@ -467,10 +458,7 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
     Returns:
         Dictionary containing aggregated executor metrics
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    executors = client.list_all_executors(app_id=app_id)
+    executors = fetch_executors(app_id=app_id, server=server)
 
     summary = {
         "total_executors": len(executors),
@@ -2540,59 +2528,6 @@ def get_application_insights(
 
     return insights
 
-
-def _calculate_stage_similarity(stage1_name: str, stage2_name: str) -> float:
-    """
-    Calculate similarity between two stage names using SequenceMatcher.
-
-    Args:
-        stage1_name: Name of the first stage
-        stage2_name: Name of the second stage
-
-    Returns:
-        Float between 0 and 1 representing similarity
-    """
-    return SequenceMatcher(None, stage1_name.lower(), stage2_name.lower()).ratio()
-
-
-def _find_matching_stages(
-    stages1: List[StageData],
-    stages2: List[StageData],
-    similarity_threshold: float = 0.6,
-) -> List[Tuple[StageData, StageData, float]]:
-    """
-    Find matching stages between two applications based on stage name similarity.
-
-    Args:
-        stages1: Stages from first application
-        stages2: Stages from second application
-        similarity_threshold: Minimum similarity threshold for matching
-
-    Returns:
-        List of tuples containing (stage1, stage2, similarity_score)
-    """
-    matches = []
-    used_stages2 = set()
-
-    for stage1 in stages1:
-        best_match = None
-        best_similarity = 0
-
-        for i, stage2 in enumerate(stages2):
-            if i in used_stages2:
-                continue
-
-            similarity = _calculate_stage_similarity(stage1.name, stage2.name)
-
-            if similarity > best_similarity and similarity >= similarity_threshold:
-                best_similarity = similarity
-                best_match = (stage2, i)
-
-        if best_match:
-            matches.append((stage1, best_match[0], best_similarity))
-            used_stages2.add(best_match[1])
-
-    return matches
 
 
 def _calculate_stage_duration(stage: StageData) -> float:
@@ -4924,15 +4859,12 @@ def find_top_stage_differences(
         - top_stage_differences: List of top N stages with biggest time differences
           Each entry includes stage details, time differences, and performance metrics
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Get application info
-    app1 = client.get_application(app_id1)
-    app2 = client.get_application(app_id2)
+    app1 = fetch_app(app_id1, server)
+    app2 = fetch_app(app_id2, server)
 
-    stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
-    stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
+    stages1 = fetch_stages(app_id=app_id1, server=server, with_summaries=True)
+    stages2 = fetch_stages(app_id=app_id2, server=server, with_summaries=True)
 
     if not stages1 or not stages2:
         return {
@@ -4943,10 +4875,10 @@ def find_top_stage_differences(
             },
         }
 
-    # Find matching stages between applications
-    stage_matches = _find_matching_stages(stages1, stages2, similarity_threshold)
+    # Find matching stages between applications via shared matcher
+    matches = match_stages(stages1, stages2, similarity_threshold)
 
-    if not stage_matches:
+    if not matches:
         return {
             "error": f"No matching stages found between applications (similarity threshold: {similarity_threshold})",
             "applications": {
@@ -4959,7 +4891,8 @@ def find_top_stage_differences(
     # Calculate time differences for matching stages
     stage_differences = []
 
-    for stage1, stage2, similarity in stage_matches:
+    for m in matches:
+        stage1, stage2, similarity = m.stage1, m.stage2, m.similarity
         duration1 = _calculate_stage_duration(stage1)
         duration2 = _calculate_stage_duration(stage2)
 
@@ -4987,7 +4920,7 @@ def find_top_stage_differences(
                 "app1": {"id": app_id1, "name": app1.name},
                 "app2": {"id": app_id2, "name": app2.name},
             },
-            "matched_stages": len(stage_matches),
+            "matched_stages": len(matches),
         }
 
     # Sort by time difference and get top N
@@ -5164,6 +5097,7 @@ def compare_app_performance(
     # If stage analysis failed, return early
     if "error" in stage_analysis:
         return {
+            "schema_version": 1,
             "applications": stage_analysis["applications"],
             "aggregated_overview": aggregated_overview,
             "stage_deep_dive": stage_analysis,
@@ -5184,6 +5118,13 @@ def compare_app_performance(
 
     # Enhanced recommendations combining both application and stage-level insights
     recommendations = []
+    # Apply default rule set (resource allocation, large stage diffs)
+    rule_ctx = {
+        "app1": app1,
+        "app2": app2,
+        "detailed_comparisons": detailed_comparisons,
+    }
+    recommendations.extend(apply_rec_rules(rule_ctx, default_rec_rules()))
 
     # APPLICATION-LEVEL RECOMMENDATIONS
     # Resource allocation differences
@@ -5235,24 +5176,7 @@ def compare_app_performance(
             aggregated_overview["stage_comparison"]["recommendations"]
         )
 
-    # STAGE-LEVEL RECOMMENDATIONS (existing logic)
-    # Check for stages with large time differences
-    large_diff_threshold = 60  # seconds
-    large_diff_stages = [
-        comp
-        for comp in detailed_comparisons
-        if comp.get("time_difference", {}).get("absolute_seconds", 0) > large_diff_threshold
-    ]
-
-    if large_diff_stages:
-        recommendations.append(
-            {
-                "type": "stage_performance",
-                "priority": "high",
-                "issue": f"Found {len(large_diff_stages)} stages with >60s time difference",
-                "suggestion": f"Investigate {large_diff_stages[0]['time_difference']['slower_application']} for potential performance issues in specific stages",
-            }
-        )
+    # STAGE-LEVEL RECOMMENDATIONS (existing logic continues below)
 
     # Check for memory spilling differences at stage level using simplified comparisons
     spill_diff_stages = []
@@ -5287,9 +5211,8 @@ def compare_app_performance(
     if sql_plans_comparison.get("sql_recommendations"):
         recommendations.extend(sql_plans_comparison["sql_recommendations"])
 
-    # Sort recommendations by priority
-    priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    recommendations.sort(key=lambda x: priority_order.get(x.get("priority", "low"), 3))
+    # Deduplicate and sort recommendations by priority
+    recommendations = prioritize_recs(dedupe_recs(recommendations), top_n=9999)
 
     # Extract simplified executor summary
     executor_summary = {}
@@ -5304,13 +5227,8 @@ def compare_app_performance(
     else:
         executor_summary = executor_comparison
 
-    # Filter recommendations to top 5, high/medium priority only
-    filtered_recommendations = []
-    for rec in recommendations:
-        if rec.get("priority") in ["critical", "high", "medium"]:
-            filtered_recommendations.append(rec)
-        if len(filtered_recommendations) >= 5:
-            break
+    # Take top 5 prioritized recommendations
+    filtered_recommendations = prioritize_recs(recommendations, top_n=5)
 
     # Get app summary comparison using the new tool
     try:
@@ -5324,6 +5242,7 @@ def compare_app_performance(
         }
 
     result = {
+        "schema_version": 1,
         "applications": {
             "app1": {"id": app_id1, "name": app1.name},
             "app2": {"id": app_id2, "name": app2.name},
@@ -5338,6 +5257,8 @@ def compare_app_performance(
     }
 
     # Sort the result by mixed metrics (change percentages and ratios)
+    # Optionally validate against schema in debug mode
+    result = validate_output(CompareAppPerformanceOutput, result, enabled=get_config().debug_validate_schema)
     return sort_comparison_data(result, sort_key="mixed")
 
 
