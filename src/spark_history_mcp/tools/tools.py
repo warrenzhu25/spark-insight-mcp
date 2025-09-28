@@ -6656,9 +6656,9 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
         total_disk_spilled_bytes = sum(getattr(stage, 'disk_bytes_spilled', 0) or 0 for stage in stages)
         total_disk_spilled_gb = total_disk_spilled_bytes / (1024 * 1024 * 1024)
 
-        # Calculate performance metrics
-        total_shuffle_fetch_wait_time_ms = 0
-        total_shuffle_write_time_ms = 0
+        # Calculate performance metrics (values are in nanoseconds from Spark)
+        total_shuffle_fetch_wait_time_ns = 0
+        total_shuffle_write_time_ns = 0
         total_failed_tasks = sum(getattr(stage, 'num_failed_tasks', 0) or 0 for stage in stages)
 
         for stage in stages:
@@ -6673,7 +6673,7 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
                     # Use median value approximation
                     median_fetch_wait = dist.shuffle_read_metrics.fetch_wait_time[2]
                     num_tasks = stage.num_tasks or 0
-                    total_shuffle_fetch_wait_time_ms += median_fetch_wait * num_tasks
+                    total_shuffle_fetch_wait_time_ns += median_fetch_wait * num_tasks
 
                 # Shuffle write time
                 if (dist.shuffle_write_metrics and
@@ -6682,10 +6682,10 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
                     # Use median value approximation
                     median_write_time = dist.shuffle_write_metrics.write_time[2]
                     num_tasks = stage.num_tasks or 0
-                    total_shuffle_write_time_ms += median_write_time * num_tasks
+                    total_shuffle_write_time_ns += median_write_time * num_tasks
 
-        shuffle_fetch_wait_min = total_shuffle_fetch_wait_time_ms / (1000 * 1000 * 1000 * 60)  # Convert from nanoseconds
-        shuffle_write_time_min = total_shuffle_write_time_ms / (1000 * 1000 * 1000 * 60)  # Convert from nanoseconds
+        shuffle_fetch_wait_min = total_shuffle_fetch_wait_time_ns / (1000 * 1000 * 1000 * 60)  # Convert from nanoseconds
+        shuffle_write_time_min = total_shuffle_write_time_ns / (1000 * 1000 * 1000 * 60)  # Convert from nanoseconds
 
         # Build summary
         summary = {
