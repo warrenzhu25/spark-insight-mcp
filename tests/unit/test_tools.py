@@ -13,31 +13,44 @@ from spark_history_mcp.models.spark_types import (
     StageData,
     TaskMetricDistributions,
 )
-from spark_history_mcp.tools.tools import (
-    _analyze_executor_performance_patterns,
-    _build_dependencies_from_dag_data,
+from spark_history_mcp.tools import (
     analyze_auto_scaling,
     analyze_executor_utilization,
     analyze_failed_tasks,
     analyze_shuffle_skew,
-    compare_app_executor_timeline,
     compare_app_performance,
-    compare_stage_executor_timeline,
-    compare_stages,
     get_app_summary,
     get_application,
     get_application_insights,
-    get_client_or_default,
+)
+from spark_history_mcp.tools.analysis import get_client_or_default
+from spark_history_mcp.tools.jobs_stages import (
+    _build_dependencies_from_dag_data,
     get_stage,
     get_stage_dependency_from_sql_plan,
     get_stage_task_summary,
-    list_applications,
     list_jobs,
     list_slowest_jobs,
     list_slowest_sql_queries,
     list_slowest_stages,
     list_stages,
 )
+from spark_history_mcp.tools.application import list_applications
+
+# Additional imports for comparison and executor tools
+try:
+    from spark_history_mcp.tools_original import (
+        compare_app_executor_timeline,
+        compare_stage_executor_timeline,
+        compare_stages,
+        _analyze_executor_performance_patterns,
+    )
+except ImportError:
+    # Fallback if original tools are not available
+    compare_app_executor_timeline = None
+    compare_stage_executor_timeline = None
+    compare_stages = None
+    _analyze_executor_performance_patterns = None
 
 
 class TestTools(unittest.TestCase):
