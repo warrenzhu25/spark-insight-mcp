@@ -170,10 +170,17 @@ def sort_comparison_data(data: Dict[str, Any], sort_key: str = "mixed") -> Dict[
     # Create a copy to avoid modifying the original
     result = data.copy()
 
-    # Common keys that contain sortable metrics
+    # Common keys that contain sortable metrics (including nested paths)
     metric_keys = [
         'diff', 'executor_comparison', 'efficiency_ratios', 'stage_comparison',
         'job_comparison', 'resource_comparison', 'comparison_metrics'
+    ]
+
+    # Also check nested paths like 'app_summary_diff' -> 'diff'
+    nested_paths = [
+        ['app_summary_diff', 'diff'],
+        ['performance_comparison', 'executors'],
+        ['performance_comparison', 'stages'],
     ]
 
     sort_func = {
@@ -182,9 +189,24 @@ def sort_comparison_data(data: Dict[str, Any], sort_key: str = "mixed") -> Dict[
         "mixed": sort_mixed_metrics
     }.get(sort_key, sort_mixed_metrics)
 
-    # Sort any metric dictionaries found
+    # Sort any metric dictionaries found at root level
     for key in metric_keys:
         if key in result and isinstance(result[key], dict):
             result[key] = sort_func(result[key])
+
+    # Sort nested metric dictionaries
+    for path in nested_paths:
+        current = result
+        # Navigate to the nested location
+        for i, key in enumerate(path[:-1]):
+            if key in current and isinstance(current[key], dict):
+                current = current[key]
+            else:
+                break
+        else:
+            # We successfully navigated to the parent, now sort the final key
+            final_key = path[-1]
+            if final_key in current and isinstance(current[final_key], dict):
+                current[final_key] = sort_func(current[final_key])
 
     return result
