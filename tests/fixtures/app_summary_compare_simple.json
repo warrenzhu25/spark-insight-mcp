@@ -1,0 +1,23 @@
+{
+  "app1_summary": {
+    "application_id": "app-1",
+    "application_duration_minutes": 1.0,
+    "executor_utilization_percent": 12.5
+  },
+  "app2_summary": {
+    "application_id": "app-2",
+    "application_duration_minutes": 1.5,
+    "executor_utilization_percent": 25.0
+  },
+  "diff": {
+    "application_duration_minutes_change": "+50.0%",
+    "executor_utilization_percent_change": "+100.0%"
+  },
+  "filtering_summary": {
+    "total_metrics": 2,
+    "significant_metrics": 2,
+    "significance_threshold": 0.1,
+    "filtering_applied": false
+  }
+}
+

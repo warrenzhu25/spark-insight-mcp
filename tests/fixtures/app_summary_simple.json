@@ -1,0 +1,22 @@
+{
+  "application_id": "app-1",
+  "application_name": "TestApp",
+  "application_duration_minutes": 1.0,
+  "total_executor_runtime_minutes": 0.5,
+  "executor_cpu_time_minutes": 2.0,
+  "jvm_gc_time_minutes": 0.08,
+  "executor_utilization_percent": 12.5,
+  "input_data_size_gb": 1.0,
+  "output_data_size_gb": 0.0,
+  "shuffle_read_size_gb": 0.0,
+  "shuffle_write_size_gb": 0.0,
+  "memory_spilled_gb": 0.0,
+  "disk_spilled_gb": 0.0,
+  "shuffle_read_wait_time_minutes": 0.17,
+  "shuffle_write_time_minutes": 0.33,
+  "failed_tasks": 1,
+  "total_stages": 1,
+  "completed_stages": 1,
+  "failed_stages": 0
+}
+
