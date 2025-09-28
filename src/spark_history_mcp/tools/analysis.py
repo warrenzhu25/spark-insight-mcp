@@ -9,41 +9,12 @@ detection, and failure analysis.
 import heapq
 import statistics
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from spark_history_mcp.core.app import mcp
-from spark_history_mcp.models.spark_types import StageData
-from spark_history_mcp.tools.fetchers import fetch_executors, fetch_stages
-
-
-def get_client_or_default(ctx, server_name: Optional[str] = None):
-    """
-    Get a client by server name or the default client if no name is provided.
-
-    Args:
-        ctx: The MCP context
-        server_name: Optional server name
-
-    Returns:
-        SparkRestClient: The requested client or default client
-
-    Raises:
-        ValueError: If no client is found
-    """
-    clients = ctx.request_context.lifespan_context.clients
-    default_client = ctx.request_context.lifespan_context.default_client
-
-    if server_name:
-        client = clients.get(server_name)
-        if client:
-            return client
-
-    if default_client:
-        return default_client
-
-    raise ValueError(
-        "No Spark client found. Please specify a valid server name or set a default server."
-    )
+from spark_history_mcp.tools.common import get_client_or_default
+from spark_history_mcp.tools.executors import get_executor_summary
+from spark_history_mcp.tools.jobs_stages import list_slowest_jobs, list_slowest_stages
 
 
 @mcp.tool()
@@ -64,10 +35,6 @@ def get_job_bottlenecks(
     Returns:
         Dictionary containing identified bottlenecks and recommendations
     """
-    # Import here to avoid circular imports
-    from spark_history_mcp.tools.jobs_stages import list_slowest_jobs, list_slowest_stages
-    from spark_history_mcp.tools.executors import get_executor_summary
-
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
@@ -133,83 +100,67 @@ def get_job_bottlenecks(
             "slowest_jobs": [
                 {
                     "job_id": job.job_id,
-                    "name": getattr(job, "name", f"Job {job.job_id}"),
+                    "name": job.name,
                     "duration_seconds": (
                         job.completion_time - job.submission_time
                     ).total_seconds()
                     if job.completion_time and job.submission_time
                     else 0,
-                    "stage_count": len(job.stage_ids) if job.stage_ids else 0,
-                    "failed_stage_count": len(job.failed_stage_ids) if job.failed_stage_ids else 0,
+                    "failed_tasks": job.num_failed_tasks,
+                    "status": job.status,
                 }
                 for job in slowest_jobs[:top_n]
             ],
-            "high_spill_stages": high_spill_stages[:top_n],
-            "gc_pressure_ratio": gc_pressure,
         },
-        "resource_utilization": exec_summary,
-        "recommendations": _generate_bottleneck_recommendations(
-            slowest_stages, high_spill_stages, gc_pressure, exec_summary
-        ),
+        "resource_bottlenecks": {
+            "memory_spill_stages": high_spill_stages[:top_n],
+            "gc_pressure_ratio": gc_pressure,
+            "executor_utilization": {
+                "total_executors": exec_summary["total_executors"],
+                "active_executors": exec_summary["active_executors"],
+                "utilization_ratio": exec_summary["active_executors"]
+                / max(exec_summary["total_executors"], 1),
+            },
+        },
+        "recommendations": [],
     }
+
+    # Generate recommendations
+    if gc_pressure > 0.1:  # More than 10% time in GC
+        bottlenecks["recommendations"].append(
+            {
+                "type": "memory",
+                "priority": "high",
+                "issue": f"High GC pressure ({gc_pressure:.1%})",
+                "suggestion": "Consider increasing executor memory or reducing memory usage",
+            }
+        )
+
+    if high_spill_stages:
+        bottlenecks["recommendations"].append(
+            {
+                "type": "memory",
+                "priority": "high",
+                "issue": f"Memory spilling detected in {len(high_spill_stages)} stages",
+                "suggestion": "Increase executor memory or optimize data partitioning",
+            }
+        )
+
+    if exec_summary["failed_tasks"] > 0:
+        bottlenecks["recommendations"].append(
+            {
+                "type": "reliability",
+                "priority": "medium",
+                "issue": f"{exec_summary['failed_tasks']} failed tasks",
+                "suggestion": "Investigate task failures and consider increasing task retry settings",
+            }
+        )
 
     return bottlenecks
 
-
-def _generate_bottleneck_recommendations(
-    slowest_stages: List[StageData],
-    high_spill_stages: List[Dict[str, Any]],
-    gc_pressure: float,
-    exec_summary: Dict[str, Any],
-) -> List[str]:
-    """Generate recommendations based on bottleneck analysis."""
-    recommendations = []
-
-    # Stage-based recommendations
-    if slowest_stages:
-        avg_duration = sum(
-            (stage.completion_time - stage.submission_time).total_seconds()
-            if stage.completion_time and stage.submission_time
-            else 0
-            for stage in slowest_stages
-        ) / len(slowest_stages)
-
-        if avg_duration > 300:  # 5 minutes
-            recommendations.append(
-                f"Consider optimizing stages with average duration of {avg_duration:.1f}s. "
-                "Look into data partitioning and filtering optimizations."
-            )
-
-    # Spill-based recommendations
-    if high_spill_stages:
-        total_spill = sum(stage["memory_spilled_mb"] for stage in high_spill_stages)
-        recommendations.append(
-            f"High memory spill detected ({total_spill:.1f}MB across {len(high_spill_stages)} stages). "
-            "Consider increasing executor memory or optimizing data structures."
-        )
-
-    # GC pressure recommendations
-    if gc_pressure > 0.1:  # More than 10% time in GC
-        recommendations.append(
-            f"High GC pressure detected ({gc_pressure:.1%}). "
-            "Consider increasing executor memory or optimizing memory usage patterns."
-        )
-
-    # Executor utilization recommendations
-    if exec_summary["failed_tasks"] > exec_summary["completed_tasks"] * 0.05:  # More than 5% failures
-        recommendations.append(
-            f"High task failure rate ({exec_summary['failed_tasks']} failures). "
-            "Investigate executor stability and resource allocation."
-        )
-
-    return recommendations
-
-
 @mcp.tool()
 def analyze_auto_scaling(
-    app_id: str,
-    server: Optional[str] = None,
-    target_stage_duration_minutes: int = 2,
+    app_id: str, server: Optional[str] = None, target_stage_duration_minutes: int = 2
 ) -> Dict[str, Any]:
     """
     Analyze application workload and provide auto-scaling recommendations.
@@ -229,95 +180,139 @@ def analyze_auto_scaling(
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
+    # Get application data
     app = client.get_application(app_id)
-    stages = fetch_stages(app_id=app_id, server=server)
-    executors = fetch_executors(app_id=app_id, server=server, include_inactive=True)
+    environment = client.get_environment(app_id)
+    stages = client.list_stages(app_id=app_id)
 
     if not stages:
-        return {
-            "error": "No stages found for analysis",
-            "application_id": app_id,
-        }
+        return {"error": "No stages found for application", "application_id": app_id}
 
-    # Analyze stage patterns
-    stage_durations = []
-    parallelism_levels = []
+    target_duration_ms = target_stage_duration_minutes * 60 * 1000
 
+    # Get app start time and analyze initial stages (first 2 minutes)
+    app_start = app.attempts[0].start_time if app.attempts else datetime.now()
+    initial_window = app_start + timedelta(minutes=2)
+
+    # Filter stages that were running in the first 2 minutes
+    initial_stages = [
+        s
+        for s in stages
+        if s.submission_time
+        and s.completion_time
+        and s.submission_time <= initial_window
+        and s.completion_time >= initial_window
+    ]
+
+    # Calculate recommended initial executors
+    initial_executor_demand = 0
+    for stage in initial_stages:
+        if stage.executor_run_time and stage.num_tasks:
+            # Estimate executors needed to complete stage in target duration
+            executors_needed = (
+                min(stage.executor_run_time / target_duration_ms, stage.num_tasks) / 4
+            )  # Conservative scaling factor
+            initial_executor_demand += executors_needed
+
+    recommended_initial = max(2, int(initial_executor_demand))
+
+    # Calculate maximum executors needed during peak load
+    # Create timeline of executor demand
+    stage_events = []
     for stage in stages:
-        if stage.completion_time and stage.submission_time:
-            duration_minutes = (
-                stage.completion_time - stage.submission_time
-            ).total_seconds() / 60
-            stage_durations.append(duration_minutes)
-            parallelism_levels.append(stage.num_tasks)
+        if (
+            stage.submission_time
+            and stage.completion_time
+            and stage.executor_run_time
+            and stage.num_tasks
+        ):
+            executors_needed = int(
+                min(stage.executor_run_time / target_duration_ms, stage.num_tasks) / 4
+            )
+            stage_events.append((stage.submission_time, executors_needed))
+            stage_events.append((stage.completion_time, -executors_needed))
 
-    if not stage_durations:
-        return {
-            "error": "No completed stages found for analysis",
-            "application_id": app_id,
-        }
+    # Sort events and calculate peak demand
+    stage_events.sort(key=lambda x: x[0])
+    current_demand = 0
+    max_demand = 2
 
-    # Calculate statistics
-    avg_stage_duration = statistics.mean(stage_durations)
-    max_stage_duration = max(stage_durations)
-    avg_parallelism = statistics.mean(parallelism_levels)
-    max_parallelism = max(parallelism_levels)
+    for _timestamp, demand_change in stage_events:
+        current_demand += demand_change
+        max_demand = max(max_demand, current_demand)
 
-    # Current resource allocation
-    current_max_executors = len(executors) if executors else 1
-    current_cores_per_executor = (
-        executors[0].total_cores if executors else app.cores_per_executor or 1
+    recommended_max = max(recommended_initial, max_demand)
+
+    # Get current configuration
+    spark_props = (
+        {k: v for k, v in environment.spark_properties}
+        if environment.spark_properties
+        else {}
     )
-
-    # Calculate optimal executor count
-    # Simple heuristic: scale executors based on parallelism and target duration
-    scaling_factor = avg_stage_duration / target_stage_duration_minutes
-    optimal_executors = max(
-        int(current_max_executors * scaling_factor),
-        int(avg_parallelism / current_cores_per_executor),
-        1,
+    current_initial = spark_props.get(
+        "spark.dynamicAllocation.initialExecutors", "Not set"
     )
+    current_max = spark_props.get("spark.dynamicAllocation.maxExecutors", "Not set")
 
-    # Cap at reasonable limits
-    recommended_min_executors = max(1, optimal_executors // 4)
-    recommended_max_executors = min(optimal_executors * 2, int(max_parallelism / current_cores_per_executor))
-
+    # Generate recommendations as a list to match other analysis functions
     recommendations = []
-    if avg_stage_duration > target_stage_duration_minutes * 1.5:
+
+    if not current_initial.isdigit() or recommended_initial != int(current_initial):
         recommendations.append(
-            f"Current average stage duration ({avg_stage_duration:.1f}min) exceeds target "
-            f"({target_stage_duration_minutes}min). Consider increasing executor count."
+            {
+                "type": "auto_scaling",
+                "priority": "medium",
+                "issue": f"Initial executors could be optimized (current: {current_initial})",
+                "suggestion": f"Set spark.dynamicAllocation.initialExecutors to {recommended_initial}",
+                "configuration": {
+                    "parameter": "spark.dynamicAllocation.initialExecutors",
+                    "current_value": current_initial,
+                    "recommended_value": str(recommended_initial),
+                    "description": "Based on stages running in first 2 minutes",
+                },
+            }
         )
 
-    if max_stage_duration > target_stage_duration_minutes * 3:
+    if not current_max.isdigit() or recommended_max != int(current_max):
         recommendations.append(
-            f"Maximum stage duration ({max_stage_duration:.1f}min) is very high. "
-            "Consider optimizing longest-running stages or increasing resources."
+            {
+                "type": "auto_scaling",
+                "priority": "medium",
+                "issue": f"Max executors could be optimized (current: {current_max})",
+                "suggestion": f"Set spark.dynamicAllocation.maxExecutors to {recommended_max}",
+                "configuration": {
+                    "parameter": "spark.dynamicAllocation.maxExecutors",
+                    "current_value": current_max,
+                    "recommended_value": str(recommended_max),
+                    "description": "Based on peak concurrent stage demand",
+                },
+            }
         )
 
     return {
         "application_id": app_id,
-        "current_configuration": {
-            "max_executors": current_max_executors,
-            "cores_per_executor": current_cores_per_executor,
-            "memory_per_executor_mb": app.memory_per_executor_mb,
-        },
-        "workload_analysis": {
+        "analysis_type": "Auto-scaling Configuration",
+        "target_stage_duration_minutes": target_stage_duration_minutes,
+        "recommendations": recommendations,
+        "analysis_details": {
             "total_stages": len(stages),
-            "avg_stage_duration_minutes": avg_stage_duration,
-            "max_stage_duration_minutes": max_stage_duration,
-            "avg_parallelism": avg_parallelism,
-            "max_parallelism": max_parallelism,
+            "initial_stages_analyzed": len(initial_stages),
+            "peak_concurrent_demand": max_demand,
+            "calculation_method": f"Aims to complete stages in {target_stage_duration_minutes} minutes",
+            "configuration_analysis": {
+                "initial_executors": {
+                    "current": current_initial,
+                    "recommended": str(recommended_initial),
+                    "description": "Based on stages running in first 2 minutes",
+                },
+                "max_executors": {
+                    "current": current_max,
+                    "recommended": str(recommended_max),
+                    "description": "Based on peak concurrent stage demand",
+                },
+            },
         },
-        "recommendations": {
-            "min_executors": recommended_min_executors,
-            "max_executors": recommended_max_executors,
-            "target_stage_duration_minutes": target_stage_duration_minutes,
-            "scaling_factor": scaling_factor,
-        },
-        "analysis_notes": recommendations,
     }
-
 
 @mcp.tool()
 def analyze_shuffle_skew(
@@ -349,81 +344,193 @@ def analyze_shuffle_skew(
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
-    stages = fetch_stages(app_id=app_id, server=server)
+    # Try to get stages with summaries, fallback to basic stages if validation fails
+    try:
+        stages = client.list_stages(app_id=app_id, with_summaries=True)
+    except Exception as e:
+        if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
+            # Known issue with executor metrics distributions - use stages without summaries
+            stages = client.list_stages(app_id=app_id, with_summaries=False)
+        else:
+            raise e
+    shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
 
-    if not stages:
-        return {
-            "error": "No stages found for analysis",
-            "application_id": app_id,
-        }
-
-    shuffle_stages = []
     skewed_stages = []
 
     for stage in stages:
-        # Only analyze stages with significant shuffle writes
+        # Check if stage has significant shuffle write
         if (
-            stage.shuffle_write_bytes
-            and stage.shuffle_write_bytes > shuffle_threshold_gb * 1024 * 1024 * 1024
+            not stage.shuffle_write_bytes
+            or stage.shuffle_write_bytes < shuffle_threshold_bytes
         ):
-            shuffle_stages.append(stage)
+            continue
 
-            # Simplified skew detection based on stage-level metrics
-            # In a real implementation, you'd fetch task-level metrics
-            stage_info = {
-                "stage_id": stage.stage_id,
-                "attempt_id": stage.attempt_id,
-                "name": stage.name,
-                "shuffle_write_gb": stage.shuffle_write_bytes / (1024 * 1024 * 1024),
-                "num_tasks": stage.num_tasks,
-                "skew_detected": False,
-                "skew_ratio": 1.0,
-            }
+        stage_skew_info = {
+            "stage_id": stage.stage_id,
+            "attempt_id": stage.attempt_id,
+            "name": stage.name,
+            "total_shuffle_write_gb": round(
+                stage.shuffle_write_bytes / (1024 * 1024 * 1024), 2
+            ),
+            "task_count": stage.num_tasks,
+            "failed_tasks": stage.num_failed_tasks,
+            "task_skew": None,
+            "executor_skew": None,
+        }
 
-            # Simple heuristic: if there are failed tasks in a shuffle stage, it might indicate skew
-            if stage.num_failed_tasks > 0:
-                stage_info["skew_detected"] = True
-                stage_info["skew_ratio"] = stage.num_failed_tasks / max(stage.num_tasks, 1) * 10
-                skewed_stages.append(stage_info)
+        # Check task-level skew
+        try:
+            task_summary = stage.task_metrics_distributions
+
+            if task_summary.shuffle_write_bytes:
+                # Extract quantiles (typically [min, 25th, 50th, 75th, max])
+                quantiles = task_summary.shuffle_write_bytes
+                if len(quantiles) >= 5:
+                    median = quantiles[2]  # 50th percentile
+                    max_val = quantiles[4]  # 100th percentile (max)
+
+                    if median > 0:
+                        task_skew_ratio = max_val / median
+                        stage_skew_info["task_skew"] = {
+                            "skew_ratio": round(task_skew_ratio, 2),
+                            "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
+                            "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
+                            "is_skewed": task_skew_ratio > skew_ratio_threshold,
+                        }
+        except Exception:
+            # Skip task-level analysis if it fails
+            pass
+
+        # Check executor-level skew using stage.executor_metrics_distributions
+        if (
+            stage.executor_metrics_distributions
+            and stage.executor_metrics_distributions.shuffle_write
+        ):
+            executor_quantiles = stage.executor_metrics_distributions.shuffle_write
+            if len(executor_quantiles) >= 5:
+                exec_median = executor_quantiles[2]  # 50th percentile
+                exec_max = executor_quantiles[4]  # 100th percentile (max)
+
+                if exec_median > 0:
+                    exec_skew_ratio = exec_max / exec_median
+                    stage_skew_info["executor_skew"] = {
+                        "skew_ratio": round(exec_skew_ratio, 2),
+                        "max_executor_shuffle_write_mb": round(
+                            exec_max / (1024 * 1024), 2
+                        ),
+                        "median_executor_shuffle_write_mb": round(
+                            exec_median / (1024 * 1024), 2
+                        ),
+                        "is_skewed": exec_skew_ratio > skew_ratio_threshold,
+                    }
+
+        # Add stage to skewed list if either task or executor skew is detected
+        is_task_skewed = (
+            stage_skew_info["task_skew"] and stage_skew_info["task_skew"]["is_skewed"]
+        )
+        is_executor_skewed = (
+            stage_skew_info["executor_skew"]
+            and stage_skew_info["executor_skew"]["is_skewed"]
+        )
+
+        if is_task_skewed or is_executor_skewed:
+            # Calculate overall skew ratio for sorting (use higher of the two)
+            task_ratio = (
+                stage_skew_info["task_skew"]["skew_ratio"]
+                if stage_skew_info["task_skew"]
+                else 0
+            )
+            exec_ratio = (
+                stage_skew_info["executor_skew"]["skew_ratio"]
+                if stage_skew_info["executor_skew"]
+                else 0
+            )
+            stage_skew_info["max_skew_ratio"] = max(task_ratio, exec_ratio)
+            skewed_stages.append(stage_skew_info)
+
+    # Sort by max skew ratio (highest first)
+    skewed_stages.sort(key=lambda x: x["max_skew_ratio"], reverse=True)
 
     recommendations = []
     if skewed_stages:
-        recommendations.append(
-            f"Found {len(skewed_stages)} stages with potential shuffle skew. "
-            "Consider repartitioning data or using salting techniques."
+        task_skewed_count = sum(
+            1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]
+        )
+        executor_skewed_count = sum(
+            1
+            for s in skewed_stages
+            if s["executor_skew"] and s["executor_skew"]["is_skewed"]
         )
 
-    if len(shuffle_stages) > len(stages) * 0.5:
-        recommendations.append(
-            "High proportion of shuffle-heavy stages detected. "
-            "Consider optimizing join strategies and data locality."
-        )
+        if task_skewed_count > 0:
+            recommendations.append(
+                {
+                    "type": "data_partitioning",
+                    "priority": "high",
+                    "issue": f"Found {task_skewed_count} stages with task-level shuffle skew",
+                    "suggestion": "Consider repartitioning data by key distribution or using salting techniques",
+                }
+            )
+
+        if executor_skewed_count > 0:
+            recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "high",
+                    "issue": f"Found {executor_skewed_count} stages with executor-level shuffle skew",
+                    "suggestion": "Check executor resource allocation, network issues, or host-specific problems",
+                }
+            )
+
+        max_skew = max(s["max_skew_ratio"] for s in skewed_stages)
+        if max_skew > 10:
+            recommendations.append(
+                {
+                    "type": "performance",
+                    "priority": "critical",
+                    "issue": f"Extreme skew detected (ratio: {max_skew})",
+                    "suggestion": "Investigate data distribution and consider custom partitioning strategies",
+                }
+            )
 
     return {
         "application_id": app_id,
-        "analysis_parameters": {
+        "analysis_type": "Shuffle Skew Analysis",
+        "parameters": {
             "shuffle_threshold_gb": shuffle_threshold_gb,
             "skew_ratio_threshold": skew_ratio_threshold,
         },
-        "shuffle_analysis": {
-            "total_stages": len(stages),
-            "shuffle_stages": len(shuffle_stages),
-            "skewed_stages": len(skewed_stages),
-            "total_shuffle_gb": sum(
-                stage.shuffle_write_bytes / (1024 * 1024 * 1024)
-                for stage in shuffle_stages
-            ),
-        },
         "skewed_stages": skewed_stages,
+        "summary": {
+            "total_stages_analyzed": len(
+                [
+                    s
+                    for s in stages
+                    if s.shuffle_write_bytes
+                    and s.shuffle_write_bytes >= shuffle_threshold_bytes
+                ]
+            ),
+            "skewed_stages_count": len(skewed_stages),
+            "task_skewed_count": sum(
+                1
+                for s in skewed_stages
+                if s["task_skew"] and s["task_skew"]["is_skewed"]
+            ),
+            "executor_skewed_count": sum(
+                1
+                for s in skewed_stages
+                if s["executor_skew"] and s["executor_skew"]["is_skewed"]
+            ),
+            "max_skew_ratio": max([s["max_skew_ratio"] for s in skewed_stages])
+            if skewed_stages
+            else 0,
+        },
         "recommendations": recommendations,
     }
 
-
 @mcp.tool()
 def analyze_failed_tasks(
-    app_id: str,
-    server: Optional[str] = None,
-    failure_threshold: int = 1,
+    app_id: str, server: Optional[str] = None, failure_threshold: int = 1
 ) -> Dict[str, Any]:
     """
     Analyze failed tasks to identify patterns and root causes.
@@ -442,62 +549,102 @@ def analyze_failed_tasks(
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
-    stages = fetch_stages(app_id=app_id, server=server)
-    executors = fetch_executors(app_id=app_id, server=server, include_inactive=True)
+    stages = client.list_stages(app_id=app_id)
+    executors = client.list_all_executors(app_id=app_id)
 
+    # Analyze stages with failures
     failed_stages = []
     total_failed_tasks = 0
 
     for stage in stages:
-        if stage.num_failed_tasks >= failure_threshold:
-            failed_stages.append({
-                "stage_id": stage.stage_id,
-                "attempt_id": stage.attempt_id,
-                "name": stage.name,
-                "failed_tasks": stage.num_failed_tasks,
-                "total_tasks": stage.num_tasks,
-                "failure_rate": stage.num_failed_tasks / max(stage.num_tasks, 1),
-                "status": stage.status,
-            })
+        if stage.num_failed_tasks and stage.num_failed_tasks >= failure_threshold:
+            failed_stages.append(
+                {
+                    "stage_id": stage.stage_id,
+                    "attempt_id": stage.attempt_id,
+                    "name": stage.name,
+                    "failed_tasks": stage.num_failed_tasks,
+                    "total_tasks": stage.num_tasks,
+                    "failure_rate": round(
+                        stage.num_failed_tasks / max(stage.num_tasks, 1) * 100, 2
+                    ),
+                    "status": stage.status,
+                }
+            )
             total_failed_tasks += stage.num_failed_tasks
 
     # Analyze executor failures
     problematic_executors = []
     for executor in executors:
-        if executor.failed_tasks >= failure_threshold:
-            problematic_executors.append({
-                "executor_id": executor.id,
-                "failed_tasks": executor.failed_tasks,
-                "completed_tasks": executor.completed_tasks,
-                "failure_rate": executor.failed_tasks / max(
-                    executor.failed_tasks + executor.completed_tasks, 1
-                ),
-                "is_active": executor.is_active,
-                "remove_reason": getattr(executor, "remove_reason", "N/A"),
-            })
+        if executor.failed_tasks and executor.failed_tasks >= failure_threshold:
+            problematic_executors.append(
+                {
+                    "executor_id": executor.id,
+                    "host": executor.host,
+                    "failed_tasks": executor.failed_tasks,
+                    "completed_tasks": executor.completed_tasks,
+                    "failure_rate": round(
+                        executor.failed_tasks
+                        / max(executor.failed_tasks + executor.completed_tasks, 1)
+                        * 100,
+                        2,
+                    ),
+                    "remove_reason": executor.remove_reason,
+                    "is_active": executor.is_active,
+                }
+            )
 
+    # Sort by failure counts
+    failed_stages.sort(key=lambda x: x["failed_tasks"], reverse=True)
+    problematic_executors.sort(key=lambda x: x["failed_tasks"], reverse=True)
+
+    # Generate recommendations
     recommendations = []
+
     if failed_stages:
-        avg_failure_rate = sum(s["failure_rate"] for s in failed_stages) / len(failed_stages)
+        avg_failure_rate = statistics.mean([s["failure_rate"] for s in failed_stages])
         recommendations.append(
-            f"Found {len(failed_stages)} stages with failures (avg failure rate: {avg_failure_rate:.1%}). "
-            "Investigate resource allocation and data processing logic."
+            {
+                "type": "reliability",
+                "priority": "high" if avg_failure_rate > 10 else "medium",
+                "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
+                "suggestion": "Investigate task failure logs and consider increasing task retry settings",
+            }
         )
 
     if problematic_executors:
-        recommendations.append(
-            f"Found {len(problematic_executors)} executors with high failure rates. "
-            "Check executor stability and resource configuration."
-        )
+        # Check for host-specific issues
+        host_failures = {}
+        for executor in problematic_executors:
+            host = executor["host"]
+            host_failures[host] = host_failures.get(host, 0) + executor["failed_tasks"]
+
+        max_host_failures = max(host_failures.values()) if host_failures else 0
+        if max_host_failures > total_failed_tasks * 0.5:
+            recommendations.append(
+                {
+                    "type": "infrastructure",
+                    "priority": "high",
+                    "issue": "High concentration of failures on specific hosts",
+                    "suggestion": "Check infrastructure health and consider blacklisting problematic nodes",
+                }
+            )
 
     return {
         "application_id": app_id,
-        "failure_analysis": {
-            "total_failed_tasks": total_failed_tasks,
-            "failed_stages_count": len(failed_stages),
-            "problematic_executors_count": len(problematic_executors),
-        },
+        "analysis_type": "Failed Task Analysis",
+        "parameters": {"failure_threshold": failure_threshold},
         "failed_stages": failed_stages,
         "problematic_executors": problematic_executors,
+        "summary": {
+            "total_failed_tasks": total_failed_tasks,
+            "stages_with_failures": len(failed_stages),
+            "executors_with_failures": len(problematic_executors),
+            "overall_failure_impact": "high"
+            if total_failed_tasks > 100
+            else "medium"
+            if total_failed_tasks > 10
+            else "low",
+        },
         "recommendations": recommendations,
     }

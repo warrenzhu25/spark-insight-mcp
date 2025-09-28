@@ -133,7 +133,7 @@ class TestTools(unittest.TestCase):
 
         # Verify results
         self.assertEqual(result, [])
-        mock_client.list_jobs.assert_called_once_with(app_id="app-123")
+        mock_client.list_jobs.assert_called_once_with(app_id="app-123", status=None)
 
     @patch("spark_history_mcp.tools.analysis.get_client_or_default")
     def test_get_slowest_jobs_exclude_running(self, mock_get_client):

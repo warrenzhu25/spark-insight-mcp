@@ -94,7 +94,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import get_application_insights
+            from spark_history_mcp.tools import get_application_insights
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -139,7 +139,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import get_job_bottlenecks
+            from spark_history_mcp.tools import get_job_bottlenecks
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -186,7 +186,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import analyze_auto_scaling
+            from spark_history_mcp.tools import analyze_auto_scaling
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -246,7 +246,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import analyze_shuffle_skew
+            from spark_history_mcp.tools import analyze_shuffle_skew
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -305,19 +305,19 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             if analysis_type == "jobs":
-                from spark_history_mcp.tools.tools import (
+                from spark_history_mcp.tools import (
                     list_slowest_jobs as analysis_func,
                 )
 
                 title = f"Slowest Jobs for {app_id}"
             elif analysis_type == "stages":
-                from spark_history_mcp.tools.tools import (
+                from spark_history_mcp.tools import (
                     list_slowest_stages as analysis_func,
                 )
 
                 title = f"Slowest Stages for {app_id}"
             elif analysis_type == "sql":
-                from spark_history_mcp.tools.tools import (
+                from spark_history_mcp.tools import (
                     list_slowest_sql_queries as analysis_func,
                 )
 
@@ -391,7 +391,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_performance
+            from spark_history_mcp.tools import compare_app_performance
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)

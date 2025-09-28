@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from spark_history_mcp.models.spark_types import StageStatus
-from .common import bytes_to_gb, ns_to_min, ms_to_min, ToolConfig, get_config
+
+from .common import bytes_to_gb, get_config, ms_to_min, ns_to_min
 
 
 def summarize_app(app, stages, executors) -> Dict[str, Any]:

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from spark_history_mcp.models.spark_types import StageData
+
 from .common import get_config
 
 

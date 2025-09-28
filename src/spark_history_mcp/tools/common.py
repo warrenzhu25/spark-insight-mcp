@@ -13,8 +13,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Callable, Optional, TypeVar
 
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings
 
 BYTES_IN_GB = 1024 * 1024 * 1024
 NS_PER_MIN = 1000 * 1000 * 1000 * 60
@@ -174,3 +174,8 @@ def get_client(ctx, server: Optional[str] = None):
 def get_server_key(server: Optional[str]) -> str:
     """Canonicalize a server key for caches and logs."""
     return server or "__default__"
+
+
+def get_client_or_default(ctx, server_name: Optional[str] = None):
+    """Backward-compatible alias widely used across tool modules."""
+    return get_client(ctx, server_name)

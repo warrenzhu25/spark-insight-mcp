@@ -98,7 +98,7 @@ def resolve_app_identifier(client, identifier: str, server: Optional[str] = None
         return identifier  # Already an ID
 
     # Search by name (contains match) and get latest (limit 1)
-    from spark_history_mcp.tools.tools import list_applications
+    from spark_history_mcp.tools import list_applications
 
     # Create mock context for tool (same pattern as list command)
     class MockContext:
@@ -193,7 +193,7 @@ if CLI_AVAILABLE:
                 params["search_type"] = "exact"
 
             # Use the existing MCP tool function
-            from spark_history_mcp.tools.tools import list_applications
+            from spark_history_mcp.tools import list_applications
 
             # Create a mock context for the tool
             class MockContext:
@@ -245,7 +245,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, server)
 
             # Use the existing MCP tool function
-            from spark_history_mcp.tools.tools import get_application
+            from spark_history_mcp.tools import get_application
 
             # Create mock context (same as above)
             class MockContext:
@@ -296,7 +296,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            from spark_history_mcp.tools.tools import list_jobs as mcp_list_jobs
+            from spark_history_mcp.tools import list_jobs as mcp_list_jobs
 
             # Create mock context
             class MockContext:
@@ -353,7 +353,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            from spark_history_mcp.tools.tools import list_stages as mcp_list_stages
+            from spark_history_mcp.tools import list_stages as mcp_list_stages
 
             # Create mock context
             class MockContext:
@@ -447,7 +447,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            from spark_history_mcp.tools.tools import get_app_summary, list_applications
+            from spark_history_mcp.tools import get_app_summary, list_applications
 
             import spark_history_mcp.tools.tools as tools_module
 

@@ -6,17 +6,15 @@ tools remain thin and avoid duplication.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-
-from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple
 
 from spark_history_mcp.core.app import mcp
 from spark_history_mcp.models.spark_types import (
     JobExecutionStatus,
     StageStatus,
 )
-from .common import get_client, get_server_key
 
+from .common import get_client, get_server_key
 
 # Basic per-process caches keyed by (server_key, namespace, identifiers...)
 _CACHE: Dict[Tuple[Any, ...], Any] = {}

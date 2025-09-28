@@ -114,7 +114,7 @@ def resolve_app_name_to_recent_apps(
         Tuple of (app_id1, app_id2, app_list) where app_list contains the full app objects
     """
     import spark_history_mcp.tools.tools as tools_module
-    from spark_history_mcp.tools.tools import list_applications
+    from spark_history_mcp.tools import list_applications
 
     original_get_context = getattr(tools_module.mcp, "get_context", None)
 
@@ -385,7 +385,7 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
 
         # Import and execute stage comparison
         import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools.tools import compare_stages
+        from spark_history_mcp.tools_original import compare_stages
 
         client = get_spark_client(ctx.obj["config_path"], server)
         original_get_context = getattr(tools_module.mcp, "get_context", None)
@@ -423,7 +423,7 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
 
         # Import and execute timeline comparison
         import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools.tools import compare_app_executor_timeline
+        from spark_history_mcp.tools_original import compare_app_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
         original_get_context = getattr(tools_module.mcp, "get_context", None)
@@ -459,7 +459,7 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
 
         # Import and execute stage timeline comparison
         import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools.tools import compare_stage_executor_timeline
+        from spark_history_mcp.tools_original import compare_stage_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
         original_get_context = getattr(tools_module.mcp, "get_context", None)
@@ -636,7 +636,7 @@ if CLI_AVAILABLE:
             save_comparison_context(app_id1, app_id2, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_performance
+            from spark_history_mcp.tools import compare_app_performance
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -714,7 +714,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_stages
+            from spark_history_mcp.tools_original import compare_stages
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -795,7 +795,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_executor_timeline
+            from spark_history_mcp.tools_original import compare_app_executor_timeline
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -866,7 +866,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_stage_executor_timeline
+            from spark_history_mcp.tools_original import compare_stage_executor_timeline
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -928,7 +928,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_resources
+            from spark_history_mcp.tools_original import compare_app_resources
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -998,7 +998,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_executors
+            from spark_history_mcp.tools_original import compare_app_executors
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -1059,7 +1059,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_jobs
+            from spark_history_mcp.tools_original import compare_app_jobs
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -1129,7 +1129,7 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_stages_aggregated
+            from spark_history_mcp.tools_original import compare_app_stages_aggregated
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)

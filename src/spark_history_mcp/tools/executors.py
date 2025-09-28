@@ -5,41 +5,13 @@ This module contains tools for retrieving and analyzing Spark executor
 information, resource allocation, and utilization patterns.
 """
 
+import statistics
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from spark_history_mcp.core.app import mcp
+from spark_history_mcp.tools.common import get_client_or_default
 from spark_history_mcp.tools.fetchers import fetch_executors
-
-
-def get_client_or_default(ctx, server_name: Optional[str] = None):
-    """
-    Get a client by server name or the default client if no name is provided.
-
-    Args:
-        ctx: The MCP context
-        server_name: Optional server name
-
-    Returns:
-        SparkRestClient: The requested client or default client
-
-    Raises:
-        ValueError: If no client is found
-    """
-    clients = ctx.request_context.lifespan_context.clients
-    default_client = ctx.request_context.lifespan_context.default_client
-
-    if server_name:
-        client = clients.get(server_name)
-        if client:
-            return client
-
-    if default_client:
-        return default_client
-
-    raise ValueError(
-        "No Spark client found. Please specify a valid server name or set a default server."
-    )
 
 
 @mcp.tool()
@@ -71,7 +43,6 @@ def list_executors(
         # If active-only is not available, filter from all
         return [e for e in fetch_executors(app_id=app_id, server=server) if getattr(e, 'is_active', False)]
 
-
 @mcp.tool()
 def get_executor(app_id: str, executor_id: str, server: Optional[str] = None):
     """
@@ -96,7 +67,6 @@ def get_executor(app_id: str, executor_id: str, server: Optional[str] = None):
             return executor
 
     return None
-
 
 @mcp.tool()
 def get_executor_summary(app_id: str, server: Optional[str] = None):
@@ -145,7 +115,6 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
         summary["total_shuffle_write"] += executor.total_shuffle_write
 
     return summary
-
 
 @mcp.tool()
 def get_resource_usage_timeline(
@@ -238,42 +207,51 @@ def get_resource_usage_timeline(
     timeline_events.sort(key=lambda x: x["timestamp"])
 
     # Calculate resource utilization over time
-    utilization_summary = {
-        "peak_executors": max(
-            len([e for e in executors if e.add_time]) if executors else 0, 1
-        ),
-        "total_core_hours": 0,
-        "avg_executor_count": 0,
-        "executor_lifetime_stats": {},
-    }
+    active_executors = 0
+    total_cores = 0
+    total_memory = 0
 
-    # Calculate core hours and other metrics
-    total_executor_time = 0
-    for executor in executors:
-        if executor.add_time:
-            remove_time = executor.remove_time or app.end_time
-            if remove_time:
-                duration_hours = (remove_time - executor.add_time).total_seconds() / 3600
-                core_hours = duration_hours * executor.total_cores
-                utilization_summary["total_core_hours"] += core_hours
-                total_executor_time += duration_hours
+    resource_timeline = []
 
-    if executors:
-        utilization_summary["avg_executor_count"] = (
-            total_executor_time / len(executors) if executors else 0
+    for event in timeline_events:
+        if event["type"] == "executor_add":
+            active_executors += 1
+            total_cores += event["cores"]
+            total_memory += event["memory_mb"]
+        elif event["type"] == "executor_remove":
+            active_executors -= 1
+            # Note: We don't have cores/memory info in remove events
+
+        resource_timeline.append(
+            {
+                "timestamp": event["timestamp"],
+                "active_executors": active_executors,
+                "total_cores": total_cores,
+                "total_memory_mb": total_memory,
+                "event": event,
+            }
         )
 
     return {
         "application_id": app_id,
-        "timeline_events": timeline_events,
-        "utilization_summary": utilization_summary,
-        "analysis": {
-            "executor_count": len(executors),
-            "stage_count": len(stages),
-            "event_count": len(timeline_events),
+        "application_name": app.name,
+        "summary": {
+            "total_events": len(timeline_events),
+            "executor_additions": len(
+                [e for e in timeline_events if e["type"] == "executor_add"]
+            ),
+            "executor_removals": len(
+                [e for e in timeline_events if e["type"] == "executor_remove"]
+            ),
+            "stage_executions": len(
+                [e for e in timeline_events if e["type"] == "stage_start"]
+            ),
+            "peak_executors": max(
+                [r["active_executors"] for r in resource_timeline] + [0]
+            ),
+            "peak_cores": max([r["total_cores"] for r in resource_timeline] + [0]),
         },
     }
-
 
 @mcp.tool()
 def analyze_executor_utilization(
@@ -355,11 +333,14 @@ def analyze_executor_utilization(
         for i in range(1, len(intervals)):
             if intervals[i]["active_executors"] != current_count:
                 # End current interval
+                time_range = (
+                    f"{current_start}"
+                    if current_start == intervals[i - 1]["minute"]
+                    else f"{current_start}-{intervals[i - 1]['minute']}"
+                )
                 merged_intervals.append(
                     {
-                        "start_minute": current_start,
-                        "end_minute": intervals[i - 1]["minute"],
-                        "duration_minutes": intervals[i - 1]["minute"] - current_start + interval_minutes,
+                        "time_range_minutes": time_range,
                         "active_executors": current_count,
                         "total_cores": current_cores,
                         "total_memory_mb": current_memory,
@@ -373,63 +354,64 @@ def analyze_executor_utilization(
                 current_memory = intervals[i]["total_memory_mb"]
 
         # Add final interval
+        time_range = (
+            f"{current_start}"
+            if current_start == intervals[-1]["minute"]
+            else f"{current_start}-{intervals[-1]['minute']}"
+        )
         merged_intervals.append(
             {
-                "start_minute": current_start,
-                "end_minute": intervals[-1]["minute"],
-                "duration_minutes": intervals[-1]["minute"] - current_start + interval_minutes,
+                "time_range_minutes": time_range,
                 "active_executors": current_count,
                 "total_cores": current_cores,
                 "total_memory_mb": current_memory,
             }
         )
 
-    # Calculate utilization statistics
-    stats = {
-        "total_intervals": len(merged_intervals),
-        "avg_executors": sum(interval["active_executors"] for interval in merged_intervals) / len(merged_intervals)
-        if merged_intervals
-        else 0,
-        "max_executors": max(interval["active_executors"] for interval in merged_intervals)
-        if merged_intervals
-        else 0,
-        "min_executors": min(interval["active_executors"] for interval in merged_intervals)
-        if merged_intervals
-        else 0,
-    }
+    # Calculate utilization metrics
+    executor_counts = [interval["active_executors"] for interval in intervals]
+    peak_executors = max(executor_counts) if executor_counts else 0
+    avg_executors = statistics.mean(executor_counts) if executor_counts else 0
+    min_executors = min(executor_counts) if executor_counts else 0
 
-    # Identify periods of low/high utilization
+    # Calculate efficiency metrics
+    total_executor_minutes = sum(interval["active_executors"] for interval in intervals)
+    utilization_efficiency = (
+        (avg_executors / peak_executors * 100) if peak_executors > 0 else 0
+    )
+
     recommendations = []
-    if merged_intervals:
-        zero_executor_periods = [
-            interval for interval in merged_intervals if interval["active_executors"] == 0
-        ]
-        if zero_executor_periods:
-            total_idle_time = sum(p["duration_minutes"] for p in zero_executor_periods)
-            recommendations.append(
-                f"Found {len(zero_executor_periods)} periods with no active executors "
-                f"totaling {total_idle_time} minutes of idle time"
-            )
+    if utilization_efficiency < 70:
+        recommendations.append(
+            {
+                "type": "resource_efficiency",
+                "priority": "medium",
+                "issue": f"Low executor utilization efficiency ({utilization_efficiency:.1f}%)",
+                "suggestion": "Consider optimizing dynamic allocation settings or job scheduling",
+            }
+        )
 
-        high_executor_periods = [
-            interval for interval in merged_intervals
-            if interval["active_executors"] > stats["avg_executors"] * 1.5
-        ]
-        if high_executor_periods:
-            recommendations.append(
-                f"Found {len(high_executor_periods)} periods with high executor usage "
-                f"(>150% of average)"
-            )
+    if peak_executors > avg_executors * 2:
+        recommendations.append(
+            {
+                "type": "resource_planning",
+                "priority": "medium",
+                "issue": "High variance in executor demand",
+                "suggestion": "Review workload patterns and consider more aggressive scaling policies",
+            }
+        )
 
     return {
         "application_id": app_id,
-        "analysis_period": {
-            "start_time": start_time.isoformat(),
-            "end_time": end_time.isoformat(),
-            "duration_minutes": total_minutes,
-            "interval_minutes": interval_minutes,
+        "analysis_type": "Executor Utilization Analysis",
+        "timeline": merged_intervals,
+        "summary": {
+            "peak_executors": peak_executors,
+            "average_executors": round(avg_executors, 1),
+            "minimum_executors": min_executors,
+            "total_duration_minutes": total_minutes,
+            "utilization_efficiency_percent": round(utilization_efficiency, 1),
+            "total_executor_minutes": total_executor_minutes,
         },
-        "utilization_intervals": merged_intervals,
-        "statistics": stats,
         "recommendations": recommendations,
     }
