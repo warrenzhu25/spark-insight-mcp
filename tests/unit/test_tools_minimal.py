@@ -286,3 +286,130 @@ def test_find_top_stage_differences_no_stages(mock_get_context):
     mock_get_context.return_value = make_ctx(c)
     res = find_top_stage_differences('a1','a2')
     assert 'error' in res
+
+
+def test_truncate_plan_description():
+    from spark_history_mcp.tools.tools import truncate_plan_description
+    short = "abc"
+    assert truncate_plan_description(short, 10) == short
+    long = "line1\nline2\n" + ("x" * 100)
+    out = truncate_plan_description(long, 10)
+    assert out.endswith("... [truncated]")
+
+
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_list_slowest_sql_queries_basic(mock_get_context):
+    from spark_history_mcp.tools.tools import list_slowest_sql_queries
+    c = MagicMock()
+    now = datetime.now()
+    # two executions, one running, one completed
+    e1 = SimpleNamespace(
+        id=1,
+        duration=100,
+        description='Q1',
+        status='COMPLETED',
+        submission_time=now,
+        plan_description='PLAN\n' + ('x' * 100),
+        success_job_ids=[1],
+        failed_job_ids=[],
+        running_job_ids=[]
+    )
+    e2 = SimpleNamespace(
+        id=2,
+        duration=200,
+        description='Q2',
+        status='RUNNING',
+        submission_time=now,
+        plan_description='RUN',
+        success_job_ids=[],
+        failed_job_ids=[],
+        running_job_ids=[2]
+    )
+    c.get_sql_list.side_effect = [[e1, e2], []]
+    mock_get_context.return_value = make_ctx(c)
+
+    # Exclude RUNNING, should return only e1 when top_n=1
+    res = list_slowest_sql_queries('app', top_n=1, page_size=10, include_running=False)
+    assert len(res) == 1
+    assert res[0].id == 1
+
+    # Include running and top 1 should be id=2 with duration longer
+    # reset side_effect for subsequent call
+    c.get_sql_list.side_effect = [[e1, e2], []]
+    res2 = list_slowest_sql_queries('app', top_n=1, page_size=10, include_running=True)
+    assert len(res2) == 1 and res2[0].id == 2
+
+    # No plan description if disabled
+    c.get_sql_list.side_effect = [[e1], []]
+    res3 = list_slowest_sql_queries('app', top_n=1, page_size=10, include_plan_description=False, include_running=True)
+    assert res3[0].plan_description == ''
+
+
+def test_build_dependencies_from_dag_data_and_get_stage_dependency():
+    from spark_history_mcp.tools.tools import _build_dependencies_from_dag_data, get_stage_dependency_from_sql_plan
+    # DAG data with nodes/edges and stage references: node 0 -> node 1 maps to stage 1 -> 2
+    dag = {
+        'stage_task_references': [{'stage_id': 1}, {'stage_id': 2}],
+        'dagVizData': {
+            'nodes': [{'name': 'stage 1'}, {'name': 'stage 2'}],
+            'edges': [{'from': 0, 'to': 1}]
+        }
+    }
+    deps = _build_dependencies_from_dag_data(dag)
+    assert 1 in deps and 2 in deps
+    assert any(p['stage_id'] == 1 for p in deps[2]['parents'])
+
+    # Now test full API path using mocked client methods
+    c = MagicMock()
+    # Execution record with id and job ids
+    exec_rec = SimpleNamespace(id=99, duration=10, running_job_ids=[1], success_job_ids=[2], failed_job_ids=[])
+    c.get_sql_list.return_value = [exec_rec]
+    # HTML methods
+    c.get_sql_execution_html.return_value = '<html></html>'
+    c.extract_dag_data_from_html.return_value = dag
+    # Jobs and stages
+    job1 = SimpleNamespace(job_id=1, name='job1', status='SUCCEEDED', submission_time=datetime.now(), completion_time=datetime.now(), stage_ids=[1])
+    job2 = SimpleNamespace(job_id=2, name='job2', status='SUCCEEDED', submission_time=datetime.now(), completion_time=datetime.now(), stage_ids=[2])
+    c.list_jobs.return_value = [job1, job2]
+    st1 = SimpleNamespace(stage_id=1, name='s1', submission_time=datetime.now(), completion_time=datetime.now())
+    st2 = SimpleNamespace(stage_id=2, name='s2', submission_time=datetime.now(), completion_time=datetime.now())
+    c.list_stages.return_value = [st1, st2]
+    with patch("spark_history_mcp.tools.tools.mcp.get_context", return_value=make_ctx(c)):
+        out = get_stage_dependency_from_sql_plan('app')
+    assert isinstance(out, dict)
+
+
+@patch('spark_history_mcp.tools.tools.get_executor_summary')
+@patch('spark_history_mcp.tools.tools.list_slowest_jobs')
+@patch('spark_history_mcp.tools.tools.list_slowest_stages')
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_get_job_bottlenecks_with_recommendations(mock_get_context, mock_slowest_stages, mock_slowest_jobs, mock_exec_summary):
+    from spark_history_mcp.tools.tools import get_job_bottlenecks
+    c = MagicMock()
+    mock_get_context.return_value = make_ctx(c)
+    # Provide stages for high_spill detection
+    st = SimpleNamespace(stage_id=1, attempt_id=0, name='spill', memory_bytes_spilled=200*1024*1024, disk_bytes_spilled=0)
+    c.list_stages.return_value = [st]
+    # Mock slowest lists
+    now = datetime.now()
+    slow_stage = SimpleNamespace(stage_id=2, attempt_id=0, name='slow', submission_time=now, completion_time=now + timedelta(seconds=10), num_tasks=10, num_failed_tasks=0)
+    slow_job = SimpleNamespace(job_id=1, name='job', submission_time=now, completion_time=now + timedelta(seconds=20), num_failed_tasks=0, status='SUCCEEDED')
+    mock_slowest_stages.return_value = [slow_stage]
+    mock_slowest_jobs.return_value = [slow_job]
+    # Exec summary with significant GC time
+    mock_exec_summary.return_value = {
+        'total_executors': 2,
+        'active_executors': 1,
+        'memory_used': 0,
+        'disk_used': 0,
+        'completed_tasks': 0,
+        'failed_tasks': 0,
+        'total_duration': 100,
+        'total_gc_time': 20,
+        'total_input_bytes': 0,
+        'total_shuffle_read': 0,
+        'total_shuffle_write': 0,
+    }
+    res = get_job_bottlenecks('app', top_n=1)
+    rec_types = [r['type'] for r in res['recommendations']]
+    assert 'memory' in rec_types or 'reliability' in rec_types
