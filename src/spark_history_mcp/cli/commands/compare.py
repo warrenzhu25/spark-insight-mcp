@@ -578,6 +578,13 @@ if CLI_AVAILABLE:
         is_flag=True,
         help="Show interactive navigation menu after comparison",
     )
+    @click.option(
+        "--threshold",
+        "-t",
+        type=float,
+        default=0.2,
+        help="Significance threshold (0.2 = 20%) - hide metrics below this difference",
+    )
     @click.pass_context
     def apps(
         ctx,
@@ -587,6 +594,7 @@ if CLI_AVAILABLE:
         top_n: int,
         format: str,
         interactive: bool,
+        threshold: float,
     ):
         """
         Compare performance between two applications and set comparison context.
@@ -635,7 +643,7 @@ if CLI_AVAILABLE:
 
             try:
                 comparison_data = compare_app_performance(
-                    app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n
+                    app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n, significance_threshold=threshold
                 )
                 formatter.output(comparison_data)
 

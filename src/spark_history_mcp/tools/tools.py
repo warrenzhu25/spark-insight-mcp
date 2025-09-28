@@ -5088,6 +5088,7 @@ def compare_app_performance(
     app_id2: str,
     server: Optional[str] = None,
     top_n: int = 3,
+    significance_threshold: float = 0.2,
 ) -> Dict[str, Any]:
     """
     Streamlined performance comparison between two Spark applications.
@@ -5313,7 +5314,7 @@ def compare_app_performance(
 
     # Get app summary comparison using the new tool
     try:
-        app_summary_diff = compare_app_summaries(app_id1, app_id2, server)
+        app_summary_diff = compare_app_summaries(app_id1, app_id2, server, significance_threshold)
     except Exception as e:
         app_summary_diff = {
             "error": f"Failed to get app summary comparison: {str(e)}",
@@ -5345,6 +5346,7 @@ def compare_app_summaries(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
+    significance_threshold: float = 0.2,
 ) -> Dict[str, Any]:
     """
     Compare application-level summary metrics between two Spark applications.
@@ -5356,6 +5358,7 @@ def compare_app_summaries(
         app_id1: First Spark application ID
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
+        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
 
     Returns:
         Dictionary containing:
@@ -5390,18 +5393,47 @@ def compare_app_summaries(
         change = ((val2 - val1) / val1) * 100
         return f"{change:+.1f}%"
 
+    # Helper function to extract percentage value for filtering
+    def extract_percentage_value(change_str):
+        if change_str in ["N/A", "+∞", "-∞"]:
+            return 0.0
+        try:
+            return abs(float(change_str.replace("+", "").replace("%", "")))
+        except (ValueError, AttributeError):
+            return 0.0
+
     # Dynamically calculate percentage changes for all comparable metrics
     diff = {}
+    filtered_app1_metrics = {}
+    filtered_app2_metrics = {}
+
     for metric_name in app1_metrics:
         if metric_name in app2_metrics and metric_name != "application_id":
-            diff[f"{metric_name}_change"] = calculate_percentage_change(
+            change_str = calculate_percentage_change(
                 app1_metrics[metric_name], app2_metrics[metric_name]
             )
+            change_value = extract_percentage_value(change_str)
+
+            # Only include metrics that meet the significance threshold
+            if change_value >= (significance_threshold * 100) or metric_name == "application_id":
+                diff[f"{metric_name}_change"] = change_str
+                filtered_app1_metrics[metric_name] = app1_metrics[metric_name]
+                filtered_app2_metrics[metric_name] = app2_metrics[metric_name]
+
+    # Always include application_id for identification
+    filtered_app1_metrics["application_id"] = app1_metrics["application_id"]
+    filtered_app2_metrics["application_id"] = app2_metrics["application_id"]
 
     result = {
-        "app1_summary": app1_metrics,
-        "app2_summary": app2_metrics,
+        "app1_summary": filtered_app1_metrics,
+        "app2_summary": filtered_app2_metrics,
         "diff": diff,
+        "filtering_summary": {
+            "total_metrics": len(app1_metrics) - 1,  # Exclude application_id
+            "significant_metrics": len(diff),
+            "significance_threshold": significance_threshold,
+            "filtering_applied": len(diff) < len(app1_metrics) - 1
+        }
     }
 
     # Sort the result by difference percentage (descending)
