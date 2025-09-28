@@ -175,7 +175,7 @@ class OutputFormatter:
 
     def _format_application_list(self, apps: List[ApplicationInfo]) -> None:
         """Format list of applications as a rich table."""
-        table = Table(title="Spark Applications")
+        table = Table(title="Spark Applications", show_lines=True)
         table.add_column("Application ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Status", style="magenta")
@@ -264,7 +264,7 @@ class OutputFormatter:
 
     def _format_job_list(self, jobs: List[JobData]) -> None:
         """Format list of jobs as a rich table."""
-        table = Table(title="Spark Jobs")
+        table = Table(title="Spark Jobs", show_lines=True)
         table.add_column("Job ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Status", style="magenta")
@@ -289,7 +289,7 @@ class OutputFormatter:
 
     def _format_stage_list(self, stages: List[StageData]) -> None:
         """Format list of stages as a rich table."""
-        table = Table(title="Spark Stages")
+        table = Table(title="Spark Stages", show_lines=True)
         table.add_column("Stage ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Status", style="magenta")
@@ -405,7 +405,7 @@ class OutputFormatter:
         app2_summary = app_summary_diff.get("app2_summary", {})
 
         # Create table
-        table = Table(title="Application Metrics Comparison")
+        table = Table(title="Application Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -589,7 +589,7 @@ class OutputFormatter:
             return
 
         # Create table
-        table = Table(title="Stage Differences")
+        table = Table(title="Stage Differences", show_lines=True)
         table.add_column("Stage", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -636,7 +636,7 @@ class OutputFormatter:
         if "executor_comparison" not in overview and "stage_comparison" not in overview:
             return
 
-        table = Table(title="Performance Metrics Comparison")
+        table = Table(title="Performance Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -842,7 +842,7 @@ class OutputFormatter:
         if not stage_metrics and not task_dist and not exec_dist:
             return
 
-        table = Table(title="Performance Metrics Comparison")
+        table = Table(title="Performance Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1046,7 +1046,7 @@ class OutputFormatter:
         if not timeline_comp:
             return
 
-        table = Table(title="Timeline Intervals")
+        table = Table(title="Timeline Intervals", show_lines=True)
         table.add_column("Interval", style="cyan")
         table.add_column("Time Range", style="green")
         table.add_column("App1 Executors", style="blue")
@@ -1177,7 +1177,7 @@ class OutputFormatter:
             self._format_complex_dict(data)
         else:
             # Simple key-value table for basic dictionaries
-            table = Table(title="Details")
+            table = Table(title="Details", show_lines=True)
             table.add_column("Property", style="cyan")
             table.add_column("Value", style="green")
 
@@ -1256,7 +1256,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Executor Performance Table
-        table = Table(title="Executor Performance Comparison")
+        table = Table(title="Executor Performance Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1336,7 +1336,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Job Performance Table
-        table = Table(title="Job Performance Comparison")
+        table = Table(title="Job Performance Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1439,7 +1439,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Aggregated Stage Metrics Table
-        table = Table(title="Aggregated Stage Metrics Comparison")
+        table = Table(title="Aggregated Stage Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1500,7 +1500,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Resource Allocation Table
-        table = Table(title="Resource Allocation Comparison")
+        table = Table(title="Resource Allocation Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
