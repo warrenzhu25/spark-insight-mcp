@@ -835,10 +835,11 @@ class OutputFormatter:
     def _format_stage_performance_metrics(self, data: Dict[str, Any]) -> None:
         """Format stage performance metrics in a comparison table with all available metrics."""
         sig_diff = data.get("significant_differences", {})
+        stage_metrics = sig_diff.get("stage_metrics", {})
         task_dist = sig_diff.get("task_distributions", {})
         exec_dist = sig_diff.get("executor_distributions", {})
 
-        if not task_dist and not exec_dist:
+        if not stage_metrics and not task_dist and not exec_dist:
             return
 
         table = Table(title="Performance Metrics Comparison")
@@ -846,6 +847,25 @@ class OutputFormatter:
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
         table.add_column("Change", style="magenta")
+
+        # Add stage-level metrics first (from our new dynamic approach)
+        for metric_key in stage_metrics.keys():
+            metric_data = stage_metrics[metric_key]
+            display_name = self._get_metric_display_name(metric_key)
+
+            # Format values based on metric type
+            if "bytes" in metric_key.lower():
+                app1_val = self._format_bytes(metric_data.get("stage1", 0))
+                app2_val = self._format_bytes(metric_data.get("stage2", 0))
+            elif "time" in metric_key.lower() or "duration" in metric_key.lower():
+                app1_val = self._format_milliseconds(metric_data.get("stage1", 0))
+                app2_val = self._format_milliseconds(metric_data.get("stage2", 0))
+            else:
+                app1_val = str(metric_data.get("stage1", 0))
+                app2_val = str(metric_data.get("stage2", 0))
+
+            change = metric_data.get("change", "N/A")
+            table.add_row(display_name, app1_val, app2_val, change)
 
         # Add all task distribution metrics dynamically
         for metric_key in task_dist.keys():

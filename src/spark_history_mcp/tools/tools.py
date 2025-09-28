@@ -5531,42 +5531,30 @@ def compare_stages(
     if duration_diff:
         stage_metrics["duration_seconds"] = duration_diff
 
-    # Task count comparisons
-    task_metrics = [
-        ("num_tasks", stage1.num_tasks or 0, stage2.num_tasks or 0),
-        (
-            "num_failed_tasks",
-            stage1.num_failed_tasks or 0,
-            stage2.num_failed_tasks or 0,
-        ),
-        (
-            "memory_bytes_spilled",
-            stage1.memory_bytes_spilled or 0,
-            stage2.memory_bytes_spilled or 0,
-        ),
-        (
-            "disk_bytes_spilled",
-            stage1.disk_bytes_spilled or 0,
-            stage2.disk_bytes_spilled or 0,
-        ),
-        ("input_bytes", stage1.input_bytes or 0, stage2.input_bytes or 0),
-        ("output_bytes", stage1.output_bytes or 0, stage2.output_bytes or 0),
-        (
-            "shuffle_read_bytes",
-            stage1.shuffle_read_bytes or 0,
-            stage2.shuffle_read_bytes or 0,
-        ),
-        (
-            "shuffle_write_bytes",
-            stage1.shuffle_write_bytes or 0,
-            stage2.shuffle_write_bytes or 0,
-        ),
-    ]
+    # Dynamic stage metrics comparison - include all numeric fields from stage objects
+    exclude_fields = {
+        "status", "stage_id", "attempt_id", "submission_time",
+        "first_task_launched_time", "completion_time", "failure_reason", "name"
+    }
 
-    for metric_name, val1, val2 in task_metrics:
-        diff = calculate_difference(val1, val2, metric_name)
-        if diff:
-            stage_metrics[metric_name] = diff
+    # Convert stage objects to dictionaries and filter numeric fields
+    stage1_dict = stage1.model_dump() if hasattr(stage1, 'model_dump') else stage1.__dict__
+    stage2_dict = stage2.model_dump() if hasattr(stage2, 'model_dump') else stage2.__dict__
+
+    # Get all comparable numeric metrics
+    stage1_metrics = {k: v for k, v in stage1_dict.items()
+                     if k not in exclude_fields and isinstance(v, (int, float)) and v is not None}
+    stage2_metrics = {k: v for k, v in stage2_dict.items()
+                     if k not in exclude_fields and isinstance(v, (int, float)) and v is not None}
+
+    # Dynamic comparison for all available metrics
+    for metric_name in stage1_metrics:
+        if metric_name in stage2_metrics:
+            val1 = stage1_metrics[metric_name]
+            val2 = stage2_metrics[metric_name]
+            diff = calculate_difference(val1, val2, metric_name)
+            if diff:
+                stage_metrics[metric_name] = diff
 
     if stage_metrics:
         result["significant_differences"]["stage_metrics"] = stage_metrics
@@ -5578,24 +5566,23 @@ def compare_stages(
         dist1 = stage1.task_metrics_distributions
         dist2 = stage2.task_metrics_distributions
 
-        # Task distribution metrics to compare
-        task_dist_metrics = [
-            ("duration", dist1.duration, dist2.duration),
-            ("executor_run_time", dist1.executor_run_time, dist2.executor_run_time),
-            (
-                "peak_execution_memory",
-                dist1.peak_execution_memory,
-                dist2.peak_execution_memory,
-            ),
-            (
-                "memory_bytes_spilled",
-                dist1.memory_bytes_spilled,
-                dist2.memory_bytes_spilled,
-            ),
-            ("disk_bytes_spilled", dist1.disk_bytes_spilled, dist2.disk_bytes_spilled),
-        ]
+        # Dynamic task distribution metrics comparison - include all available distribution fields
+        exclude_dist_fields = {"quantiles", "shuffle_read_metrics", "shuffle_write_metrics", "input_metrics", "output_metrics", "peak_memory_metrics"}
 
-        for metric_name, vals1, vals2 in task_dist_metrics:
+        # Get all distribution fields from the objects
+        dist1_dict = dist1.model_dump() if hasattr(dist1, 'model_dump') else dist1.__dict__
+        dist2_dict = dist2.model_dump() if hasattr(dist2, 'model_dump') else dist2.__dict__
+
+        # Find all sequence fields that are comparable (both exist and have proper format)
+        distribution_fields = []
+        for field_name in dist1_dict:
+            if (field_name not in exclude_dist_fields and
+                field_name in dist2_dict and
+                isinstance(dist1_dict[field_name], (list, tuple)) and
+                isinstance(dist2_dict[field_name], (list, tuple))):
+                distribution_fields.append((field_name, dist1_dict[field_name], dist2_dict[field_name]))
+
+        for metric_name, vals1, vals2 in distribution_fields:
             if vals1 and vals2 and len(vals1) >= 5 and len(vals2) >= 5:
                 metric_comparison = {}
 
