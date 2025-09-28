@@ -2501,7 +2501,7 @@ class TestCompareAppPerformance(unittest.TestCase):
         self.assertEqual(stage_comp["stage2"]["stage_id"], 2)
 
         # Verify significance threshold is set
-        self.assertEqual(result["summary"]["significance_threshold"], 0.2)
+        self.assertEqual(result["summary"]["significance_threshold"], 0.1)
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_compare_stages_error_handling(self, mock_get_client):
@@ -2525,7 +2525,7 @@ class TestCompareAppPerformance(unittest.TestCase):
         """Test compare_stages when no differences meet significance threshold"""
         mock_get_client.return_value = self.mock_client
 
-        # Create mock stages with very similar metrics (below default 0.2 threshold)
+        # Create mock stages with very similar metrics (below default 0.1 threshold)
         stage1 = self._create_mock_stage(
             stage_id=1, name="Stage 1", num_tasks=100, memory_spilled_bytes=1000
         )

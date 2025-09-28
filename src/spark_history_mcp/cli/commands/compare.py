@@ -582,8 +582,8 @@ if CLI_AVAILABLE:
         "--threshold",
         "-t",
         type=float,
-        default=0.2,
-        help="Significance threshold (0.2 = 20%) - hide metrics below this difference",
+        default=0.1,
+        help="Significance threshold (0.1 = 10%) - hide metrics below this difference",
     )
     @click.pass_context
     def apps(
@@ -679,7 +679,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--significance-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Minimum difference threshold to include metric",
     )
     @click.option(
@@ -959,7 +959,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--significance-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Minimum difference threshold to show metric",
     )
     @click.option(
@@ -1090,7 +1090,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--significance-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Minimum difference threshold to show metric",
     )
     @click.option(

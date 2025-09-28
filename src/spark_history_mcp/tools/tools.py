@@ -3619,7 +3619,7 @@ def _calculate_job_stats(jobs) -> Dict[str, Any]:
 
 def _filter_significant_metrics(
     metrics_dict: Dict[str, Any],
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
     show_only_significant: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -3627,7 +3627,7 @@ def _filter_significant_metrics(
 
     Args:
         metrics_dict: Dictionary of metric names to ratio values
-        significance_threshold: Minimum difference threshold (0.2 = 20%)
+        significance_threshold: Minimum difference threshold (0.1 = 10%)
         show_only_significant: If True, filter out non-significant metrics
 
     Returns:
@@ -3687,7 +3687,7 @@ def _filter_significant_metrics(
 
 def _filter_stage_metrics_comparison(
     stage_metric_comparison: Dict[str, Any],
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
     show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -3695,7 +3695,7 @@ def _filter_stage_metrics_comparison(
 
     Args:
         stage_metric_comparison: Nested dict containing stage metrics by category
-        significance_threshold: Minimum difference threshold (0.2 = 20%)
+        significance_threshold: Minimum difference threshold (0.1 = 10%)
         show_only_significant: If True, filter out non-significant metrics
 
     Returns:
@@ -4242,7 +4242,7 @@ def compare_app_executors(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
     show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -4255,7 +4255,7 @@ def compare_app_executors(
         app_id1: First Spark application ID (baseline)
         app_id2: Second Spark application ID (comparison target)
         server: Optional Spark History Server name
-        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
+        significance_threshold: Minimum difference threshold to show metric (default: 0.1)
         show_only_significant: When True, filter out metrics below significance threshold (default: True)
 
     Returns:
@@ -4616,7 +4616,7 @@ def compare_app_stages_aggregated(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
     show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -4629,7 +4629,7 @@ def compare_app_stages_aggregated(
         app_id1: First Spark application ID (baseline)
         app_id2: Second Spark application ID (comparison target)
         server: Optional Spark History Server name
-        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
+        significance_threshold: Minimum difference threshold to show metric (default: 0.1)
         show_only_significant: When True, filter out metrics below significance threshold (default: True)
 
     Returns:
@@ -5088,7 +5088,7 @@ def compare_app_performance(
     app_id2: str,
     server: Optional[str] = None,
     top_n: int = 3,
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
 ) -> Dict[str, Any]:
     """
     Streamlined performance comparison between two Spark applications.
@@ -5114,7 +5114,7 @@ def compare_app_performance(
 
     Uses optimized defaults:
     - similarity_threshold: 0.6 for stage matching
-    - significance_threshold: 0.2 for metric filtering
+    - significance_threshold: 0.1 for metric filtering
     - filter_auto_generated: True for cleaner environment comparison
     """
     ctx = mcp.get_context()
@@ -5128,14 +5128,14 @@ def compare_app_performance(
     # Use specialized comparison tools for aggregated overview with hardcoded defaults
     try:
         executor_comparison = compare_app_executors(
-            app_id1, app_id2, server, significance_threshold=0.2, show_only_significant=True
+            app_id1, app_id2, server, significance_threshold=significance_threshold, show_only_significant=True
         )
     except Exception as e:
         executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
 
     try:
         stage_comparison = compare_app_stages_aggregated(
-            app_id1, app_id2, server, significance_threshold=0.2, show_only_significant=True
+            app_id1, app_id2, server, significance_threshold=significance_threshold, show_only_significant=True
         )
     except Exception as e:
         stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
@@ -5346,7 +5346,7 @@ def compare_app_summaries(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
 ) -> Dict[str, Any]:
     """
     Compare application-level summary metrics between two Spark applications.
@@ -5358,7 +5358,7 @@ def compare_app_summaries(
         app_id1: First Spark application ID
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
-        significance_threshold: Minimum difference threshold to show metric (default: 0.2)
+        significance_threshold: Minimum difference threshold to show metric (default: 0.1)
 
     Returns:
         Dictionary containing:
@@ -5447,7 +5447,7 @@ def compare_stages(
     stage_id1: int,
     stage_id2: int,
     server: Optional[str] = None,
-    significance_threshold: float = 0.2,
+    significance_threshold: float = 0.1,
 ) -> Dict[str, Any]:
     """
     Compare specific stages between two Spark applications.
@@ -5461,7 +5461,7 @@ def compare_stages(
         stage_id1: Stage ID from first application
         stage_id2: Stage ID from second application
         server: Optional server name to use (uses default if not specified)
-        significance_threshold: Minimum difference threshold to include metric (default: 0.2)
+        significance_threshold: Minimum difference threshold to include metric (default: 0.1)
 
     Returns:
         Dictionary containing stage comparison with significant differences only
