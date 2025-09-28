@@ -928,7 +928,7 @@ class OutputFormatter:
         total_diffs = summary.get("total_differences_found", 0)
         if total_diffs > 0:
             summary_items.append(
-                f"• {total_diffs} significant performance differences found"
+                f"• {total_diffs} metrics compared"
             )
 
         # Key performance insight
