@@ -41,12 +41,10 @@ from spark_history_mcp.tools.application import list_applications
 # Additional imports for comparison and executor tools
 try:
     from spark_history_mcp.tools_original import (
-        compare_app_executor_timeline,
         _analyze_executor_performance_patterns,
     )
 except ImportError:
     # Fallback if original tools are not available
-    compare_app_executor_timeline = None
     _analyze_executor_performance_patterns = None
 
 # Import compare_stages from the refactored location
@@ -55,11 +53,16 @@ try:
 except ImportError:
     compare_stages = None
 
-# Import compare_stage_executor_timeline from the refactored location
+# Import timeline comparison functions from the refactored location
 try:
     from spark_history_mcp.tools import compare_stage_executor_timeline
 except ImportError:
     compare_stage_executor_timeline = None
+
+try:
+    from spark_history_mcp.tools import compare_app_executor_timeline
+except ImportError:
+    compare_app_executor_timeline = None
 
 
 class TestTools(unittest.TestCase):
@@ -3053,7 +3056,7 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Create applications with different efficiency patterns
         start_time1 = datetime(2024, 1, 1, 10, 0, 0)
-        end_time1 = datetime(2024, 1, 1, 10, 60, 0)  # 1 hour
+        end_time1 = datetime(2024, 1, 1, 11, 0, 0)  # 1 hour
         start_time2 = datetime(2024, 1, 1, 11, 0, 0)
         end_time2 = datetime(2024, 1, 1, 11, 30, 0)  # 30 minutes (faster)
 
