@@ -5,6 +5,7 @@ Provides consistent sorting logic for MCP tools and CLI formatters
 to sort metrics by difference ratios, percentage changes, and other criteria.
 """
 
+import copy
 from typing import Any, Dict
 
 
@@ -167,8 +168,8 @@ def sort_comparison_data(data: Dict[str, Any], sort_key: str = "mixed") -> Dict[
     if not isinstance(data, dict):
         return data
 
-    # Create a copy to avoid modifying the original
-    result = data.copy()
+    # Create a deep copy to avoid modifying the original
+    result = copy.deepcopy(data)
 
     # Common keys that contain sortable metrics (including nested paths)
     metric_keys = [

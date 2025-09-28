@@ -439,18 +439,21 @@ class OutputFormatter:
             "failed_tasks": ("Failed Tasks", "count"),
         }
 
-        # Get all metrics dynamically, excluding application_id
-        all_metrics = [key for key in app1_summary.keys() if key != "application_id"]
+        # Use the sorted order from diff keys (already sorted by MCP tool)
+        # Extract metric names from the sorted diff keys (remove '_change' suffix)
+        sorted_metric_names = [
+            key.replace('_change', '') for key in diff_data.keys()
+            if key.endswith('_change')
+        ]
 
-        # Sort metrics by category for better display
-        priority_order = ["application_duration_minutes", "total_executor_runtime_minutes",
-                         "executor_cpu_time_minutes", "executor_utilization_percent",
-                         "input_data_size_gb", "output_data_size_gb",
-                         "shuffle_read_size_gb", "shuffle_write_size_gb",
-                         "total_stages", "completed_stages", "failed_tasks"]
+        # Add any metrics that don't have change values (shouldn't normally happen)
+        all_available_metrics = [key for key in app1_summary.keys() if key != "application_id"]
+        for metric in all_available_metrics:
+            if metric not in sorted_metric_names:
+                sorted_metric_names.append(metric)
 
-        # Metrics are already sorted by the MCP tool, use existing order
-        for field_name in all_metrics:
+        # Use the sorted order from the MCP tool
+        for field_name in sorted_metric_names:
             # Get display configuration or use field name as fallback
             if field_name in metric_display_config:
                 display_name, format_type = metric_display_config[field_name]
