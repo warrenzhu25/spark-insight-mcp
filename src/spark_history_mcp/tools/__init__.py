@@ -21,6 +21,8 @@ from .application import (
 from .comparisons import (
     compare_app_performance,
     compare_app_summaries,
+    compare_stages,
+    compare_stage_executor_timeline,
     find_top_stage_differences,
 )
 
@@ -76,5 +78,7 @@ __all__ = [
     # Comparison tools
     "compare_app_performance",
     "compare_app_summaries",
+    "compare_stages",
+    "compare_stage_executor_timeline",
     "find_top_stage_differences",
 ]

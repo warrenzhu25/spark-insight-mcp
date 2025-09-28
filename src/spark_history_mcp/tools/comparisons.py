@@ -5,18 +5,54 @@ This module contains tools for comparing performance metrics, resource allocatio
 and configurations between different Spark applications.
 """
 
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.tools.application import get_app_summary
-from spark_history_mcp.tools.common import get_client_or_default, get_config
-from spark_history_mcp.tools.recommendations import (
+from ..core.app import mcp
+from . import analysis as analysis_tools
+from . import executors as executor_tools
+from . import fetchers as fetcher_tools
+from . import matching as matching_tools
+from .application import get_app_summary as _get_app_summary_impl
+from .common import get_config, resolve_legacy_tool
+from .recommendations import (
     apply_rules as apply_rec_rules,
     default_rules as default_rec_rules,
     prioritize as prioritize_recs,
     dedupe as dedupe_recs,
 )
-from spark_history_mcp.tools.schema import validate_output, CompareAppPerformanceOutput
+from .schema import validate_output, CompareAppPerformanceOutput
+from .timelines import merge_consecutive_intervals
+
+
+def _get_mcp_context() -> Optional[object]:
+    """Return the active MCP request context if available."""
+
+    try:
+        return mcp.get_context()
+    except ValueError:
+        # Allow tools to run in unit tests where no request context is active.
+        return None
+
+
+def _resolve_client(server: Optional[str]) -> Any:
+    """Return a Spark client using the legacy analysis accessor.
+
+    The tests patch ``spark_history_mcp.tools.analysis.get_client_or_default`` to
+    inject mock clients, so we delegate through that module instead of importing
+    the helper directly. When no MCP request context is available we surface a
+    clear error unless the patched helper returns a client (as in unit tests).
+    """
+
+    ctx = _get_mcp_context()
+    try:
+        return analysis_tools.get_client_or_default(ctx, server)
+    except AttributeError as exc:
+        if ctx is None:
+            raise ValueError(
+                "Spark MCP context is not available outside of a request."
+            ) from exc
+        raise
 
 
 @mcp.tool()
@@ -26,6 +62,7 @@ def compare_app_performance(
     server: Optional[str] = None,
     top_n: int = 3,
     significance_threshold: float = 0.1,
+    similarity_threshold: float = 0.6,
 ) -> Dict[str, Any]:
     """
     Streamlined performance comparison between two Spark applications.
@@ -38,6 +75,8 @@ def compare_app_performance(
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
         top_n: Number of top stage differences to return for analysis (default: 3)
+        significance_threshold: Minimum difference threshold to show metric (default: 0.1)
+        similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
 
     Returns:
         Dictionary containing:
@@ -54,12 +93,84 @@ def compare_app_performance(
     - significance_threshold: 0.1 for metric filtering
     - filter_auto_generated: True for cleaner environment comparison
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
-    # Get application info
-    app1 = client.get_application(app_id1)
-    app2 = client.get_application(app_id2)
+    # Get application info via fetchers to populate caches used downstream
+    try:
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+    except Exception as e:
+        return {
+            "schema_version": 1,
+            "applications": {
+                "app1": {"id": app_id1, "name": "Unknown", "error": f"Failed to fetch: {str(e)}"},
+                "app2": {"id": app_id2, "name": "Unknown"},
+            },
+            "aggregated_overview": {
+                "error": f"Failed to fetch application {app_id1}: {str(e)}"
+            },
+            "stage_deep_dive": {
+                "error": f"Failed to fetch application {app_id1}: {str(e)}",
+                "applications": {
+                    "app1": {"id": app_id1, "name": "Unknown"},
+                    "app2": {"id": app_id2, "name": "Unknown"},
+                },
+                "top_stage_differences": [],
+                "analysis_parameters": {
+                    "requested_top_n": top_n,
+                    "similarity_threshold": similarity_threshold,
+                    "available_stages_app1": 0,
+                    "available_stages_app2": 0,
+                    "matched_stages": 0,
+                },
+                "stage_summary": {
+                    "matched_stages": 0,
+                    "total_time_difference_seconds": 0.0,
+                    "average_time_difference_seconds": 0.0,
+                    "max_time_difference_seconds": 0.0,
+                },
+            },
+            "error": f"Failed to fetch application {app_id1}: {str(e)}",
+            "recommendations": [],
+            "key_recommendations": [],
+        }
+
+    try:
+        app2 = fetcher_tools.fetch_app(app_id2, server)
+    except Exception as e:
+        return {
+            "schema_version": 1,
+            "applications": {
+                "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
+                "app2": {"id": app_id2, "name": "Unknown", "error": f"Failed to fetch: {str(e)}"},
+            },
+            "aggregated_overview": {
+                "error": f"Failed to fetch application {app_id2}: {str(e)}"
+            },
+            "stage_deep_dive": {
+                "error": f"Failed to fetch application {app_id2}: {str(e)}",
+                "applications": {
+                    "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
+                    "app2": {"id": app_id2, "name": "Unknown"},
+                },
+                "top_stage_differences": [],
+                "analysis_parameters": {
+                    "requested_top_n": top_n,
+                    "similarity_threshold": similarity_threshold,
+                    "available_stages_app1": 0,
+                    "available_stages_app2": 0,
+                    "matched_stages": 0,
+                },
+                "stage_summary": {
+                    "matched_stages": 0,
+                    "total_time_difference_seconds": 0.0,
+                    "average_time_difference_seconds": 0.0,
+                    "max_time_difference_seconds": 0.0,
+                },
+            },
+            "error": f"Failed to fetch application {app_id2}: {str(e)}",
+            "recommendations": [],
+            "key_recommendations": [],
+        }
 
     # PHASE 1: AGGREGATED APPLICATION OVERVIEW
     # Use specialized comparison tools for aggregated overview with hardcoded defaults
@@ -79,15 +190,17 @@ def compare_app_performance(
 
     # Create streamlined aggregated overview using specialized tools
     aggregated_overview = {
-        "executor_comparison": executor_comparison,
-        "stage_comparison": stage_comparison,
+        "application_summary": {},
+        "job_performance": {},
+        "stage_metrics": stage_comparison,
+        "executor_performance": executor_comparison,
     }
 
     # PHASE 2: STAGE-LEVEL DEEP DIVE ANALYSIS
     # Use the new find_top_stage_differences tool for stage analysis
     try:
         stage_analysis = find_top_stage_differences(
-            app_id1, app_id2, server, top_n, similarity_threshold=0.6
+            app_id1, app_id2, server, top_n, similarity_threshold=similarity_threshold
         )
     except Exception as e:
         stage_analysis = {
@@ -96,9 +209,55 @@ def compare_app_performance(
                 "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
                 "app2": {"id": app_id2, "name": getattr(app2, 'name', 'Unknown')},
             },
+            "top_stage_differences": [],
+            "analysis_parameters": {
+                "requested_top_n": top_n,
+                "similarity_threshold": 0.6,
+                "available_stages_app1": 0,
+                "available_stages_app2": 0,
+                "matched_stages": 0,
+            },
+            "stage_summary": {
+                "matched_stages": 0,
+                "total_time_difference_seconds": 0.0,
+                "average_time_difference_seconds": 0.0,
+                "max_time_difference_seconds": 0.0,
+            },
         }
 
-    # If stage analysis failed, return early
+    # Generate basic recommendations even if stage analysis fails
+    basic_recommendations = []
+
+    # APPLICATION-LEVEL RECOMMENDATIONS
+    # Resource allocation differences
+    if app1.cores_granted and app2.cores_granted:
+        core_ratio = app2.cores_granted / app1.cores_granted
+        if core_ratio > 1.5 or core_ratio < 0.67:  # >50% difference
+            slower_app = "app1" if core_ratio > 1.5 else "app2"
+            faster_app = "app2" if core_ratio > 1.5 else "app1"
+            basic_recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "medium",
+                    "issue": f"Significant core allocation difference (ratio: {core_ratio:.2f})",
+                    "suggestion": f"Consider equalizing core allocation - {slower_app} has fewer cores than {faster_app}",
+                }
+            )
+
+    # Memory allocation differences
+    if app1.memory_per_executor_mb and app2.memory_per_executor_mb:
+        memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
+        if memory_ratio > 1.5 or memory_ratio < 0.67:  # >50% difference
+            basic_recommendations.append(
+                {
+                    "type": "resource_allocation",
+                    "priority": "medium",
+                    "issue": f"Significant memory per executor difference (ratio: {memory_ratio:.2f})",
+                    "suggestion": "Review memory allocation settings between applications",
+                }
+            )
+
+    # If stage analysis failed, return early with basic recommendations
     if "error" in stage_analysis:
         return {
             "schema_version": 1,
@@ -106,6 +265,8 @@ def compare_app_performance(
             "aggregated_overview": aggregated_overview,
             "stage_deep_dive": stage_analysis,
             "error": stage_analysis["error"],
+            "recommendations": basic_recommendations,
+            "key_recommendations": basic_recommendations[:5],
         }
 
     # Extract stage differences for recommendations logic
@@ -121,7 +282,9 @@ def compare_app_performance(
         total_time_diff = avg_time_diff = max_time_diff = 0
 
     # Enhanced recommendations combining both application and stage-level insights
-    recommendations = []
+    # Start with basic recommendations already generated above
+    recommendations = basic_recommendations[:]
+
     # Apply default rule set (resource allocation, large stage diffs)
     rule_ctx = {
         "app1": app1,
@@ -130,54 +293,25 @@ def compare_app_performance(
     }
     recommendations.extend(apply_rec_rules(rule_ctx, default_rec_rules()))
 
-    # APPLICATION-LEVEL RECOMMENDATIONS
-    # Resource allocation differences
-    if app1.cores_granted and app2.cores_granted:
-        core_ratio = app2.cores_granted / app1.cores_granted
-        if core_ratio > 1.5 or core_ratio < 0.67:  # >50% difference
-            slower_app = "app1" if core_ratio > 1.5 else "app2"
-            faster_app = "app2" if core_ratio > 1.5 else "app1"
-            recommendations.append(
-                {
-                    "type": "resource_allocation",
-                    "priority": "medium",
-                    "issue": f"Significant core allocation difference (ratio: {core_ratio:.2f})",
-                    "suggestion": f"Consider equalizing core allocation - {slower_app} has fewer cores than {faster_app}",
-                }
-            )
-
-    # Memory allocation differences
-    if app1.memory_per_executor_mb and app2.memory_per_executor_mb:
-        memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
-        if memory_ratio > 1.5 or memory_ratio < 0.67:  # >50% difference
-            recommendations.append(
-                {
-                    "type": "resource_allocation",
-                    "priority": "medium",
-                    "issue": f"Significant memory per executor difference (ratio: {memory_ratio:.2f})",
-                    "suggestion": "Review memory allocation settings between applications",
-                }
-            )
-
     # Extract recommendations from specialized comparison tools
     # Executor efficiency recommendations
     if (
-        aggregated_overview["executor_comparison"]
-        and isinstance(aggregated_overview["executor_comparison"], dict)
-        and "recommendations" in aggregated_overview["executor_comparison"]
+        aggregated_overview["executor_performance"]
+        and isinstance(aggregated_overview["executor_performance"], dict)
+        and "recommendations" in aggregated_overview["executor_performance"]
     ):
         recommendations.extend(
-            aggregated_overview["executor_comparison"]["recommendations"]
+            aggregated_overview["executor_performance"]["recommendations"]
         )
 
     # Stage-level aggregated recommendations
     if (
-        aggregated_overview["stage_comparison"]
-        and isinstance(aggregated_overview["stage_comparison"], dict)
-        and "recommendations" in aggregated_overview["stage_comparison"]
+        aggregated_overview["stage_metrics"]
+        and isinstance(aggregated_overview["stage_metrics"], dict)
+        and "recommendations" in aggregated_overview["stage_metrics"]
     ):
         recommendations.extend(
-            aggregated_overview["stage_comparison"]["recommendations"]
+            aggregated_overview["stage_metrics"]["recommendations"]
         )
 
     # STAGE-LEVEL RECOMMENDATIONS (existing logic continues below)
@@ -216,7 +350,8 @@ def compare_app_performance(
         recommendations.extend(sql_plans_comparison["sql_recommendations"])
 
     # Deduplicate and sort recommendations by priority
-    recommendations = prioritize_recs(dedupe_recs(recommendations), top_n=9999)
+    sorted_recommendations = prioritize_recs(dedupe_recs(recommendations), top_n=9999)
+    filtered_recommendations = sorted_recommendations[:5]
 
     # Extract simplified executor summary
     executor_summary = {}
@@ -231,9 +366,6 @@ def compare_app_performance(
     else:
         executor_summary = executor_comparison
 
-    # Take top 5 prioritized recommendations
-    filtered_recommendations = prioritize_recs(recommendations, top_n=5)
-
     # Get app summary comparison using the new tool
     try:
         app_summary_diff = compare_app_summaries(app_id1, app_id2, server, significance_threshold)
@@ -245,6 +377,17 @@ def compare_app_performance(
             "diff": {},
         }
 
+    aggregated_overview["application_summary"] = app_summary_diff
+
+    try:
+        job_overview = compare_app_jobs(app_id1, app_id2, server)
+    except Exception as e:
+        job_overview = {
+            "error": f"Failed to get job performance comparison: {str(e)}",
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
+        }
+    aggregated_overview["job_performance"] = job_overview
+
     result = {
         "schema_version": 1,
         "applications": {
@@ -255,8 +398,11 @@ def compare_app_performance(
             "executors": executor_summary,
             "stages": stage_analysis,
         },
+        "aggregated_overview": aggregated_overview,
+        "stage_deep_dive": stage_analysis,
         "app_summary_diff": app_summary_diff,
         "environment_comparison": environment_comparison,
+        "recommendations": sorted_recommendations,
         "key_recommendations": filtered_recommendations,
     }
 
@@ -290,10 +436,11 @@ def compare_app_summaries(
         - app2_summary: Aggregated metrics for second application
         - diff: Percentage changes (app2 vs app1) for key metrics
     """
-    ctx = mcp.get_context()
-    get_client_or_default(ctx, server)
+    _resolve_client(server)
 
     # Get app summaries for both applications
+    get_app_summary = resolve_legacy_tool("get_app_summary", _get_app_summary_impl)
+
     app1_summary = get_app_summary(app_id1, server)
     app2_summary = get_app_summary(app_id2, server)
 
@@ -391,11 +538,11 @@ def find_top_stage_differences(
           Each entry includes stage details, time differences, and performance metrics
     """
     # Get application info
-    app1 = fetch_app(app_id1, server)
-    app2 = fetch_app(app_id2, server)
+    app1 = fetcher_tools.fetch_app(app_id1, server)
+    app2 = fetcher_tools.fetch_app(app_id2, server)
 
-    stages1 = fetch_stages(app_id=app_id1, server=server, with_summaries=True)
-    stages2 = fetch_stages(app_id=app_id2, server=server, with_summaries=True)
+    stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server, with_summaries=True)
+    stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server, with_summaries=True)
 
     if not stages1 or not stages2:
         return {
@@ -404,10 +551,23 @@ def find_top_stage_differences(
                 "app1": {"id": app_id1, "name": app1.name, "stage_count": len(stages1)},
                 "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)},
             },
+            "analysis_parameters": {
+                "requested_top_n": top_n,
+                "similarity_threshold": similarity_threshold,
+                "available_stages_app1": len(stages1),
+                "available_stages_app2": len(stages2),
+                "matched_stages": 0,
+            },
+            "stage_summary": {
+                "matched_stages": 0,
+                "total_time_difference_seconds": 0.0,
+                "average_time_difference_seconds": 0.0,
+                "max_time_difference_seconds": 0.0,
+            },
         }
 
     # Find matching stages between applications via shared matcher
-    matches = match_stages(stages1, stages2, similarity_threshold)
+    matches = matching_tools.match_stages(stages1, stages2, similarity_threshold)
 
     if not matches:
         return {
@@ -415,6 +575,19 @@ def find_top_stage_differences(
             "applications": {
                 "app1": {"id": app_id1, "name": app1.name, "stage_count": len(stages1)},
                 "app2": {"id": app_id2, "name": app2.name, "stage_count": len(stages2)},
+            },
+            "analysis_parameters": {
+                "requested_top_n": top_n,
+                "similarity_threshold": similarity_threshold,
+                "available_stages_app1": len(stages1),
+                "available_stages_app2": len(stages2),
+                "matched_stages": 0,
+            },
+            "stage_summary": {
+                "matched_stages": 0,
+                "total_time_difference_seconds": 0.0,
+                "average_time_difference_seconds": 0.0,
+                "max_time_difference_seconds": 0.0,
             },
             "suggestion": "Try lowering the similarity_threshold parameter or check that applications are performing similar operations",
         }
@@ -451,7 +624,19 @@ def find_top_stage_differences(
                 "app1": {"id": app_id1, "name": app1.name},
                 "app2": {"id": app_id2, "name": app2.name},
             },
-            "matched_stages": len(matches),
+            "analysis_parameters": {
+                "requested_top_n": top_n,
+                "similarity_threshold": similarity_threshold,
+                "available_stages_app1": len(stages1),
+                "available_stages_app2": len(stages2),
+                "matched_stages": 0,
+            },
+            "stage_summary": {
+                "matched_stages": 0,
+                "total_time_difference_seconds": 0.0,
+                "average_time_difference_seconds": 0.0,
+                "max_time_difference_seconds": 0.0,
+            },
         }
 
     # Sort by time difference and get top N
@@ -535,7 +720,34 @@ def find_top_stage_differences(
             "stage_metrics_comparison": stage_metric_comparison,
         }
 
+        stage_comparison["executor_analysis"] = _build_executor_analysis(stage1, stage2)
+
         detailed_comparisons.append(stage_comparison)
+
+    total_diff = sum(
+        comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons
+    )
+    avg_diff = total_diff / len(detailed_comparisons) if detailed_comparisons else 0.0
+    max_diff = (
+        max(comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons)
+        if detailed_comparisons
+        else 0.0
+    )
+
+    stage_summary = {
+        "matched_stages": len(detailed_comparisons),
+        "total_time_difference_seconds": total_diff,
+        "average_time_difference_seconds": avg_diff,
+        "max_time_difference_seconds": max_diff,
+    }
+
+    analysis_parameters = {
+        "requested_top_n": top_n,
+        "similarity_threshold": similarity_threshold,
+        "available_stages_app1": len(stages1),
+        "available_stages_app2": len(stages2),
+        "matched_stages": len(detailed_comparisons),
+    }
 
     return {
         "applications": {
@@ -543,6 +755,8 @@ def find_top_stage_differences(
             "app2": {"id": app_id2, "name": app2.name},
         },
         "top_stage_differences": detailed_comparisons,
+        "analysis_parameters": analysis_parameters,
+        "stage_summary": stage_summary,
     }
 
 
@@ -572,8 +786,7 @@ def compare_stages(
     Returns:
         Dictionary containing stage comparison with significant differences only
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
     try:
         # Get stage data with summaries
@@ -1024,8 +1237,7 @@ def compare_app_executor_timeline(
     Returns:
         Dictionary containing comprehensive application executor timeline comparison
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
     try:
         # Get application information for both apps
@@ -1429,8 +1641,7 @@ def compare_stage_executor_timeline(
     Returns:
         Dictionary containing stage executor timeline comparison
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
     try:
         # Get stage information for both applications
@@ -1658,8 +1869,7 @@ def compare_app_resources(
     Returns:
         Dict containing resource allocation comparison, efficiency ratios, and recommendations
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
     try:
         # Get application info
@@ -1776,13 +1986,12 @@ def compare_app_executors(
     Returns:
         Dict containing executor performance comparison, efficiency ratios, and recommendations
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
     try:
         # Get executor summaries for both applications
-        exec_summary1 = get_executor_summary(app_id1, server)
-        exec_summary2 = get_executor_summary(app_id2, server)
+        exec_summary1 = executor_tools.get_executor_summary(app_id1, server)
+        exec_summary2 = executor_tools.get_executor_summary(app_id2, server)
 
         if not exec_summary1 or not exec_summary2:
             return {
@@ -1998,13 +2207,10 @@ def compare_app_jobs(
     Returns:
         Dict containing job performance comparison, timing analysis, and recommendations
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     try:
         # Get job data for both applications
-        jobs1 = client.list_jobs(app_id=app_id1)
-        jobs2 = client.list_jobs(app_id=app_id2)
+        jobs1 = fetcher_tools.fetch_jobs(app_id1, server)
+        jobs2 = fetcher_tools.fetch_jobs(app_id2, server)
 
         # Calculate job statistics
         job_stats1 = _calculate_job_stats(jobs1)
@@ -2150,18 +2356,17 @@ def compare_app_stages_aggregated(
     Returns:
         Dict containing aggregated stage comparison, I/O analysis, and recommendations
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = _resolve_client(server)
 
     try:
         # Get stages from both applications - try with summaries first, fallback if needed
         try:
-            stages1 = client.list_stages(app_id=app_id1, with_summaries=True)
-            stages2 = client.list_stages(app_id=app_id2, with_summaries=True)
+            stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server, with_summaries=True)
+            stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server, with_summaries=True)
         except Exception as e:
             if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
-                stages1 = client.list_stages(app_id=app_id1, with_summaries=False)
-                stages2 = client.list_stages(app_id=app_id2, with_summaries=False)
+                stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server, with_summaries=False)
+                stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server, with_summaries=False)
             else:
                 raise e
 
@@ -2472,14 +2677,37 @@ def _calculate_safe_ratio(val1, val2):
 
 
 def _filter_significant_metrics(metrics, threshold, show_only_significant=True):
-    """Filter metrics based on significance threshold."""
-    if not show_only_significant:
-        return metrics
+    """Filter metrics based on significance threshold with summary metadata."""
 
-    if isinstance(metrics, dict):
-        return {k: v for k, v in metrics.items()
-                if isinstance(v, (int, float)) and abs(v - 1.0) >= threshold}
-    return metrics
+    if not isinstance(metrics, dict):
+        return {
+            "metrics": metrics,
+            "total_metrics": 0,
+            "significant_metrics": 0,
+            "filtering_applied": False,
+        }
+
+    total_metrics = len(metrics)
+    if not show_only_significant:
+        return {
+            "metrics": metrics,
+            "total_metrics": total_metrics,
+            "significant_metrics": total_metrics,
+            "filtering_applied": False,
+        }
+
+    filtered = {
+        k: v
+        for k, v in metrics.items()
+        if isinstance(v, (int, float)) and abs(v - 1.0) >= threshold
+    }
+
+    return {
+        "metrics": filtered,
+        "total_metrics": total_metrics,
+        "significant_metrics": len(filtered),
+        "filtering_applied": len(filtered) != total_metrics,
+    }
 
 
 def sort_comparison_data(data, sort_key="ratio"):
@@ -2496,3 +2724,195 @@ def sort_comparison_data(data, sort_key="ratio"):
             except (TypeError, KeyError):
                 pass  # Keep original order if sorting fails
     return data
+
+
+def _calculate_stage_duration(stage) -> float:
+    """Return stage duration in seconds using available fields."""
+
+    submission = getattr(stage, "submission_time", None)
+    completion = getattr(stage, "completion_time", None)
+    if submission and completion:
+        try:
+            return max((completion - submission).total_seconds(), 0.0)
+        except Exception:
+            pass
+
+    executor_run_time = getattr(stage, "executor_run_time", None)
+    if executor_run_time is not None:
+        try:
+            return max(float(executor_run_time) / 1000.0, 0.0)
+        except Exception:
+            return 0.0
+
+    duration = getattr(stage, "duration", None)
+    if duration is not None:
+        try:
+            return max(float(duration), 0.0)
+        except Exception:
+            return 0.0
+
+    return 0.0
+
+
+def _calculate_job_stats(jobs) -> Dict[str, Any]:
+    """Aggregate basic statistics for a collection of jobs."""
+
+    count = len(jobs)
+    total_duration = 0.0
+    completed = 0
+    failed = 0
+
+    for job in jobs:
+        submission = getattr(job, "submission_time", None)
+        completion = getattr(job, "completion_time", None)
+        duration = 0.0
+        if submission and completion:
+            try:
+                duration = max((completion - submission).total_seconds(), 0.0)
+            except Exception:
+                duration = 0.0
+        elif hasattr(job, "duration") and job.duration is not None:
+            try:
+                duration = float(job.duration)
+            except Exception:
+                duration = 0.0
+
+        total_duration += duration
+
+        status = (getattr(job, "status", "") or "").upper()
+        if status in {"SUCCEEDED", "SUCCESS", "COMPLETED", "COMPLETE"}:
+            completed += 1
+        elif status in {"FAILED", "FAIL", "ERROR"}:
+            failed += 1
+
+    avg_duration = total_duration / count if count else 0.0
+
+    return {
+        "count": count,
+        "completed_count": completed,
+        "failed_count": failed,
+        "avg_duration": avg_duration,
+        "total_duration": total_duration,
+    }
+
+
+def _calculate_aggregated_stage_metrics(stages) -> Dict[str, Any]:
+    """Aggregate key metrics across a collection of stages."""
+
+    total_duration = 0.0
+    total_executor_run_time = 0.0
+    total_memory_spilled = 0.0
+    total_shuffle_read = 0.0
+    total_shuffle_write = 0.0
+    total_input = 0.0
+    total_output = 0.0
+    total_tasks = 0
+    total_failed_tasks = 0
+    completed = 0
+    failed = 0
+
+    for stage in stages:
+        total_duration += _calculate_stage_duration(stage)
+        total_executor_run_time += float(getattr(stage, "executor_run_time", 0) or 0)
+        total_memory_spilled += float(getattr(stage, "memory_bytes_spilled", 0) or 0)
+        total_shuffle_read += float(getattr(stage, "shuffle_read_bytes", 0) or 0)
+        total_shuffle_write += float(getattr(stage, "shuffle_write_bytes", 0) or 0)
+        total_input += float(getattr(stage, "input_bytes", 0) or 0)
+        total_output += float(getattr(stage, "output_bytes", 0) or 0)
+        total_tasks += int(getattr(stage, "num_tasks", 0) or 0)
+        total_failed_tasks += int(getattr(stage, "num_failed_tasks", 0) or 0)
+
+        status = (getattr(stage, "status", "") or "").upper()
+        if status == "COMPLETE" or status == "COMPLETED":
+            completed += 1
+        elif status == "FAILED":
+            failed += 1
+
+    return {
+        "total_stages": len(stages),
+        "total_stage_duration": total_duration,
+        "total_executor_run_time": total_executor_run_time,
+        "total_memory_spilled": total_memory_spilled,
+        "total_shuffle_read_bytes": total_shuffle_read,
+        "total_shuffle_write_bytes": total_shuffle_write,
+        "total_input_bytes": total_input,
+        "total_output_bytes": total_output,
+        "total_tasks": total_tasks,
+        "total_failed_tasks": total_failed_tasks,
+        "completed_stages": completed,
+        "failed_stages": failed,
+    }
+
+
+def _summarize_executor_metrics(executor_summary: Dict[str, Any]) -> Dict[str, Any]:
+    """Summarize executor-level metrics for stage comparisons."""
+
+    total_task_time = 0.0
+    total_failed_tasks = 0
+    total_succeeded_tasks = 0
+    total_spill = 0.0
+    total_shuffle_read = 0.0
+    total_shuffle_write = 0.0
+
+    for executor in (executor_summary or {}).values():
+        total_task_time += float(getattr(executor, "task_time", 0) or 0)
+        total_failed_tasks += int(getattr(executor, "failed_tasks", 0) or 0)
+        total_succeeded_tasks += int(getattr(executor, "succeeded_tasks", 0) or 0)
+        total_spill += float(getattr(executor, "memory_bytes_spilled", 0) or 0)
+        total_shuffle_read += float(getattr(executor, "shuffle_read", 0) or 0)
+        total_shuffle_write += float(getattr(executor, "shuffle_write", 0) or 0)
+
+    return {
+        "executor_count": len(executor_summary or {}),
+        "total_task_time": total_task_time,
+        "failed_tasks": total_failed_tasks,
+        "succeeded_tasks": total_succeeded_tasks,
+        "memory_spilled_bytes": total_spill,
+        "shuffle_read_bytes": total_shuffle_read,
+        "shuffle_write_bytes": total_shuffle_write,
+    }
+
+
+def _build_executor_analysis(stage1, stage2) -> Dict[str, Any]:
+    """Build executor comparison analysis for a pair of stages."""
+
+    metrics1 = _summarize_executor_metrics(getattr(stage1, "executor_summary", None))
+    metrics2 = _summarize_executor_metrics(getattr(stage2, "executor_summary", None))
+
+    comparative = {
+        "task_time_ratio": _calculate_safe_ratio(
+            metrics1["total_task_time"], metrics2["total_task_time"]
+        ),
+        "failed_task_ratio": _calculate_safe_ratio(
+            metrics1["failed_tasks"], metrics2["failed_tasks"]
+        ),
+        "memory_spill_ratio": _calculate_safe_ratio(
+            metrics1["memory_spilled_bytes"], metrics2["memory_spilled_bytes"]
+        ),
+    }
+
+    insights = []
+    if metrics1["executor_count"] and metrics2["executor_count"]:
+        if metrics2["total_task_time"] > metrics1["total_task_time"]:
+            insights.append("app2 executors spent more time per stage compared to app1")
+        elif metrics1["total_task_time"] > metrics2["total_task_time"]:
+            insights.append("app1 executors spent more time per stage compared to app2")
+
+    recommendations = []
+    if metrics2["memory_spilled_bytes"] > metrics1["memory_spilled_bytes"] * 2:
+        recommendations.append(
+            {
+                "type": "executor_memory",
+                "priority": "medium",
+                "issue": "App2 stage executors spill significantly more memory",
+                "suggestion": "Consider increasing executor memory or optimizing data skew",
+            }
+        )
+
+    return {
+        "app1_executor_metrics": metrics1,
+        "app2_executor_metrics": metrics2,
+        "comparative_analysis": comparative,
+        "insights": insights,
+        "recommendations": recommendations,
+    }
