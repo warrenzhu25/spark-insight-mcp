@@ -4280,28 +4280,21 @@ def compare_app_executors(
                 },
             }
 
-        # Calculate executor performance ratios with proper zero handling
-        executor_comparison = {
-            "executor_count_ratio": _calculate_safe_ratio(
-                exec_summary1.get("total_executors", 0),
-                exec_summary2.get("total_executors", 0),
-            ),
-            "memory_usage_ratio": _calculate_safe_ratio(
-                exec_summary1.get("memory_used", 0), exec_summary2.get("memory_used", 0)
-            ),
-            "task_completion_ratio": _calculate_safe_ratio(
-                exec_summary1.get("completed_tasks", 0),
-                exec_summary2.get("completed_tasks", 0),
-            ),
-            "gc_time_ratio": _calculate_safe_ratio(
-                exec_summary1.get("total_gc_time", 0),
-                exec_summary2.get("total_gc_time", 0),
-            ),
-            "active_tasks_ratio": _calculate_safe_ratio(
-                exec_summary1.get("active_tasks", 0),
-                exec_summary2.get("active_tasks", 0),
-            ),
-        }
+        # Dynamic executor performance ratios - include all numeric fields from executor summaries
+        exclude_fields = {"active_executors"}  # active_executors is calculated differently
+
+        # Filter to only comparable numeric metrics from get_executor_summary
+        app1_metrics = {k: v for k, v in exec_summary1.items()
+                       if k not in exclude_fields and isinstance(v, (int, float))}
+        app2_metrics = {k: v for k, v in exec_summary2.items()
+                       if k not in exclude_fields and isinstance(v, (int, float))}
+
+        # Calculate dynamic performance ratios with proper zero handling
+        executor_comparison = {}
+        for metric in app1_metrics.keys():
+            if metric in app2_metrics:
+                ratio = _calculate_safe_ratio(app1_metrics[metric], app2_metrics[metric])
+                executor_comparison[f"{metric}_ratio"] = ratio
 
         # Calculate efficiency metrics
         efficiency_metrics = {}
@@ -4338,43 +4331,43 @@ def compare_app_executors(
         recommendations = []
 
         # Executor scaling analysis
-        if executor_comparison["executor_count_ratio"] > 1.5:
+        if executor_comparison.get("total_executors_ratio", 1) > 1.5:
             recommendations.append(
                 {
                     "type": "executor_scaling",
                     "priority": "medium",
-                    "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x more executors than App1",
+                    "issue": f"App2 uses {executor_comparison['total_executors_ratio']:.1f}x more executors than App1",
                     "suggestion": "Evaluate if App2 needs this level of parallelism or if resources can be optimized",
                 }
             )
-        elif executor_comparison["executor_count_ratio"] < 0.7:
+        elif executor_comparison.get("total_executors_ratio", 1) < 0.7:
             recommendations.append(
                 {
                     "type": "executor_scaling",
                     "priority": "high",
-                    "issue": f"App2 uses {executor_comparison['executor_count_ratio']:.1f}x fewer executors than App1",
+                    "issue": f"App2 uses {executor_comparison['total_executors_ratio']:.1f}x fewer executors than App1",
                     "suggestion": "App2 may benefit from increased parallelism - consider scaling up executors",
                 }
             )
 
         # Memory efficiency analysis
-        if executor_comparison["memory_usage_ratio"] > 2.0:
+        if executor_comparison.get("memory_used_ratio", 1) > 2.0:
             recommendations.append(
                 {
                     "type": "memory_efficiency",
                     "priority": "medium",
-                    "issue": f"App2 uses {executor_comparison['memory_usage_ratio']:.1f}x more memory than App1",
+                    "issue": f"App2 uses {executor_comparison['memory_used_ratio']:.1f}x more memory than App1",
                     "suggestion": "Review App2's memory usage patterns - may indicate inefficient data structures or caching",
                 }
             )
 
         # GC performance analysis
-        if executor_comparison["gc_time_ratio"] > 2.0:
+        if executor_comparison.get("total_gc_time_ratio", 1) > 2.0:
             recommendations.append(
                 {
                     "type": "gc_performance",
                     "priority": "high",
-                    "issue": f"App2 has {executor_comparison['gc_time_ratio']:.1f}x more GC time than App1",
+                    "issue": f"App2 has {executor_comparison['total_gc_time_ratio']:.1f}x more GC time than App1",
                     "suggestion": "App2 experiencing memory pressure - consider increasing executor memory or optimizing data structures",
                 }
             )
