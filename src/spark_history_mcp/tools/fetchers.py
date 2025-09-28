@@ -34,7 +34,7 @@ def _cache_set(key: Tuple[Any, ...], value: Any):
 def fetch_app(app_id: str, server: Optional[str] = None):
     # Prefer legacy shim to keep unit tests compatible where it's patched
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)
@@ -49,7 +49,7 @@ def fetch_jobs(
     app_id: str, server: Optional[str] = None, status: Optional[List[str]] = None
 ):
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)
@@ -72,7 +72,7 @@ def fetch_stages(
     with_summaries: bool = False,
 ):
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)
@@ -101,7 +101,7 @@ def fetch_stages(
 
 def fetch_executors(app_id: str, server: Optional[str] = None, include_inactive: bool = True):
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)
@@ -122,7 +122,7 @@ def fetch_stage_attempt(
     with_summaries: bool = False,
 ):
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)
@@ -156,7 +156,7 @@ def fetch_stage_attempts(
     with_summaries: bool = False,
 ):
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)
@@ -194,7 +194,7 @@ def fetch_sql_pages(
     If paging is not supported by the client, falls back to a single call.
     """
     try:
-        from .tools import get_client_or_default as _shim
+        from .analysis import get_client_or_default as _shim
         client = _shim(mcp.get_context(), server)
     except Exception:
         client = get_client(mcp.get_context(), server)

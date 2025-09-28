@@ -178,7 +178,7 @@ class TestAppIdentifierResolution:
         assert app_id2 == "app-789"
         assert "Resolved 'Daily Job' to: app-789" in feedback
 
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_resolve_app_name_recent_apps_one_found(self, mock_list_apps):
         mock_client = MagicMock()
         # Return exactly 1 match
@@ -188,7 +188,7 @@ class TestAppIdentifierResolution:
             resolve_app_name_to_recent_apps('Name', mock_client, None, limit=2)
         assert 'Only found 1 application matching' in str(exc.value)
 
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_resolve_app_name_recent_apps_too_many(self, mock_list_apps):
         mock_client = MagicMock()
         # Return 3 matches (limit defaults to 2)
@@ -261,7 +261,7 @@ class TestCompareAppsCommand:
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
     @patch('spark_history_mcp.cli.commands.compare.resolve_app_identifiers')
     @patch('spark_history_mcp.cli.commands.compare.save_comparison_context')
-    @patch('spark_history_mcp.tools.tools.compare_app_performance')
+    @patch('spark_history_mcp.tools.compare_app_performance')
     def test_compare_apps_basic_success(self, mock_compare_perf, mock_save_context, mock_resolve, mock_get_client, cli_runner):
         """Test basic successful app comparison."""
         # Setup mocks
@@ -321,7 +321,7 @@ class TestCompareStagesCommand:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_stages')
+    @patch('spark_history_mcp.tools_original.compare_stages')
     def test_compare_stages_with_context(self, mock_compare_stages, mock_get_client, mock_get_context, cli_runner):
         """Test stage comparison using saved context."""
         # Setup mocks
@@ -355,7 +355,7 @@ class TestCompareStagesCommand:
         )
 
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_stages')
+    @patch('spark_history_mcp.tools_original.compare_stages')
     def test_compare_stages_with_apps_override(self, mock_compare_stages, mock_get_client, cli_runner):
         """Test stage comparison with explicit app override."""
         mock_client = MagicMock()
@@ -380,7 +380,7 @@ class TestCompareTimelineCommand:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_executor_timeline')
+    @patch('spark_history_mcp.tools_original.compare_app_executor_timeline')
     def test_compare_timeline_basic(self, mock_compare_timeline, mock_get_client, mock_get_context, cli_runner):
         """Test basic timeline comparison."""
         mock_get_context.return_value = ("app-123", "app-456", "local")
@@ -407,7 +407,7 @@ class TestCompareExecutorsCommand:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_executors')
+    @patch('spark_history_mcp.tools_original.compare_app_executors')
     def test_compare_executors_with_filtering(self, mock_compare_execs, mock_get_client, mock_get_context, cli_runner):
         """Test executor comparison with significance filtering."""
         mock_get_context.return_value = ("app-123", "app-456", "local")
@@ -479,7 +479,7 @@ class TestAdditionalCompareCommands:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_resources')
+    @patch('spark_history_mcp.tools_original.compare_app_resources')
     def test_compare_resources_with_override(self, mock_compare_resources, mock_get_client, mock_get_context, cli_runner):
         mock_get_context.return_value = ("app-111", "app-222", "local")
         mock_get_client.return_value = MagicMock()
@@ -498,7 +498,7 @@ class TestAdditionalCompareCommands:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_stage_executor_timeline')
+    @patch('spark_history_mcp.tools_original.compare_stage_executor_timeline')
     def test_stage_timeline_basic(self, mock_stage_timeline, mock_get_client, mock_get_context, cli_runner):
         mock_get_context.return_value = ("app-1", "app-2", "local")
         mock_get_client.return_value = MagicMock()
@@ -516,7 +516,7 @@ class TestAdditionalCompareCommands:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_stages_aggregated')
+    @patch('spark_history_mcp.tools_original.compare_app_stages_aggregated')
     def test_stages_aggregated_basic(self, mock_stages_agg, mock_get_client, mock_get_context, cli_runner):
         mock_get_context.return_value = ("app-1", "app-2", "local")
         mock_get_client.return_value = MagicMock()
@@ -531,7 +531,7 @@ class TestAdditionalCompareCommands:
 
     @patch('spark_history_mcp.cli.commands.compare.resolve_app_identifiers')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_jobs')
+    @patch('spark_history_mcp.tools_original.compare_app_jobs')
     def test_jobs_basic(self, mock_compare_jobs, mock_get_client, mock_resolve, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_resolve.return_value = ("app-1", "app-2", None)
@@ -543,7 +543,7 @@ class TestAdditionalCompareCommands:
 
     @patch('spark_history_mcp.cli.commands.compare.resolve_app_identifiers')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_performance')
+    @patch('spark_history_mcp.tools.compare_app_performance')
     @patch('click.getchar', return_value='q')
     def test_apps_interactive_quit(self, mock_getchar, mock_compare_perf, mock_get_client, mock_resolve, cli_runner):
         mock_get_client.return_value = MagicMock()
@@ -602,7 +602,7 @@ class TestCompareAppsInteractiveMenu:
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
     @patch('spark_history_mcp.cli.commands.compare.save_comparison_context')
     @patch('spark_history_mcp.cli.commands.compare.resolve_app_identifiers')
-    @patch('spark_history_mcp.tools.tools.compare_app_performance')
+    @patch('spark_history_mcp.tools.compare_app_performance')
     @patch('click.getchar', return_value='1')
     @patch('spark_history_mcp.cli.commands.compare.execute_stage_comparison')
     def test_apps_interactive_stage_selection(
@@ -651,7 +651,7 @@ class TestCompareStagesPostMenu:
     @patch('spark_history_mcp.cli.commands.compare.get_app_context')
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
     @patch('spark_history_mcp.cli.commands.compare.load_comparison_context', return_value=("app-1","app-2","local"))
-    @patch('spark_history_mcp.tools.tools.compare_stages')
+    @patch('spark_history_mcp.tools_original.compare_stages')
     @patch('click.getchar', return_value='q')
     def test_stages_human_triggers_post_menu(
         self,
@@ -697,7 +697,7 @@ class TestCompareStatusClearAndTimelineOverride:
         assert 'No comparison context to clear' in result.output
 
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_executor_timeline')
+    @patch('spark_history_mcp.tools_original.compare_app_executor_timeline')
     def test_timeline_with_override(self, mock_compare_tl, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_compare_tl.return_value = {"timeline": []}
@@ -712,7 +712,7 @@ class TestExecuteHelpers:
 
     @patch('spark_history_mcp.cli.commands.compare.load_comparison_context', return_value=("app-1","app-2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_stages')
+    @patch('spark_history_mcp.tools_original.compare_stages')
     def test_execute_stage_comparison(self, mock_compare_stages, mock_get_client, mock_load_ctx, capsys):
         from types import SimpleNamespace
         from spark_history_mcp.cli.commands.compare import execute_stage_comparison
@@ -726,7 +726,7 @@ class TestExecuteHelpers:
         mock_compare_stages.assert_called_once()
 
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_executor_timeline')
+    @patch('spark_history_mcp.tools_original.compare_app_executor_timeline')
     def test_execute_timeline_comparison(self, mock_compare_tl, mock_get_client, capsys):
         from types import SimpleNamespace
         from spark_history_mcp.cli.commands.compare import execute_timeline_comparison
@@ -741,7 +741,7 @@ class TestExecuteHelpers:
 
     @patch('spark_history_mcp.cli.commands.compare.load_comparison_context', return_value=("app-1","app-2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_stage_executor_timeline')
+    @patch('spark_history_mcp.tools_original.compare_stage_executor_timeline')
     def test_execute_stage_timeline_comparison(self, mock_compare_stage_tl, mock_get_client, mock_load_ctx, capsys):
         from types import SimpleNamespace
         from spark_history_mcp.cli.commands.compare import execute_stage_timeline_comparison
@@ -768,7 +768,7 @@ class TestExecuteHelpers:
 class TestCompareMoreErrorsAndBranches:
     @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_jobs', side_effect=Exception('boom'))
+    @patch('spark_history_mcp.tools_original.compare_app_jobs', side_effect=Exception('boom'))
     def test_jobs_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(compare, ['jobs'], obj={'config_path': Path('/tmp/config.yaml')})
@@ -777,7 +777,7 @@ class TestCompareMoreErrorsAndBranches:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_resources', side_effect=Exception('boom'))
+    @patch('spark_history_mcp.tools_original.compare_app_resources', side_effect=Exception('boom'))
     def test_resources_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(compare, ['resources'], obj={'config_path': Path('/tmp/config.yaml')})
@@ -786,7 +786,7 @@ class TestCompareMoreErrorsAndBranches:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_executor_timeline', side_effect=Exception('boom'))
+    @patch('spark_history_mcp.tools_original.compare_app_executor_timeline', side_effect=Exception('boom'))
     def test_timeline_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(compare, ['timeline'], obj={'config_path': Path('/tmp/config.yaml')})
@@ -795,7 +795,7 @@ class TestCompareMoreErrorsAndBranches:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_stage_executor_timeline', side_effect=Exception('boom'))
+    @patch('spark_history_mcp.tools_original.compare_stage_executor_timeline', side_effect=Exception('boom'))
     def test_stage_timeline_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(compare, ['stage-timeline', '1', '2'], obj={'config_path': Path('/tmp/config.yaml')})
@@ -804,7 +804,7 @@ class TestCompareMoreErrorsAndBranches:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_executors', side_effect=Exception('boom'))
+    @patch('spark_history_mcp.tools_original.compare_app_executors', side_effect=Exception('boom'))
     def test_executors_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(compare, ['executors'], obj={'config_path': Path('/tmp/config.yaml')})
@@ -813,7 +813,7 @@ class TestCompareMoreErrorsAndBranches:
 
     @patch('spark_history_mcp.cli.commands.compare.get_app_context', return_value=("a1","a2","local"))
     @patch('spark_history_mcp.cli.commands.compare.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_stages_aggregated', side_effect=Exception('boom'))
+    @patch('spark_history_mcp.tools_original.compare_app_stages_aggregated', side_effect=Exception('boom'))
     def test_stages_aggregated_error_handling(self, mock_comp, mock_get_client, mock_get_ctx, cli_runner):
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(compare, ['stages-aggregated'], obj={'config_path': Path('/tmp/config.yaml')})

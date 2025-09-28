@@ -196,11 +196,11 @@ def get_application_insights(
     # Import here to avoid circular imports
     from spark_history_mcp.tools.analysis import (
         analyze_auto_scaling,
-        analyze_executor_utilization,
         analyze_failed_tasks,
         analyze_shuffle_skew,
         get_job_bottlenecks,
     )
+    from spark_history_mcp.tools.executors import analyze_executor_utilization
 
     insights = {}
 

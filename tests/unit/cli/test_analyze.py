@@ -18,13 +18,13 @@ except ImportError:
 pytestmark = pytest.mark.skipif(not CLI_AVAILABLE, reason="CLI dependencies not available")
 
 from spark_history_mcp.cli.commands.analyze import analyze
-# Ensure submodule is loaded so patch('spark_history_mcp.tools.tools') works
-import spark_history_mcp.tools.tools as _tools_loaded  # noqa: F401
+# Ensure tools are loaded for CLI tests
+import spark_history_mcp.tools as _tools_loaded  # noqa: F401
 
 
 class TestAnalyzeInsights:
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.get_application_insights')
+    @patch('spark_history_mcp.tools.get_application_insights')
     def test_insights_basic(self, mock_get_insights, mock_get_client, cli_runner):
         mock_client = MagicMock()
         mock_get_client.return_value = mock_client
@@ -57,7 +57,7 @@ class TestAnalyzeInsights:
 
 class TestAnalyzeBottlenecks:
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.get_job_bottlenecks')
+    @patch('spark_history_mcp.tools.get_job_bottlenecks')
     def test_bottlenecks_topn(self, mock_get_bottlenecks, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_get_bottlenecks.return_value = {"bottlenecks": []}
@@ -72,7 +72,7 @@ class TestAnalyzeBottlenecks:
 
 class TestAnalyzeAutoScaling:
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.analyze_auto_scaling')
+    @patch('spark_history_mcp.tools.analyze_auto_scaling')
     def test_auto_scaling(self, mock_analyze_auto_scaling, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_analyze_auto_scaling.return_value = {"recommendations": []}
@@ -87,7 +87,7 @@ class TestAnalyzeAutoScaling:
 
 class TestAnalyzeShuffleSkew:
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.analyze_shuffle_skew')
+    @patch('spark_history_mcp.tools.analyze_shuffle_skew')
     def test_shuffle_skew(self, mock_analyze_skew, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_analyze_skew.return_value = {"skew": {}}
@@ -105,7 +105,7 @@ class TestAnalyzeShuffleSkew:
 
 class TestAnalyzeSlowest:
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_slowest_jobs')
+    @patch('spark_history_mcp.tools.list_slowest_jobs')
     def test_slowest_jobs(self, mock_list_jobs, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_list_jobs.return_value = []
@@ -118,7 +118,7 @@ class TestAnalyzeSlowest:
         mock_list_jobs.assert_called_once_with(app_id='app-1', server=None, n=2)
 
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_slowest_stages')
+    @patch('spark_history_mcp.tools.list_slowest_stages')
     def test_slowest_stages(self, mock_list_stages, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_list_stages.return_value = []
@@ -131,7 +131,7 @@ class TestAnalyzeSlowest:
         mock_list_stages.assert_called_once_with(app_id='app-1', server=None, n=4)
 
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_slowest_sql_queries')
+    @patch('spark_history_mcp.tools.list_slowest_sql_queries')
     def test_slowest_sql(self, mock_list_sql, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_list_sql.return_value = []
@@ -146,7 +146,7 @@ class TestAnalyzeSlowest:
 
 class TestAnalyzeCompareDeprecated:
     @patch('spark_history_mcp.cli.commands.analyze.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.compare_app_performance')
+    @patch('spark_history_mcp.tools.compare_app_performance')
     def test_compare_deprecated(self, mock_compare, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
         mock_compare.return_value = {"applications": {}}

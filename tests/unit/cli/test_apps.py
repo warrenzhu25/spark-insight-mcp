@@ -119,7 +119,7 @@ class TestApplicationIdentification:
 
         assert result == "app-123456"
 
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_resolve_app_identifier_with_name(self, mock_list_applications):
         """Test resolving app name to ID."""
         mock_client = MagicMock()
@@ -136,7 +136,7 @@ class TestApplicationIdentification:
             limit=1
         )
 
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_resolve_app_identifier_name_not_found(self, mock_list_applications):
         """Test error when app name can't be resolved."""
         mock_client = MagicMock()
@@ -166,7 +166,7 @@ class TestAppsListCommand:
     """Test the apps list command."""
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_apps_list_basic(self, mock_list_applications, mock_get_client, cli_runner):
         """Test basic app listing."""
         # Setup mocks
@@ -191,7 +191,7 @@ class TestAppsListCommand:
         mock_list_applications.assert_called_once()
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_apps_list_with_status_filter(self, mock_list_applications, mock_get_client, cli_runner):
         """Test app listing with status filter."""
         mock_client = MagicMock()
@@ -211,7 +211,7 @@ class TestAppsListCommand:
         assert 'RUNNING' in call_args.kwargs['status']
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_applications')
+    @patch('spark_history_mcp.tools.list_applications')
     def test_apps_list_with_name_filter(self, mock_list_applications, mock_get_client, cli_runner):
         """Test app listing with name filter."""
         mock_client = MagicMock()
@@ -242,7 +242,7 @@ class TestAppsShowCommand:
     """Test the apps show command."""
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.get_application')
+    @patch('spark_history_mcp.tools.get_application')
     def test_apps_show_success(self, mock_get_application, mock_get_client, cli_runner):
         """Test successful app show command."""
         # Setup mocks
@@ -265,7 +265,7 @@ class TestAppsShowCommand:
         assert call_args.kwargs.get('server') is None
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.get_application')
+    @patch('spark_history_mcp.tools.get_application')
     def test_apps_show_error(self, mock_get_application, mock_get_client, cli_runner):
         """Test error when app identifier can't be resolved."""
         mock_client = MagicMock()
@@ -281,7 +281,7 @@ class TestAppsSummaryCommand:
     """Test the apps summary command."""
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.get_app_summary')
+    @patch('spark_history_mcp.tools.get_app_summary')
     def test_apps_summary_success(self, mock_get_app_summary, mock_get_client, cli_runner):
         """Test successful app summary command."""
         mock_client = MagicMock()
@@ -304,7 +304,7 @@ class TestAppsJobsCommand:
     """Test the apps jobs command."""
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_jobs')
+    @patch('spark_history_mcp.tools.list_jobs')
     def test_apps_jobs_basic(self, mock_list_jobs, mock_get_client, cli_runner):
         """Test basic jobs listing."""
         mock_client = MagicMock()
@@ -331,7 +331,7 @@ class TestAppsStagesCommand:
     """Test the apps stages command."""
 
     @patch('spark_history_mcp.cli.commands.apps.get_spark_client')
-    @patch('spark_history_mcp.tools.tools.list_stages')
+    @patch('spark_history_mcp.tools.list_stages')
     def test_apps_stages_basic(self, mock_list_stages, mock_get_client, cli_runner):
         """Test basic stages listing."""
         mock_client = MagicMock()
