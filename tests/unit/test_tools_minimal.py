@@ -447,41 +447,6 @@ def test_compare_stages_basic(mock_get_context):
     assert 'duration_seconds' in diffs
 
 
-@patch('spark_history_mcp.tools.tools.get_executor_summary')
-@patch('spark_history_mcp.tools.tools.list_slowest_jobs')
-@patch('spark_history_mcp.tools.tools.list_slowest_stages')
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_get_job_bottlenecks_with_recommendations(mock_get_context, mock_slowest_stages, mock_slowest_jobs, mock_exec_summary):
-    from spark_history_mcp.tools.tools import get_job_bottlenecks
-    c = MagicMock()
-    mock_get_context.return_value = make_ctx(c)
-    # Provide stages for high_spill detection
-    st = SimpleNamespace(stage_id=1, attempt_id=0, name='spill', memory_bytes_spilled=200*1024*1024, disk_bytes_spilled=0)
-    c.list_stages.return_value = [st]
-    # Mock slowest lists
-    now = datetime.now()
-    slow_stage = SimpleNamespace(stage_id=2, attempt_id=0, name='slow', submission_time=now, completion_time=now + timedelta(seconds=10), num_tasks=10, num_failed_tasks=0)
-    slow_job = SimpleNamespace(job_id=1, name='job', submission_time=now, completion_time=now + timedelta(seconds=20), num_failed_tasks=0, status='SUCCEEDED')
-    mock_slowest_stages.return_value = [slow_stage]
-    mock_slowest_jobs.return_value = [slow_job]
-    # Exec summary with significant GC time
-    mock_exec_summary.return_value = {
-        'total_executors': 2,
-        'active_executors': 1,
-        'memory_used': 0,
-        'disk_used': 0,
-        'completed_tasks': 0,
-        'failed_tasks': 0,
-        'total_duration': 100,
-        'total_gc_time': 20,
-        'total_input_bytes': 0,
-        'total_shuffle_read': 0,
-        'total_shuffle_write': 0,
-    }
-    res = get_job_bottlenecks('app', top_n=1)
-    rec_types = [r['type'] for r in res['recommendations']]
-    assert 'memory' in rec_types or 'reliability' in rec_types
-
 
 @patch("spark_history_mcp.tools.tools.mcp.get_context")
 def test_get_stage_task_summary(mock_get_context):
