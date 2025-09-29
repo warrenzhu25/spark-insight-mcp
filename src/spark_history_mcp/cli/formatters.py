@@ -6,6 +6,7 @@ including JSON, table, and human-readable formats.
 """
 
 import json
+import sys
 from typing import Any, Dict, List, Optional
 
 try:
@@ -31,6 +32,11 @@ class OutputFormatter:
     def __init__(self, format_type: str = "human", quiet: bool = False):
         self.format_type = format_type
         self.quiet = quiet
+
+    def _write_line(self, text: str = "") -> None:
+        """Write a line to stdout for fallback paths."""
+
+        sys.stdout.write(f"{text}\n")
 
     def output(self, data: Any, title: Optional[str] = None) -> None:
         """Output data in the specified format."""
@@ -60,7 +66,7 @@ class OutputFormatter:
         else:
             output = str(data)
 
-        print(json.dumps(output, indent=2, default=str))
+        self._write_line(json.dumps(output, indent=2, default=str))
 
     def _output_table(self, data: Any, title: Optional[str] = None) -> None:
         """Output as table using tabulate."""
@@ -83,7 +89,7 @@ class OutputFormatter:
             if rows:
                 headers = list(rows[0].keys())
                 table_data = [[row.get(h, "") for h in headers] for row in rows]
-                print(tabulate(table_data, headers=headers, tablefmt="grid"))
+                self._write_line(tabulate(table_data, headers=headers, tablefmt="grid"))
             return
 
         # Single object
@@ -94,12 +100,12 @@ class OutputFormatter:
         elif isinstance(data, dict):
             obj_data = data
         else:
-            print(str(data))
+            self._write_line(str(data))
             return
 
         # Create key-value table
         rows = [[k, v] for k, v in obj_data.items()]
-        print(tabulate(rows, headers=["Property", "Value"], tablefmt="grid"))
+        self._write_line(tabulate(rows, headers=["Property", "Value"], tablefmt="grid"))
 
     def _output_human(self, data: Any, title: Optional[str] = None) -> None:
         """Output in human-readable format using Rich."""
@@ -141,21 +147,22 @@ class OutputFormatter:
     def _output_simple(self, data: Any, title: Optional[str] = None) -> None:
         """Simple fallback output when Rich is not available."""
         if title:
-            print(f"\n{title}")
-            print("=" * len(title))
+            self._write_line()
+            self._write_line(title)
+            self._write_line("=" * len(title))
 
         if isinstance(data, list):
             for i, item in enumerate(data, 1):
-                print(f"{i}. {item}")
+                self._write_line(f"{i}. {item}")
         elif hasattr(data, "model_dump"):
             obj_data = data.model_dump()
             for k, v in obj_data.items():
-                print(f"{k}: {v}")
+                self._write_line(f"{k}: {v}")
         elif isinstance(data, dict):
             for k, v in data.items():
-                print(f"{k}: {v}")
+                self._write_line(f"{k}: {v}")
         else:
-            print(str(data))
+            self._write_line(str(data))
 
     def _format_list(self, items: List[Any]) -> None:
         """Format a list of items."""
@@ -317,10 +324,10 @@ class OutputFormatter:
         comparison_keys = {
             "applications",
             "aggregated_overview",  # Old structure
-            "stage_deep_dive",      # Old structure
+            "stage_deep_dive",  # Old structure
             "performance_comparison",  # New structure
-            "app_summary_diff",     # New structure
-            "key_recommendations",     # New structure
+            "app_summary_diff",  # New structure
+            "key_recommendations",  # New structure
             "recommendations",
             "environment_comparison",
             "sql_execution_plans",
@@ -387,7 +394,10 @@ class OutputFormatter:
         # 3. Stage Differences table SECOND (detailed breakdown)
         if "stage_deep_dive" in data:
             self._format_stage_differences(data["stage_deep_dive"])
-        elif "performance_comparison" in data and "stages" in data["performance_comparison"]:
+        elif (
+            "performance_comparison" in data
+            and "stages" in data["performance_comparison"]
+        ):
             # Handle new structure - stages are now nested under performance_comparison
             self._format_stage_differences(data["performance_comparison"]["stages"])
 
@@ -420,7 +430,6 @@ class OutputFormatter:
             "jvm_gc_time_minutes": ("GC Time (min)", "time"),
             "shuffle_read_wait_time_minutes": ("Shuffle Read Wait (min)", "time"),
             "shuffle_write_time_minutes": ("Shuffle Write Time (min)", "time"),
-
             # Size metrics (GB)
             "input_data_size_gb": ("Input Data (GB)", "size"),
             "output_data_size_gb": ("Output Data (GB)", "size"),
@@ -428,10 +437,8 @@ class OutputFormatter:
             "shuffle_write_size_gb": ("Shuffle Write (GB)", "size"),
             "memory_spilled_gb": ("Memory Spilled (GB)", "size"),
             "disk_spilled_gb": ("Disk Spilled (GB)", "size"),
-
             # Percentage metrics
             "executor_utilization_percent": ("Executor Utilization (%)", "percent"),
-
             # Count metrics
             "total_stages": ("Total Stages", "count"),
             "completed_stages": ("Completed Stages", "count"),
@@ -442,12 +449,15 @@ class OutputFormatter:
         # Use the sorted order from diff keys (already sorted by MCP tool)
         # Extract metric names from the sorted diff keys (remove '_change' suffix)
         sorted_metric_names = [
-            key.replace('_change', '') for key in diff_data.keys()
-            if key.endswith('_change')
+            key.replace("_change", "")
+            for key in diff_data.keys()
+            if key.endswith("_change")
         ]
 
         # Add any metrics that don't have change values (shouldn't normally happen)
-        all_available_metrics = [key for key in app1_summary.keys() if key != "application_id"]
+        all_available_metrics = [
+            key for key in app1_summary.keys() if key != "application_id"
+        ]
         for metric in all_available_metrics:
             if metric not in sorted_metric_names:
                 sorted_metric_names.append(metric)
@@ -521,7 +531,9 @@ class OutputFormatter:
 
         if overview:
             # Task completion ratio - handle both old and new structure
-            executor_data = overview.get("executor_comparison") or overview.get("executors", {})
+            executor_data = overview.get("executor_comparison") or overview.get(
+                "executors", {}
+            )
             if executor_data:
                 exec_comp = executor_data
                 if "task_completion_ratio_change" in exec_comp:
@@ -532,7 +544,10 @@ class OutputFormatter:
         stage_dive = None
         if "stage_deep_dive" in data:
             stage_dive = data["stage_deep_dive"]
-        elif "performance_comparison" in data and "stages" in data["performance_comparison"]:
+        elif (
+            "performance_comparison" in data
+            and "stages" in data["performance_comparison"]
+        ):
             stage_dive = data["performance_comparison"]["stages"]
 
         if stage_dive and "top_stage_differences" in stage_dive:
@@ -549,17 +564,17 @@ class OutputFormatter:
                     count = sum(
                         1
                         for diff in differences
-                        if diff.get("time_difference", {}).get(
-                            "absolute_seconds", 0
-                        )
-                            > 60
-                        )
+                        if diff.get("time_difference", {}).get("absolute_seconds", 0)
+                        > 60
+                    )
                     summary_items.append(
                         f"• Found {count} stages with >60s time difference"
-                        )
+                    )
 
         # Add recommendations summary - handle both old and new structure
-        recommendations = data.get("recommendations") or data.get("key_recommendations", [])
+        recommendations = data.get("recommendations") or data.get(
+            "key_recommendations", []
+        )
         if recommendations:
             rec_count = len(recommendations)
             if rec_count > 0:
@@ -646,14 +661,20 @@ class OutputFormatter:
                 app2_metrics = apps.get("app2", {}).get("executor_metrics", {})
 
                 # Dynamically show key executor metrics for overview
-                key_executor_metrics = ["completed_tasks", "total_input_bytes", "total_duration"]
+                key_executor_metrics = [
+                    "completed_tasks",
+                    "total_input_bytes",
+                    "total_duration",
+                ]
 
                 for metric_key in key_executor_metrics:
                     if metric_key in app1_metrics and metric_key in app2_metrics:
                         app1_val = app1_metrics[metric_key]
                         app2_val = app2_metrics[metric_key]
 
-                        display_name = self._get_executor_metric_display_name(metric_key)
+                        display_name = self._get_executor_metric_display_name(
+                            metric_key
+                        )
                         formatter_func = self._get_executor_metric_formatter(metric_key)
 
                         app1_display = formatter_func(app1_val)
@@ -661,12 +682,18 @@ class OutputFormatter:
 
                         # Get change from executor comparison analysis
                         if metric_key == "completed_tasks":
-                            change = exec_data.get("task_completion_ratio_change", "N/A")
+                            change = exec_data.get(
+                                "task_completion_ratio_change", "N/A"
+                            )
                         else:
                             # Calculate change percentage for other metrics
                             if app1_val > 0:
                                 change_pct = ((app2_val - app1_val) / app1_val) * 100
-                                change = f"+{change_pct:.1f}%" if change_pct >= 0 else f"{change_pct:.1f}%"
+                                change = (
+                                    f"+{change_pct:.1f}%"
+                                    if change_pct >= 0
+                                    else f"{change_pct:.1f}%"
+                                )
                             else:
                                 change = "N/A"
 
@@ -691,7 +718,9 @@ class OutputFormatter:
 
                     if ratio > 0:
                         # For ratio-based metrics, show as baseline vs ratio
-                        table.add_row(display_name, "Baseline", f"{ratio:.1%} of App1", change)
+                        table.add_row(
+                            display_name, "Baseline", f"{ratio:.1%} of App1", change
+                        )
 
         if table.rows:
             console.print(table)
@@ -925,9 +954,7 @@ class OutputFormatter:
         # Number of differences found
         total_diffs = summary.get("total_differences_found", 0)
         if total_diffs > 0:
-            summary_items.append(
-                f"• {total_diffs} metrics compared"
-            )
+            summary_items.append(f"• {total_diffs} metrics compared")
 
         # Key performance insight
         task_dist = sig_diff.get("task_distributions", {})
@@ -1159,7 +1186,6 @@ class OutputFormatter:
             console.print(
                 Panel(content, title="Timeline Analysis Summary", border_style="yellow")
             )
-
 
     def _format_bytes(self, bytes_value: int) -> str:
         """Format bytes in human readable format."""
