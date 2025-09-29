@@ -1,5 +1,6 @@
 import json
 import re
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Type, TypeVar
 from urllib.parse import urljoin
 
@@ -228,9 +229,13 @@ class SparkRestClient:
         data = self._get("applications", params)
         return self._parse_model_list(data, ApplicationInfo)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def get_application(self, app_id: str) -> ApplicationInfo:
         """
         Get information about a specific application.
+
+        Note: Results are cached in memory for performance. Data for completed
+        applications is immutable, so caching is safe.
 
         Args:
             app_id: The application ID
@@ -241,11 +246,14 @@ class SparkRestClient:
         data = self._get(f"applications/{app_id}")
         return self._parse_model(data, ApplicationInfo)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def get_application_attempt(
         self, app_id: str, attempt_id: str
     ) -> ApplicationAttemptInfo:
         """
         Get information about a specific application attempt.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -257,11 +265,31 @@ class SparkRestClient:
         data = self._get(f"applications/{app_id}/{attempt_id}")
         return self._parse_model(data, ApplicationAttemptInfo)
 
+    def _list_jobs_impl(
+        self, app_id: str, status_tuple: Optional[tuple] = None
+    ) -> List[JobData]:
+        """Internal implementation with hashable parameters."""
+        params = {}
+        if status_tuple:
+            params["status"] = [s.value for s in status_tuple]
+
+        data = self._get(f"applications/{app_id}/jobs", params)
+        return self._parse_model_list(data, JobData)
+
+    @lru_cache(maxsize=1000)  # noqa: B019
+    def _list_jobs_cached(
+        self, app_id: str, status_tuple: Optional[tuple] = None
+    ) -> List[JobData]:
+        """Cached version of list_jobs."""
+        return self._list_jobs_impl(app_id, status_tuple)
+
     def list_jobs(
         self, app_id: str, status: Optional[List[JobExecutionStatus]] = None
     ) -> List[JobData]:
         """
         Get a list of all jobs for an application.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -270,16 +298,15 @@ class SparkRestClient:
         Returns:
             List of JobData objects
         """
-        params = {}
-        if status:
-            params["status"] = [s.value for s in status]
+        status_tuple = tuple(status) if status else None
+        return self._list_jobs_cached(app_id, status_tuple)
 
-        data = self._get(f"applications/{app_id}/jobs", params)
-        return self._parse_model_list(data, JobData)
-
+    @lru_cache(maxsize=1000)  # noqa: B019
     def get_job(self, app_id: str, job_id: int) -> JobData:
         """
         Get information about a specific job.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -406,6 +433,7 @@ class SparkRestClient:
         )
         return self._parse_model(data, StageData)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def get_stage_task_summary(
         self,
         app_id: str,
@@ -414,6 +442,8 @@ class SparkRestClient:
     ) -> TaskMetricDistributions:
         """
         Get task summary metrics for a specific stage attempt.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -464,9 +494,12 @@ class SparkRestClient:
         )
         return self._parse_model_list(data, TaskData)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def list_executors(self, app_id: str) -> List[ExecutorSummary]:
         """
         Get a list of all executors for an application.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -477,9 +510,12 @@ class SparkRestClient:
         data = self._get(f"applications/{app_id}/executors")
         return self._parse_model_list(data, ExecutorSummary)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def list_all_executors(self, app_id: str) -> List[ExecutorSummary]:
         """
         Get a list of all executors (active and inactive) for an application.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -550,9 +586,12 @@ class SparkRestClient:
         data = self._get(f"applications/{app_id}/storage/rdd")
         return self._parse_model_list(data, RDDStorageInfo)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def get_rdd(self, app_id: str, rdd_id: int) -> RDDStorageInfo:
         """
         Get information about a specific RDD.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -564,9 +603,12 @@ class SparkRestClient:
         data = self._get(f"applications/{app_id}/storage/rdd/{rdd_id}")
         return self._parse_model(data, RDDStorageInfo)
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def get_environment(self, app_id: str) -> ApplicationEnvironmentInfo:
         """
         Get environment information for an application.
+
+        Note: Results are cached in memory for performance.
 
         Args:
             app_id: The application ID
@@ -813,3 +855,60 @@ class SparkRestClient:
             dag_data["parsing_error"] = str(e)
 
         return dag_data
+
+    def clear_cache(self):
+        """
+        Clear all cached method results.
+
+        This is useful if you need to force fresh data retrieval from the server,
+        for example when analyzing running applications or after data updates.
+        """
+        # Clear all cached methods
+        methods_to_clear = [
+            self.get_application,
+            self.get_application_attempt,
+            self._list_jobs_cached,
+            self.get_job,
+            self.get_stage_task_summary,
+            self.list_executors,
+            self.list_all_executors,
+            self.get_rdd,
+            self.get_environment,
+        ]
+
+        for method in methods_to_clear:
+            if hasattr(method, "cache_clear"):
+                method.cache_clear()
+
+    def cache_info(self) -> Dict[str, Any]:
+        """
+        Get cache statistics for all cached methods.
+
+        Returns:
+            Dictionary mapping method names to cache info (hits, misses, size, maxsize)
+        """
+        cache_stats = {}
+
+        cached_methods = {
+            "get_application": self.get_application,
+            "get_application_attempt": self.get_application_attempt,
+            "list_jobs": self._list_jobs_cached,
+            "get_job": self.get_job,
+            "get_stage_task_summary": self.get_stage_task_summary,
+            "list_executors": self.list_executors,
+            "list_all_executors": self.list_all_executors,
+            "get_rdd": self.get_rdd,
+            "get_environment": self.get_environment,
+        }
+
+        for name, method in cached_methods.items():
+            if hasattr(method, "cache_info"):
+                info = method.cache_info()
+                cache_stats[name] = {
+                    "hits": info.hits,
+                    "misses": info.misses,
+                    "maxsize": info.maxsize,
+                    "currsize": info.currsize,
+                }
+
+        return cache_stats

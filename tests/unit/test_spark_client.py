@@ -238,3 +238,138 @@ class TestSparkClient(unittest.TestCase):
                 expected_url,
                 f"Failed to correctly modify URL.\nInput: {input_url}\nExpected: {expected_url}\nGot: {modified_url}",
             )
+
+    @patch("spark_history_mcp.api.spark_client.requests.get")
+    def test_cache_get_application(self, mock_get):
+        """Test that get_application caches results."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "id": "app-123",
+            "name": "Test App",
+            "attempts": [
+                {
+                    "attemptId": "1",
+                    "startTime": "2023-01-01T12:34:56.789GMT",
+                    "endTime": "2023-01-01T13:34:56.789GMT",
+                    "lastUpdated": "2023-01-01T13:34:56.789GMT",
+                    "duration": 3600000,
+                    "sparkUser": "spark",
+                    "completed": True,
+                }
+            ],
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        # Clear cache before test
+        self.client.clear_cache()
+
+        # First call - should hit the API
+        app1 = self.client.get_application("app-123")
+        self.assertEqual(app1.id, "app-123")
+        self.assertEqual(mock_get.call_count, 1)
+
+        # Second call with same app_id - should use cache
+        app2 = self.client.get_application("app-123")
+        self.assertEqual(app2.id, "app-123")
+        self.assertEqual(mock_get.call_count, 1)  # Still 1, not 2
+
+        # Verify both returns are the same object (cached)
+        self.assertIs(app1, app2)
+
+    @patch("spark_history_mcp.api.spark_client.requests.get")
+    def test_cache_list_jobs(self, mock_get):
+        """Test that list_jobs caches results with tuple conversion."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {
+                "jobId": 1,
+                "name": "Job 1",
+                "status": "SUCCEEDED",
+                "numTasks": 10,
+                "numActiveTasks": 0,
+                "numCompletedTasks": 10,
+                "numSkippedTasks": 0,
+                "numFailedTasks": 0,
+                "numKilledTasks": 0,
+                "numCompletedIndices": 10,
+                "numActiveStages": 0,
+                "numCompletedStages": 1,
+                "numSkippedStages": 0,
+                "numFailedStages": 0,
+                "stageIds": [1],
+            }
+        ]
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        # Clear cache before test
+        self.client.clear_cache()
+
+        from spark_history_mcp.models.spark_types import JobExecutionStatus
+
+        # First call
+        jobs1 = self.client.list_jobs("app-123", status=[JobExecutionStatus.SUCCEEDED])
+        self.assertEqual(len(jobs1), 1)
+        self.assertEqual(mock_get.call_count, 1)
+
+        # Second call with same parameters - should use cache
+        jobs2 = self.client.list_jobs("app-123", status=[JobExecutionStatus.SUCCEEDED])
+        self.assertEqual(len(jobs2), 1)
+        self.assertEqual(mock_get.call_count, 1)  # Still 1
+
+    def test_clear_cache(self):
+        """Test that clear_cache clears all cached methods."""
+        # Clear and get initial cache info
+        self.client.clear_cache()
+        cache_info = self.client.cache_info()
+
+        # All methods should have 0 hits and 0 cache size
+        for method_name, info in cache_info.items():
+            self.assertEqual(info["hits"], 0, f"{method_name} should have 0 hits")
+            self.assertEqual(
+                info["currsize"], 0, f"{method_name} should have 0 cache size"
+            )
+
+    @patch("spark_history_mcp.api.spark_client.requests.get")
+    def test_cache_info(self, mock_get):
+        """Test that cache_info returns correct statistics."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "id": "app-123",
+            "name": "Test App",
+            "attempts": [
+                {
+                    "attemptId": "1",
+                    "startTime": "2023-01-01T12:34:56.789GMT",
+                    "endTime": "2023-01-01T13:34:56.789GMT",
+                    "lastUpdated": "2023-01-01T13:34:56.789GMT",
+                    "duration": 3600000,
+                    "sparkUser": "spark",
+                    "completed": True,
+                }
+            ],
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        # Clear cache
+        self.client.clear_cache()
+
+        # Make some cached calls
+        self.client.get_application("app-123")
+        self.client.get_application("app-123")  # Cache hit
+        self.client.get_application("app-456")  # Cache miss
+
+        # Get cache info
+        cache_info = self.client.cache_info()
+
+        # Verify get_application has correct stats
+        app_cache = cache_info["get_application"]
+        self.assertEqual(app_cache["hits"], 1)  # One hit on second call
+        self.assertEqual(app_cache["misses"], 2)  # Two misses (app-123 first, app-456)
+        self.assertEqual(app_cache["currsize"], 2)  # Two items cached
+        self.assertEqual(app_cache["maxsize"], 1000)  # Default maxsize
