@@ -8,7 +8,13 @@ import json
 from pathlib import Path
 from typing import Optional, Tuple
 
-from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
+from spark_history_mcp.cli._compat import (
+    CLI_AVAILABLE,
+    cli_unavailable_stub,
+    click,
+    create_tool_context,
+    patch_tool_context,
+)
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
@@ -243,22 +249,9 @@ def resolve_app_identifiers(
 
 
 def create_mock_context(client):
-    """Create mock context for MCP tool functions."""
+    """Backward-compatible wrapper for tests relying on the old helper."""
 
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    return MockContext(client)
+    return create_tool_context(client)
 
 
 def extract_stage_menu_options(comparison_data):
@@ -382,10 +375,7 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
         from spark_history_mcp.tools import compare_stages
 
         client = get_spark_client(ctx.obj["config_path"], server)
-        original_get_context = getattr(tools_module.mcp, "get_context", None)
-        tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-        try:
+        with patch_tool_context(client, tools_module):
             comparison_data = compare_stages(
                 app_id1=app_id1,
                 app_id2=app_id2,
@@ -402,9 +392,6 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
                 show_post_stage_menu(
                     app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
                 )
-        finally:
-            if original_get_context:
-                tools_module.mcp.get_context = original_get_context
 
     except Exception as e:
         click.echo(f"Error executing stage comparison: {e}")
@@ -420,19 +407,13 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
         from spark_history_mcp.tools import compare_app_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
-        original_get_context = getattr(tools_module.mcp, "get_context", None)
-        tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-        try:
+        with patch_tool_context(client, tools_module):
             comparison_data = compare_app_executor_timeline(
                 app_id1=app_id1, app_id2=app_id2, server=server, interval_minutes=1
             )
             formatter.output(
                 comparison_data, f"Timeline Comparison: {app_id1} vs {app_id2}"
             )
-        finally:
-            if original_get_context:
-                tools_module.mcp.get_context = original_get_context
 
     except Exception as e:
         click.echo(f"Error executing timeline comparison: {e}")
@@ -456,10 +437,7 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
         from spark_history_mcp.tools import compare_stage_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
-        original_get_context = getattr(tools_module.mcp, "get_context", None)
-        tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-        try:
+        with patch_tool_context(client, tools_module):
             comparison_data = compare_stage_executor_timeline(
                 app_id1=app_id1,
                 app_id2=app_id2,
@@ -471,9 +449,6 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
             formatter.output(
                 comparison_data, f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
             )
-        finally:
-            if original_get_context:
-                tools_module.mcp.get_context = original_get_context
 
     except Exception as e:
         click.echo(f"Error executing stage timeline comparison: {e}")
@@ -633,10 +608,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_performance
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_performance(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -657,10 +629,6 @@ if CLI_AVAILABLE:
                         click.echo(
                             "Use 'compare stages', 'compare timeline', etc. for detailed analysis"
                         )
-
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing applications: {e}") from e
@@ -716,10 +684,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_stages
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_stages(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -744,9 +709,6 @@ if CLI_AVAILABLE:
                         formatter,
                         ctx,
                     )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing stages: {e}") from e
@@ -798,10 +760,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_executor_timeline
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_executor_timeline(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -812,9 +771,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Timeline Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing timelines: {e}") from e
@@ -870,10 +826,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_stage_executor_timeline
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_stage_executor_timeline(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -886,9 +839,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stage Timeline Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing stage timelines: {e}") from e
@@ -933,10 +883,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_resources
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_resources(
                     app_id1=app_id1, app_id2=app_id2, server=final_server
                 )
@@ -944,9 +891,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Resource Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing resources: {e}") from e
@@ -1004,10 +948,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_executors
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_executors(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1019,9 +960,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Executor Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing executors: {e}") from e
@@ -1066,10 +1004,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_jobs
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_jobs(
                     app_id1=app_id1, app_id2=app_id2, server=final_server
                 )
@@ -1077,9 +1012,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Job Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing jobs: {e}") from e
@@ -1137,10 +1069,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_stages_aggregated
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_stages_aggregated(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1152,9 +1081,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stages Aggregated Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing aggregated stages: {e}") from e
