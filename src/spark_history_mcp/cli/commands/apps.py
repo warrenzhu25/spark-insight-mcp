@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Optional
 
 from spark_history_mcp.api.spark_client import SparkRestClient
-from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
+from spark_history_mcp.cli._compat import (
+    CLI_AVAILABLE,
+    cli_unavailable_stub,
+    click,
+    create_tool_context,
+    patch_tool_context,
+)
 from spark_history_mcp.config.config import Config
 
 if CLI_AVAILABLE:
@@ -69,22 +75,9 @@ def is_application_id(identifier: str) -> bool:
 
 
 def create_mock_context(client):
-    """Create mock context for MCP tool functions."""
+    """Backward-compatible wrapper for tests relying on the old helper."""
 
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    return MockContext(client)
+    return create_tool_context(client)
 
 
 def resolve_app_identifier(
@@ -95,28 +88,10 @@ def resolve_app_identifier(
         return identifier  # Already an ID
 
     # Search by name (contains match) and get latest (limit 1)
+    import spark_history_mcp.tools.tools as tools_module
     from spark_history_mcp.tools import list_applications
 
-    # Create mock context for tool (same pattern as list command)
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    import spark_history_mcp.tools.tools as tools_module
-
-    original_get_context = getattr(tools_module.mcp, "get_context", None)
-    tools_module.mcp.get_context = lambda: MockContext(client)
-
-    try:
+    with patch_tool_context(client, tools_module):
         apps = list_applications(
             server=server,
             app_name=identifier,
@@ -133,9 +108,6 @@ def resolve_app_identifier(
                 raise RuntimeError(f"No application found matching name: {identifier}")
 
         return apps[0].id  # Return the latest match
-    finally:
-        if original_get_context:
-            tools_module.mcp.get_context = original_get_context
 
 
 if CLI_AVAILABLE:
@@ -193,36 +165,12 @@ if CLI_AVAILABLE:
                 params["app_name"] = name_exact
                 params["search_type"] = "exact"
 
-            # Use the existing MCP tool function
+            import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import list_applications
 
-            # Create a mock context for the tool
-            class MockContext:
-                def __init__(self, client):
-                    self.request_context = MockRequestContext(client)
-
-            class MockRequestContext:
-                def __init__(self, client):
-                    self.lifespan_context = MockLifespanContext(client)
-
-            class MockLifespanContext:
-                def __init__(self, client):
-                    self.default_client = client
-                    self.clients = {"default": client}
-
-            # Set up mock context for the tool
-            import spark_history_mcp.tools.tools as tools_module
-
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: MockContext(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 apps = list_applications(server=server, **params)
                 formatter.output(apps, "Spark Applications")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
         except Exception as err:
             raise click.ClickException(f"Error listing applications: {err}") from err
 
@@ -246,35 +194,12 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            # Use the existing MCP tool function
+            import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import get_application
 
-            # Create mock context (same as above)
-            class MockContext:
-                def __init__(self, client):
-                    self.request_context = MockRequestContext(client)
-
-            class MockRequestContext:
-                def __init__(self, client):
-                    self.lifespan_context = MockLifespanContext(client)
-
-            class MockLifespanContext:
-                def __init__(self, client):
-                    self.default_client = client
-                    self.clients = {"default": client}
-
-            import spark_history_mcp.tools.tools as tools_module
-
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: MockContext(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 app = get_application(app_id, server=server)
                 formatter.output(app, f"Application {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
         except Exception as err:
             raise click.ClickException(
                 f"Error getting application {app_id}: {err}"
@@ -303,38 +228,16 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
+            import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import list_jobs as mcp_list_jobs
 
-            # Create mock context
-            class MockContext:
-                def __init__(self, client):
-                    self.request_context = MockRequestContext(client)
+            params = {"app_id": app_id, "server": server}
+            if status:
+                params["status"] = list(status)
 
-            class MockRequestContext:
-                def __init__(self, client):
-                    self.lifespan_context = MockLifespanContext(client)
-
-            class MockLifespanContext:
-                def __init__(self, client):
-                    self.default_client = client
-                    self.clients = {"default": client}
-
-            import spark_history_mcp.tools.tools as tools_module
-
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: MockContext(client)
-
-            try:
-                params = {"app_id": app_id, "server": server}
-                if status:
-                    params["status"] = list(status)
-
+            with patch_tool_context(client, tools_module):
                 jobs = mcp_list_jobs(**params)
                 formatter.output(jobs, f"Jobs for Application {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
         except Exception as err:
             raise click.ClickException(
                 f"Error listing jobs for {app_id}: {err}"
@@ -363,38 +266,16 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
+            import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import list_stages as mcp_list_stages
 
-            # Create mock context
-            class MockContext:
-                def __init__(self, client):
-                    self.request_context = MockRequestContext(client)
+            params = {"app_id": app_id, "server": server}
+            if status:
+                params["status"] = list(status)
 
-            class MockRequestContext:
-                def __init__(self, client):
-                    self.lifespan_context = MockLifespanContext(client)
-
-            class MockLifespanContext:
-                def __init__(self, client):
-                    self.default_client = client
-                    self.clients = {"default": client}
-
-            import spark_history_mcp.tools.tools as tools_module
-
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: MockContext(client)
-
-            try:
-                params = {"app_id": app_id, "server": server}
-                if status:
-                    params["status"] = list(status)
-
+            with patch_tool_context(client, tools_module):
                 stages = mcp_list_stages(**params)
                 formatter.output(stages, f"Stages for Application {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
         except Exception as err:
             raise click.ClickException(
                 f"Error listing stages for {app_id}: {err}"
@@ -461,10 +342,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import get_app_summary, list_applications
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 # Resolve name to ID if needed (gets latest match)
                 if is_application_id(app_identifier):
                     app_id = app_identifier  # Already an ID
@@ -502,10 +380,6 @@ if CLI_AVAILABLE:
                     formatter.output(display_data, title)
                 else:
                     formatter.output(summary_data, title)
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
         except Exception as err:
             raise click.ClickException(
                 f"Error getting summary for application {app_identifier}: {err}"

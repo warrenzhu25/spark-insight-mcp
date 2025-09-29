@@ -6,30 +6,16 @@ Commands for performing Spark performance analysis and insights.
 
 from typing import Optional
 
-from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
+from spark_history_mcp.cli._compat import (
+    CLI_AVAILABLE,
+    cli_unavailable_stub,
+    click,
+    patch_tool_context,
+)
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
     from spark_history_mcp.cli.formatters import OutputFormatter
-
-
-def create_mock_context(client):
-    """Create mock context for MCP tool functions."""
-
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    return MockContext(client)
 
 
 if CLI_AVAILABLE:
@@ -91,10 +77,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import get_application_insights
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 insights_data = get_application_insights(
                     app_id=app_id,
                     server=server,
@@ -104,14 +87,10 @@ if CLI_AVAILABLE:
                     include_executor_utilization=include_executor_utilization,
                 )
                 formatter.output(insights_data, f"Application Insights for {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing application {app_id}: {e}"
-            ) from e
+                f"Error analyzing application {app_id}: {err}"
+            ) from err
 
     @analyze.command("bottlenecks")
     @click.argument("app_id")
@@ -141,24 +120,17 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import get_job_bottlenecks
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 bottlenecks_data = get_job_bottlenecks(
                     app_id=app_id, server=server, top_n=top_n
                 )
                 formatter.output(
                     bottlenecks_data, f"Performance Bottlenecks for {app_id}"
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing bottlenecks for {app_id}: {e}"
-            ) from e
+                f"Error analyzing bottlenecks for {app_id}: {err}"
+            ) from err
 
     @analyze.command("auto-scaling")
     @click.argument("app_id")
@@ -195,24 +167,17 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import analyze_auto_scaling
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 scaling_data = analyze_auto_scaling(
                     app_id=app_id,
                     server=server,
                     target_stage_duration_minutes=target_duration,
                 )
                 formatter.output(scaling_data, f"Auto-Scaling Analysis for {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing auto-scaling for {app_id}: {e}"
-            ) from e
+                f"Error analyzing auto-scaling for {app_id}: {err}"
+            ) from err
 
     @analyze.command("shuffle-skew")
     @click.argument("app_id")
@@ -256,10 +221,7 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import analyze_shuffle_skew
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 skew_data = analyze_shuffle_skew(
                     app_id=app_id,
                     server=server,
@@ -267,14 +229,10 @@ if CLI_AVAILABLE:
                     skew_ratio_threshold=skew_ratio,
                 )
                 formatter.output(skew_data, f"Shuffle Skew Analysis for {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing shuffle skew for {app_id}: {e}"
-            ) from e
+                f"Error analyzing shuffle skew for {app_id}: {err}"
+            ) from err
 
     @analyze.command("slowest")
     @click.argument("app_id")
@@ -334,10 +292,7 @@ if CLI_AVAILABLE:
 
             import spark_history_mcp.tools.tools as tools_module
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 if analysis_type in ["jobs", "stages"]:
                     slowest_data = analysis_func(app_id=app_id, server=server, n=top_n)
                 else:  # sql
@@ -345,14 +300,10 @@ if CLI_AVAILABLE:
                         app_id=app_id, server=server, top_n=top_n
                     )
                 formatter.output(slowest_data, title)
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing slowest {analysis_type} for {app_id}: {e}"
-            ) from e
+                f"Error analyzing slowest {analysis_type} for {app_id}: {err}"
+            ) from err
 
     @analyze.command("compare", deprecated=True)
     @click.argument("app_id1")
@@ -408,24 +359,17 @@ if CLI_AVAILABLE:
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools import compare_app_performance
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_performance(
                     app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n
                 )
                 formatter.output(
                     comparison_data, f"Performance Comparison: {app_id1} vs {app_id2}"
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error comparing applications {app_id1} and {app_id2}: {e}"
-            ) from e
+                f"Error comparing applications {app_id1} and {app_id2}: {err}"
+            ) from err
 
 else:
     analyze = cli_unavailable_stub("analyze")
