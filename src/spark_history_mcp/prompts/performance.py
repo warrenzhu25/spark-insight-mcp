@@ -60,7 +60,6 @@ get_job_bottlenecks("{app_id}"{server_param})
 list_slowest_stages("{app_id}"{server_param})
 
 # Resource and Data Analysis
-analyze_executor_utilization("{app_id}"{server_param})
 analyze_shuffle_skew("{app_id}"{server_param})
 
 # Configuration Review
@@ -215,7 +214,6 @@ get_executor_summary("{app_id}"{server_param})
 
 # Resource Timeline and Utilization
 get_resource_usage_timeline("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Performance and Configuration Context
 get_job_bottlenecks("{app_id}"{server_param})

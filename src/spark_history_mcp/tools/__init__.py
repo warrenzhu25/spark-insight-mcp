@@ -33,7 +33,6 @@ from .comparisons import (
 
 # Executor and resource tools
 from .executors import (
-    analyze_executor_utilization,
     get_executor,
     get_executor_summary,
     get_resource_usage_timeline,
@@ -72,7 +71,6 @@ __all__ = [
     "get_executor",
     "get_executor_summary",
     "get_resource_usage_timeline",
-    "analyze_executor_utilization",
     # Analysis tools
     "get_job_bottlenecks",
     "analyze_auto_scaling",

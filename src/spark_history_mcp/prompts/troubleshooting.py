@@ -296,7 +296,6 @@ get_stage_task_summary("{app_id}", stage_id{server_param})
 
 # Executor Performance Context
 get_executor_summary("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Configuration Review
 get_environment("{app_id}"{server_param})
@@ -408,7 +407,6 @@ get_job_bottlenecks("{app_id}"{server_param})
 
 # Resource and Scaling Analysis
 analyze_auto_scaling("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Specific Issue Analysis
 analyze_shuffle_skew("{app_id}"{server_param})
