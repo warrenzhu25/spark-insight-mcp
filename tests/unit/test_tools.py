@@ -25,10 +25,9 @@ from spark_history_mcp.tools import (
     get_application_insights,
 )
 from spark_history_mcp.tools.analysis import get_client_or_default
+from spark_history_mcp.tools.application import list_applications
 from spark_history_mcp.tools.jobs_stages import (
-    _build_dependencies_from_dag_data,
     get_stage,
-    get_stage_dependency_from_sql_plan,
     get_stage_task_summary,
     list_jobs,
     list_slowest_jobs,
@@ -36,7 +35,6 @@ from spark_history_mcp.tools.jobs_stages import (
     list_slowest_stages,
     list_stages,
 )
-from spark_history_mcp.tools.application import list_applications
 
 # Additional imports for comparison and executor tools
 try:
@@ -1406,10 +1404,12 @@ class TestSparkInsightTools(unittest.TestCase):
         # Setup mock data
         mock_app = self._create_mock_application()
         # Set initial executors to a value that should be changed
-        mock_env = self._create_mock_environment({
-            "spark.dynamicAllocation.initialExecutors": "4",  # Will trigger recommendation to change to 2
-            "spark.dynamicAllocation.maxExecutors": "10",      # Will trigger recommendation to change to 2
-        })
+        mock_env = self._create_mock_environment(
+            {
+                "spark.dynamicAllocation.initialExecutors": "4",  # Will trigger recommendation to change to 2
+                "spark.dynamicAllocation.maxExecutors": "10",  # Will trigger recommendation to change to 2
+            }
+        )
 
         # Create stages with different patterns
         stages = [
@@ -1891,7 +1891,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         mock_executor.shuffle_write = shuffle_write
         return mock_executor
 
-    @unittest.skip("Function _analyze_executor_performance_patterns does not exist after refactoring")
+    @unittest.skip(
+        "Function _analyze_executor_performance_patterns does not exist after refactoring"
+    )
     def test_analyze_executor_performance_patterns_basic(self):
         """Test basic executor performance pattern analysis"""
         # Create mock executor summaries
@@ -1943,7 +1945,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
             comparison["task_time_ratio"], 9000 / 5500, places=1
         )  # App2 is slower
 
-    @unittest.skip("Function _analyze_executor_performance_patterns does not exist after refactoring")
+    @unittest.skip(
+        "Function _analyze_executor_performance_patterns does not exist after refactoring"
+    )
     def test_analyze_executor_performance_patterns_with_failures(self):
         """Test executor performance analysis with task failures"""
         exec_summary1 = {
@@ -1974,7 +1978,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
             comparison["failure_rate_ratio"], 3.0
         )  # App2 has 3x more failures
 
-    @unittest.skip("Function _analyze_executor_performance_patterns does not exist after refactoring")
+    @unittest.skip(
+        "Function _analyze_executor_performance_patterns does not exist after refactoring"
+    )
     def test_analyze_executor_performance_patterns_memory_spill(self):
         """Test executor performance analysis with memory spill"""
         exec_summary1 = {
@@ -2021,7 +2027,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         self.assertTrue(memory_insight_found)
         self.assertTrue(memory_rec_found)
 
-    @unittest.skip("Function _analyze_executor_performance_patterns does not exist after refactoring")
+    @unittest.skip(
+        "Function _analyze_executor_performance_patterns does not exist after refactoring"
+    )
     def test_analyze_executor_performance_patterns_empty_data(self):
         """Test executor performance analysis with empty data"""
         result = _analyze_executor_performance_patterns({}, {})
@@ -2031,7 +2039,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
             result["analysis"], "No executor data available for comparison"
         )
 
-    @unittest.skip("Function _analyze_executor_performance_patterns does not exist after refactoring")
+    @unittest.skip(
+        "Function _analyze_executor_performance_patterns does not exist after refactoring"
+    )
     def test_analyze_executor_performance_patterns_one_empty(self):
         """Test executor performance analysis with one empty dataset"""
         exec_summary1 = {"1": self._create_mock_executor_summary("1", task_time=5000)}
@@ -2049,7 +2059,9 @@ class TestExecutorPerformanceAnalysis(unittest.TestCase):
         self.assertEqual(app1_metrics["total_executors"], 1)
         self.assertEqual(app2_metrics["total_executors"], 0)
 
-    @unittest.skip("Function _analyze_executor_performance_patterns does not exist after refactoring")
+    @unittest.skip(
+        "Function _analyze_executor_performance_patterns does not exist after refactoring"
+    )
     def test_analyze_executor_performance_patterns_reliability_insights(self):
         """Test reliability insights generation"""
         # Create scenario where app2 has > 2x more executor failures than app1
@@ -2716,7 +2728,10 @@ class TestCompareStageExecutorTimeline(unittest.TestCase):
         # Should have calculated 5 original intervals (10 minutes / 2 minutes each)
         self.assertEqual(result["comparison_config"]["interval_minutes"], 2)
         expected_intervals = 5
-        self.assertEqual(result["comparison_config"]["original_intervals_compared"], expected_intervals)
+        self.assertEqual(
+            result["comparison_config"]["original_intervals_compared"],
+            expected_intervals,
+        )
 
     @patch("spark_history_mcp.tools.analysis.get_client_or_default")
     def test_compare_stage_executor_timeline_no_submission_time(self, mock_get_client):
@@ -3106,6 +3121,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
             for r in result["recommendations"]
             if r.get("type") == "resource_allocation"
         ]
+        self.assertGreater(
+            len(resource_recs), 0, "Should detect resource allocation difference"
+        )
 
         # Check efficiency scores
         self.assertIn("efficiency_score", result["resource_efficiency"]["app1"])
@@ -3160,457 +3178,6 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertIn("Failed to compare app executor timelines", result["error"])
         self.assertEqual(result["app1_id"], "app-123")
         self.assertEqual(result["app2_id"], "app-456")
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_success(self, mock_get_client):
-        """Test successful stage dependency analysis from SQL plan"""
-        mock_get_client.return_value = self.mock_client
-
-        # Mock SQL execution data
-        mock_execution = MagicMock()
-        mock_execution.id = 1
-        mock_execution.description = "Test SQL Query"
-        mock_execution.status = "COMPLETED"
-        mock_execution.duration = 10000
-        mock_execution.success_job_ids = [1, 2]
-        mock_execution.running_job_ids = []
-        mock_execution.failed_job_ids = []
-
-        # Mock job data
-        job1 = MagicMock(spec=JobData)
-        job1.job_id = 1
-        job1.name = "Job 1"
-        job1.status = "SUCCEEDED"
-        job1.stage_ids = [1, 2]
-        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        job1.completion_time = datetime(2024, 1, 1, 10, 2, 0)
-
-        job2 = MagicMock(spec=JobData)
-        job2.job_id = 2
-        job2.name = "Job 2"
-        job2.status = "SUCCEEDED"
-        job2.stage_ids = [3, 4]
-        job2.submission_time = datetime(2024, 1, 1, 10, 2, 30)
-        job2.completion_time = datetime(2024, 1, 1, 10, 4, 0)
-
-        # Mock stage data
-        stage1 = MagicMock(spec=StageData)
-        stage1.stage_id = 1
-        stage1.name = "Stage 1"
-        stage1.status = "COMPLETE"
-        stage1.num_tasks = 10
-        stage1.attempt_id = 0
-        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        stage1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        stage2 = MagicMock(spec=StageData)
-        stage2.stage_id = 2
-        stage2.name = "Stage 2"
-        stage2.status = "COMPLETE"
-        stage2.num_tasks = 8
-        stage2.attempt_id = 0
-        stage2.submission_time = datetime(2024, 1, 1, 10, 1, 30)
-        stage2.completion_time = datetime(2024, 1, 1, 10, 2, 0)
-
-        stage3 = MagicMock(spec=StageData)
-        stage3.stage_id = 3
-        stage3.name = "Stage 3"
-        stage3.status = "COMPLETE"
-        stage3.num_tasks = 12
-        stage3.attempt_id = 0
-        stage3.submission_time = datetime(2024, 1, 1, 10, 2, 30)
-        stage3.completion_time = datetime(2024, 1, 1, 10, 3, 30)
-
-        stage4 = MagicMock(spec=StageData)
-        stage4.stage_id = 4
-        stage4.name = "Stage 4"
-        stage4.status = "COMPLETE"
-        stage4.num_tasks = 6
-        stage4.attempt_id = 0
-        stage4.submission_time = datetime(2024, 1, 1, 10, 3, 45)
-        stage4.completion_time = datetime(2024, 1, 1, 10, 4, 0)
-
-        # Set up mock client responses
-        self.mock_client.get_sql_execution.return_value = mock_execution
-        self.mock_client.list_jobs.return_value = [job1, job2]
-        self.mock_client.list_stages.return_value = [stage1, stage2, stage3, stage4]
-
-        # Call the function
-        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
-
-        # Verify the result is a stage dependencies dictionary
-        self.assertIsInstance(result, dict)
-        self.assertTrue(len(result) > 0)  # Should have stage dependencies
-
-        # Verify structure of stage dependencies
-        for stage_id, stage_dep in result.items():
-            self.assertIsInstance(stage_id, int)
-            self.assertIn("parents", stage_dep)
-            self.assertIn("children", stage_dep)
-            self.assertIn("stage_info", stage_dep)
-
-            # Verify parents and children are lists
-            self.assertIsInstance(stage_dep["parents"], list)
-            self.assertIsInstance(stage_dep["children"], list)
-            self.assertIsInstance(stage_dep["stage_info"], dict)
-
-        # Verify specific stages exist
-        self.assertIn(1, result)
-        self.assertIn(2, result)
-        self.assertIn(3, result)
-        self.assertIn(4, result)
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_no_execution_id(self, mock_get_client):
-        """Test stage dependency analysis without specifying execution_id"""
-        mock_get_client.return_value = self.mock_client
-
-        # Mock multiple SQL executions
-        execution1 = MagicMock()
-        execution1.id = 1
-        execution1.duration = 5000
-        execution1.description = "Short Query"
-        execution1.status = "COMPLETED"
-        execution1.success_job_ids = [1]
-        execution1.running_job_ids = []
-        execution1.failed_job_ids = []
-
-        execution2 = MagicMock()
-        execution2.id = 2
-        execution2.duration = 15000  # Longest duration
-        execution2.description = "Long Query"
-        execution2.status = "COMPLETED"
-        execution2.success_job_ids = [2, 3]
-        execution2.running_job_ids = []
-        execution2.failed_job_ids = []
-
-        self.mock_client.get_sql_list.return_value = [execution1, execution2]
-
-        # Mock job and stage data for the longest execution
-        job2 = MagicMock(spec=JobData)
-        job2.job_id = 2
-        job2.name = "Job 2"
-        job2.status = "SUCCEEDED"
-        job2.stage_ids = [2]
-        job2.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        job2.completion_time = datetime(2024, 1, 1, 10, 5, 0)
-
-        stage2 = MagicMock(spec=StageData)
-        stage2.stage_id = 2
-        stage2.name = "Stage 2"
-        stage2.status = "COMPLETE"
-        stage2.num_tasks = 20
-        stage2.attempt_id = 0
-        stage2.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        stage2.completion_time = datetime(2024, 1, 1, 10, 5, 0)
-
-        self.mock_client.list_jobs.return_value = [job2]
-        self.mock_client.list_stages.return_value = [stage2]
-
-        # Call without execution_id - should pick longest duration execution
-        result = get_stage_dependency_from_sql_plan("app-123")
-
-        # Should return stage dependencies (will pick execution 2 internally)
-        self.assertIsInstance(result, dict)
-        # Should have stage 2 from the longer execution
-        self.assertIn(2, result)
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_no_sql_executions(
-        self, mock_get_client
-    ):
-        """Test when no SQL executions are found"""
-        mock_get_client.return_value = self.mock_client
-        self.mock_client.get_sql_list.return_value = []
-
-        result = get_stage_dependency_from_sql_plan("app-123")
-
-        # Should return empty dict when no SQL executions found
-        self.assertEqual(result, {})
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_no_jobs(self, mock_get_client):
-        """Test when SQL execution has no associated jobs"""
-        mock_get_client.return_value = self.mock_client
-
-        # Mock execution with no job IDs
-        mock_execution = MagicMock()
-        mock_execution.id = 1
-        mock_execution.description = "Query with no jobs"
-        mock_execution.status = "FAILED"
-        mock_execution.success_job_ids = []
-        mock_execution.running_job_ids = []
-        mock_execution.failed_job_ids = []
-
-        self.mock_client.get_sql_execution.return_value = mock_execution
-
-        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
-
-        # Should return empty dict when no jobs found
-        self.assertEqual(result, {})
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_from_sql_plan_exception_handling(
-        self, mock_get_client
-    ):
-        """Test exception handling in get_stage_dependency_from_sql_plan"""
-        mock_get_client.return_value = self.mock_client
-
-        # Simulate an exception
-        self.mock_client.get_sql_execution.side_effect = Exception("API Error")
-
-        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
-
-        # Should return empty dict on exception
-        self.assertEqual(result, {})
-
-    def test_build_dependencies_from_dag_data_empty_input(self):
-        """Test DAG dependency building with empty input"""
-        # Empty dict
-        result = _build_dependencies_from_dag_data({})
-        self.assertEqual(result, {})
-
-        # None input
-        result = _build_dependencies_from_dag_data(None)
-        self.assertEqual(result, {})
-
-        # Invalid input type
-        result = _build_dependencies_from_dag_data("invalid")
-        self.assertEqual(result, {})
-
-    def test_build_dependencies_from_dag_data_with_stage_references(self):
-        """Test DAG dependency building with stage task references"""
-        dag_data = {
-            "stage_task_references": [
-                {"stage_id": 1, "attempt_id": 0, "task_id": 1},
-                {"stage_id": 2, "attempt_id": 0, "task_id": 2},
-            ],
-            "dagVizData": {
-                "nodes": [{"id": 0, "name": "scan"}, {"id": 1, "name": "filter"}],
-                "edges": [{"fromId": 0, "toId": 1}],
-            },
-        }
-
-        result = _build_dependencies_from_dag_data(dag_data)
-
-        # Should have dependencies based on the edges
-        self.assertIn(2, result)  # Stage 2 should have dependencies
-        self.assertEqual(len(result[2]["parents"]), 1)
-        self.assertEqual(result[2]["parents"][0]["stage_id"], 1)
-        self.assertEqual(result[2]["parents"][0]["relationship_type"], "dag_based")
-
-    def test_build_dependencies_from_dag_data_malformed_data(self):
-        """Test DAG dependency building with malformed data"""
-        # Missing edges
-        dag_data = {
-            "dagVizData": {
-                "nodes": [{"id": 0, "name": "scan"}]
-                # No edges
-            }
-        }
-        result = _build_dependencies_from_dag_data(dag_data)
-        self.assertEqual(result, {})
-
-        # Non-list nodes/edges
-        dag_data = {"dagVizData": {"nodes": "invalid", "edges": "invalid"}}
-        result = _build_dependencies_from_dag_data(dag_data)
-        self.assertEqual(result, {})
-
-    def test_build_dependencies_from_dag_data_node_name_extraction(self):
-        """Test stage ID extraction from node names"""
-        dag_data = {
-            "dagVizData": {
-                "nodes": [
-                    {"id": 0, "name": "Stage 1 - Scan"},
-                    {"id": 1, "name": "Stage 2 - Filter"},
-                ],
-                "edges": [{"fromId": 0, "toId": 1}],
-            }
-        }
-
-        result = _build_dependencies_from_dag_data(dag_data)
-
-        # Should extract stage IDs from node names and build dependencies
-        self.assertIn(2, result)
-        self.assertEqual(len(result[2]["parents"]), 1)
-        self.assertEqual(result[2]["parents"][0]["stage_id"], 1)
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_html_parsing_success(self, mock_get_client):
-        """Test stage dependency analysis with successful HTML parsing"""
-        mock_get_client.return_value = self.mock_client
-
-        # Mock execution data
-        mock_execution = MagicMock()
-        mock_execution.id = 1
-        mock_execution.description = "Test SQL Query"
-        mock_execution.status = "COMPLETED"
-        mock_execution.success_job_ids = [1]
-        mock_execution.running_job_ids = []
-        mock_execution.failed_job_ids = []
-
-        self.mock_client.get_sql_execution.return_value = mock_execution
-
-        # Mock HTML parsing methods
-        self.mock_client.get_sql_execution_html = MagicMock()
-        self.mock_client.extract_dag_data_from_html = MagicMock()
-
-        # Mock HTML content and parsed DAG data
-        html_content = "<html>mock content</html>"
-        dag_data = {
-            "stage_task_references": [
-                {"stage_id": 1, "attempt_id": 0, "task_id": 1},
-                {"stage_id": 2, "attempt_id": 0, "task_id": 2},
-            ],
-            "dagVizData": {
-                "nodes": [{"id": 0}, {"id": 1}],
-                "edges": [{"fromId": 0, "toId": 1}],
-            },
-        }
-
-        self.mock_client.get_sql_execution_html.return_value = html_content
-        self.mock_client.extract_dag_data_from_html.return_value = dag_data
-
-        # Mock other required data
-        job1 = MagicMock(spec=JobData)
-        job1.job_id = 1
-        job1.stage_ids = [1, 2]
-        job1.name = "Test Job"
-        job1.status = "SUCCEEDED"
-        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        job1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        stage1 = MagicMock(spec=StageData)
-        stage1.stage_id = 1
-        stage1.name = "Stage 1"
-        stage1.status = "COMPLETE"
-        stage1.attempt_id = 0
-        stage1.num_tasks = 10
-        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        stage1.completion_time = datetime(2024, 1, 1, 10, 0, 30)
-
-        stage2 = MagicMock(spec=StageData)
-        stage2.stage_id = 2
-        stage2.name = "Stage 2"
-        stage2.status = "COMPLETE"
-        stage2.attempt_id = 0
-        stage2.num_tasks = 8
-        stage2.submission_time = datetime(2024, 1, 1, 10, 0, 30)
-        stage2.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        self.mock_client.list_jobs.return_value = [job1]
-        self.mock_client.list_stages.return_value = [stage1, stage2]
-
-        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
-
-        # Should return stage dependencies with DAG-based relationships
-        self.assertIsInstance(result, dict)
-        self.assertTrue(len(result) > 0)  # Should have stage dependencies
-
-        # Check that we have the expected stages and they have dag_based relationships
-        self.assertIn(1, result)
-        self.assertIn(2, result)
-
-        # Verify HTML methods were called
-        self.mock_client.get_sql_execution_html.assert_called_once_with("app-123", 1)
-        self.mock_client.extract_dag_data_from_html.assert_called_once_with(
-            html_content
-        )
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_html_parsing_failure(self, mock_get_client):
-        """Test stage dependency analysis with HTML parsing failure"""
-        mock_get_client.return_value = self.mock_client
-
-        # Mock execution data
-        mock_execution = MagicMock()
-        mock_execution.id = 1
-        mock_execution.description = "Test SQL Query"
-        mock_execution.status = "COMPLETED"
-        mock_execution.success_job_ids = [1]
-        mock_execution.running_job_ids = []
-        mock_execution.failed_job_ids = []
-
-        self.mock_client.get_sql_execution.return_value = mock_execution
-
-        # Mock HTML parsing methods with failure
-        self.mock_client.get_sql_execution_html = MagicMock()
-        self.mock_client.get_sql_execution_html.side_effect = Exception(
-            "HTML fetch failed"
-        )
-
-        # Mock fallback data
-        job1 = MagicMock(spec=JobData)
-        job1.job_id = 1
-        job1.stage_ids = [1]
-        job1.name = "Test Job"
-        job1.status = "SUCCEEDED"
-        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        job1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        stage1 = MagicMock(spec=StageData)
-        stage1.stage_id = 1
-        stage1.name = "Stage 1"
-        stage1.status = "COMPLETE"
-        stage1.attempt_id = 0
-        stage1.num_tasks = 10
-        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        stage1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        self.mock_client.list_jobs.return_value = [job1]
-        self.mock_client.list_stages.return_value = [stage1]
-
-        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
-
-        # Should return stage dependencies with timing-based fallback
-        self.assertIsInstance(result, dict)
-        self.assertIn(1, result)  # Should still have stage 1
-
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_stage_dependency_no_html_support(self, mock_get_client):
-        """Test stage dependency analysis when client doesn't support HTML methods"""
-        mock_get_client.return_value = self.mock_client
-
-        # Mock execution data
-        mock_execution = MagicMock()
-        mock_execution.id = 1
-        mock_execution.description = "Test SQL Query"
-        mock_execution.status = "COMPLETED"
-        mock_execution.success_job_ids = [1]
-        mock_execution.running_job_ids = []
-        mock_execution.failed_job_ids = []
-
-        self.mock_client.get_sql_execution.return_value = mock_execution
-
-        # Don't add HTML methods to client (simulating older client)
-        # self.mock_client doesn't have get_sql_execution_html by default
-
-        # Mock fallback data
-        job1 = MagicMock(spec=JobData)
-        job1.job_id = 1
-        job1.stage_ids = [1]
-        job1.name = "Test Job"
-        job1.status = "SUCCEEDED"
-        job1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        job1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        stage1 = MagicMock(spec=StageData)
-        stage1.stage_id = 1
-        stage1.name = "Stage 1"
-        stage1.status = "COMPLETE"
-        stage1.attempt_id = 0
-        stage1.num_tasks = 10
-        stage1.submission_time = datetime(2024, 1, 1, 10, 0, 0)
-        stage1.completion_time = datetime(2024, 1, 1, 10, 1, 0)
-
-        self.mock_client.list_jobs.return_value = [job1]
-        self.mock_client.list_stages.return_value = [stage1]
-
-        result = get_stage_dependency_from_sql_plan("app-123", execution_id=1)
-
-        # Should return stage dependencies using timing-based analysis
-        self.assertIsInstance(result, dict)
-        self.assertIn(1, result)  # Should have stage 1
 
     @patch("spark_history_mcp.tools.analysis.get_client_or_default")
     def test_get_app_summary_success(self, mock_get_client):
@@ -3688,18 +3255,36 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
         self.assertEqual(result["application_name"], "Test Application")
 
         # Verify time metrics
-        self.assertEqual(result["application_duration_minutes"], 5.0)  # 300000ms = 5 minutes
-        self.assertEqual(result["total_executor_runtime_minutes"], 5.0)  # (120000 + 180000)ms = 5 minutes
-        self.assertAlmostEqual(result["executor_cpu_time_minutes"], 4.17, places=1)  # 250 seconds = (100+150) seconds = 4.17 minutes
-        self.assertAlmostEqual(result["jvm_gc_time_minutes"], 0.13, places=2)  # (5+3) seconds = 8 seconds = 0.13 minutes
+        self.assertEqual(
+            result["application_duration_minutes"], 5.0
+        )  # 300000ms = 5 minutes
+        self.assertEqual(
+            result["total_executor_runtime_minutes"], 5.0
+        )  # (120000 + 180000)ms = 5 minutes
+        self.assertAlmostEqual(
+            result["executor_cpu_time_minutes"], 4.17, places=1
+        )  # 250 seconds = (100+150) seconds = 4.17 minutes
+        self.assertAlmostEqual(
+            result["jvm_gc_time_minutes"], 0.13, places=2
+        )  # (5+3) seconds = 8 seconds = 0.13 minutes
         self.assertGreater(result["executor_utilization_percent"], 0)
 
         # Verify data processing metrics
-        self.assertAlmostEqual(result["input_data_size_gb"], 1.5, places=2)  # 1 + 0.5 GB
-        self.assertAlmostEqual(result["output_data_size_gb"], 0.75, places=2)  # 0.5 + 0.25 GB
-        self.assertAlmostEqual(result["shuffle_read_size_gb"], 0.375, places=3)  # 0.25 + 0.125 GB
-        self.assertAlmostEqual(result["shuffle_write_size_gb"], 0.188, places=3)  # 0.125 + 0.0625 GB
-        self.assertAlmostEqual(result["memory_spilled_gb"], 0.062, places=2)  # 0.0625 GB rounded
+        self.assertAlmostEqual(
+            result["input_data_size_gb"], 1.5, places=2
+        )  # 1 + 0.5 GB
+        self.assertAlmostEqual(
+            result["output_data_size_gb"], 0.75, places=2
+        )  # 0.5 + 0.25 GB
+        self.assertAlmostEqual(
+            result["shuffle_read_size_gb"], 0.375, places=3
+        )  # 0.25 + 0.125 GB
+        self.assertAlmostEqual(
+            result["shuffle_write_size_gb"], 0.188, places=3
+        )  # 0.125 + 0.0625 GB
+        self.assertAlmostEqual(
+            result["memory_spilled_gb"], 0.062, places=2
+        )  # 0.0625 GB rounded
         self.assertAlmostEqual(result["disk_spilled_gb"], 0.031, places=3)  # 0.03125 GB
 
         # Verify performance metrics
@@ -3712,7 +3297,9 @@ class TestCompareAppExecutorTimeline(unittest.TestCase):
 
         # Verify client calls
         mock_client.get_application.assert_called_once_with("app-123")
-        mock_client.list_stages.assert_called_once_with(app_id="app-123", with_summaries=True)
+        mock_client.list_stages.assert_called_once_with(
+            app_id="app-123", with_summaries=True
+        )
         mock_client.list_all_executors.assert_called_once_with(app_id="app-123")
 
     @patch("spark_history_mcp.tools.analysis.get_client_or_default")

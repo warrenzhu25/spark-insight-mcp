@@ -20,10 +20,14 @@ from .application import (
 # Comparison tools
 from .comparisons import (
     compare_app_executor_timeline,
+    compare_app_executors,
+    compare_app_jobs,
     compare_app_performance,
+    compare_app_resources,
+    compare_app_stages_aggregated,
     compare_app_summaries,
-    compare_stages,
     compare_stage_executor_timeline,
+    compare_stages,
     find_top_stage_differences,
 )
 
@@ -39,7 +43,6 @@ from .executors import (
 # Job and stage tools
 from .jobs_stages import (
     get_stage,
-    get_stage_dependency_from_sql_plan,
     get_stage_task_summary,
     list_jobs,
     list_slowest_jobs,
@@ -64,7 +67,6 @@ __all__ = [
     "get_stage",
     "get_stage_task_summary",
     "list_slowest_sql_queries",
-    "get_stage_dependency_from_sql_plan",
     # Executor tools
     "list_executors",
     "get_executor",
@@ -78,8 +80,12 @@ __all__ = [
     "analyze_failed_tasks",
     # Comparison tools
     "compare_app_executor_timeline",
+    "compare_app_executors",
+    "compare_app_jobs",
     "compare_app_performance",
+    "compare_app_resources",
     "compare_app_summaries",
+    "compare_app_stages_aggregated",
     "compare_stages",
     "compare_stage_executor_timeline",
     "find_top_stage_differences",
