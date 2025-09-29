@@ -593,6 +593,7 @@ def _build_executor_efficiency_metrics(exec1, exec2) -> Dict[str, Any]:
         ("total_executor_time", "Total Executor Time"),
         ("total_gc_time", "Total GC Time"),
         ("active_executors", "Active Executors"),
+        ("executor_utilization_percent", "Executor Utilization"),
     ]
 
     for field, _label in efficiency_fields:
