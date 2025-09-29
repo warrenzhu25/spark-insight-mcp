@@ -9,6 +9,7 @@ import json
 import tempfile
 from contextlib import suppress
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,6 +26,10 @@ from spark_history_mcp.cli.commands.compare import (
     clear_comparison_context,
     compare,
     create_mock_context,
+    execute_stage_comparison,
+    execute_stage_timeline_comparison,
+    execute_timeline_comparison,
+    extract_stage_menu_options,
     get_app_context,
     get_session_file,
     is_app_id,
@@ -32,9 +37,21 @@ from spark_history_mcp.cli.commands.compare import (
     resolve_app_identifiers,
     resolve_app_name_to_recent_apps,
     save_comparison_context,
+    show_interactive_menu,
+    show_post_stage_menu,
 )
 
 CONFIG_PATH = Path(tempfile.gettempdir()) / "spark_history_test_config.yaml"
+
+
+class DummyFormatter:
+    def __init__(self, format_type="human"):
+        self.format_type = format_type
+        self.outputs: list[tuple] = []
+
+    def output(self, data, title=None):
+        self.outputs.append((data, title))
+
 
 pytestmark = pytest.mark.skipif(
     not CLI_AVAILABLE, reason="CLI dependencies not available"
@@ -782,6 +799,169 @@ class TestCompareStagesPostMenu:
         mock_compare_stages.assert_called_once()
 
 
+class TestInteractiveHelperFunctions:
+    """Direct tests for interactive helper utilities."""
+
+    def test_extract_stage_menu_options_new_structure(self):
+        comparison_data = {
+            "stage_deep_dive": {
+                "top_stage_differences": [
+                    {
+                        "app1_stage": {"stage_id": 1},
+                        "app2_stage": {"stage_id": 2},
+                        "stage_name": "Very Long Stage Name That Exceeds Limit",
+                    },
+                    {
+                        "app1_stage": {"stage_id": 3},
+                        "app2_stage": {"stage_id": 4},
+                        "stage_name": "Short Name",
+                    },
+                ]
+            }
+        }
+
+        options = extract_stage_menu_options(comparison_data)
+
+        assert options == [
+            (1, 1, 2, "Very Long Stage Name That Exceeds L"),
+            (2, 3, 4, "Short Name"),
+        ]
+
+    def test_extract_stage_menu_options_legacy_structure(self):
+        comparison_data = {
+            "performance_comparison": {
+                "stages": {
+                    "top_stage_differences": [
+                        {
+                            "app1_stage": {"stage_id": 7},
+                            "app2_stage": {"stage_id": 8},
+                            "stage_name": "Legacy Stage",
+                        }
+                    ]
+                }
+            }
+        }
+
+        options = extract_stage_menu_options(comparison_data)
+        assert options == [(1, 7, 8, "Legacy Stage")]
+
+    @patch("spark_history_mcp.cli.commands.compare.click.echo")
+    def test_show_interactive_menu_no_differences(self, mock_echo):
+        show_interactive_menu(
+            {},
+            "app-1",
+            "app-2",
+            "local",
+            DummyFormatter(),
+            SimpleNamespace(obj={"config_path": CONFIG_PATH}),
+        )
+
+        mock_echo.assert_any_call(
+            "No stage differences available for interactive navigation."
+        )
+
+    @patch("spark_history_mcp.cli.commands.compare.click.getchar", return_value="t")
+    @patch("spark_history_mcp.cli.commands.compare.execute_timeline_comparison")
+    @patch(
+        "spark_history_mcp.cli.commands.compare.extract_stage_menu_options",
+        return_value=[(1, 11, 22, "Stage A")],
+    )
+    @patch("spark_history_mcp.cli.commands.compare.click.echo")
+    def test_show_interactive_menu_triggers_timeline(
+        self, _mock_echo, _mock_extract, mock_exec_timeline, _mock_getchar
+    ):
+        original_import = __import__
+
+        def fake_import(
+            name, globals_dict=None, locals_dict=None, fromlist=(), level=0
+        ):
+            if name in {"rich.console", "rich.panel"}:
+                raise ImportError("rich unavailable")
+            return original_import(name, globals_dict, locals_dict, fromlist, level)
+
+        formatter = DummyFormatter()
+        ctx = SimpleNamespace(obj={"config_path": CONFIG_PATH})
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            show_interactive_menu(
+                {"dummy": True},
+                "app-1",
+                "app-2",
+                "local",
+                formatter,
+                ctx,
+            )
+
+        mock_exec_timeline.assert_called_once_with(
+            "app-1", "app-2", "local", formatter, ctx
+        )
+
+    @patch("spark_history_mcp.cli.commands.compare.click.getchar", return_value="s")
+    @patch("spark_history_mcp.cli.commands.compare.execute_stage_timeline_comparison")
+    @patch("spark_history_mcp.cli.commands.compare.execute_timeline_comparison")
+    @patch("spark_history_mcp.cli.commands.compare.click.echo")
+    def test_show_post_stage_menu_stage_path(
+        self, _mock_echo, mock_exec_timeline, mock_exec_stage_timeline, _mock_getchar
+    ):
+        original_import = __import__
+
+        def fake_import(
+            name, globals_dict=None, locals_dict=None, fromlist=(), level=0
+        ):
+            if name in {"rich.console", "rich.panel"}:
+                raise ImportError("rich unavailable")
+            return original_import(name, globals_dict, locals_dict, fromlist, level)
+
+        formatter = DummyFormatter()
+        ctx = SimpleNamespace(obj={"config_path": CONFIG_PATH})
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            show_post_stage_menu(
+                "app-1",
+                "app-2",
+                1,
+                2,
+                "local",
+                formatter,
+                ctx,
+            )
+
+        mock_exec_stage_timeline.assert_called_once_with(1, 2, "local", formatter, ctx)
+        mock_exec_timeline.assert_not_called()
+
+    @patch("spark_history_mcp.cli.commands.compare.click.echo")
+    @patch(
+        "spark_history_mcp.cli.commands.compare.load_comparison_context",
+        return_value=None,
+    )
+    def test_execute_stage_comparison_without_context(self, mock_load, mock_echo):
+        execute_stage_comparison(
+            1,
+            2,
+            "local",
+            DummyFormatter(),
+            SimpleNamespace(obj={"config_path": CONFIG_PATH}),
+        )
+
+        mock_echo.assert_any_call("Error: No comparison context found.")
+
+    @patch("spark_history_mcp.cli.commands.compare.click.echo")
+    @patch(
+        "spark_history_mcp.cli.commands.compare.load_comparison_context",
+        return_value=None,
+    )
+    def test_execute_stage_timeline_without_context(self, mock_load, mock_echo):
+        execute_stage_timeline_comparison(
+            1,
+            2,
+            "local",
+            DummyFormatter(),
+            SimpleNamespace(obj={"config_path": CONFIG_PATH}),
+        )
+
+        mock_echo.assert_any_call("Error: No comparison context found.")
+
+
 class TestCompareStatusClearAndTimelineOverride:
     @patch(
         "spark_history_mcp.cli.commands.compare.load_comparison_context",
@@ -840,8 +1020,6 @@ class TestExecuteHelpers:
     def test_execute_stage_comparison(
         self, mock_compare_stages, mock_get_client, mock_load_ctx, capsys
     ):
-        from types import SimpleNamespace
-
         from spark_history_mcp.cli.commands.compare import execute_stage_comparison
 
         class F:
@@ -860,10 +1038,6 @@ class TestExecuteHelpers:
     def test_execute_timeline_comparison(
         self, mock_compare_tl, mock_get_client, capsys
     ):
-        from types import SimpleNamespace
-
-        from spark_history_mcp.cli.commands.compare import execute_timeline_comparison
-
         class F:
             format_type = "human"
 
@@ -884,8 +1058,6 @@ class TestExecuteHelpers:
     def test_execute_stage_timeline_comparison(
         self, mock_compare_stage_tl, mock_get_client, mock_load_ctx, capsys
     ):
-        from types import SimpleNamespace
-
         from spark_history_mcp.cli.commands.compare import (
             execute_stage_timeline_comparison,
         )
@@ -906,8 +1078,6 @@ class TestExecuteHelpers:
         return_value=None,
     )
     def test_execute_stage_comparison_no_context(self, mock_load_ctx, capsys):
-        from types import SimpleNamespace
-
         from spark_history_mcp.cli.commands.compare import execute_stage_comparison
 
         class F:

@@ -121,6 +121,52 @@ def test_list_slowest_jobs_and_empty(mock_get_context):
     assert list_slowest_jobs(app_id="a") == []
 
 
+@patch("spark_history_mcp.tools.jobs_stages.get_config")
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_list_slowest_jobs_respects_include_running_default(
+    mock_get_context, mock_get_config
+):
+    from spark_history_mcp.tools.tools import list_slowest_jobs
+
+    c = MagicMock()
+    now = datetime.now()
+    running_job = SimpleNamespace(
+        status="RUNNING",
+        submission_time=now,
+        completion_time=None,
+    )
+
+    c.list_jobs.return_value = [running_job]
+    mock_get_context.return_value = make_ctx(c)
+    mock_get_config.return_value = SimpleNamespace(include_running_defaults=True)
+
+    result = list_slowest_jobs(app_id="app", n=1)
+    assert result == [running_job]
+
+
+@patch("spark_history_mcp.tools.jobs_stages.get_config")
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_list_slowest_stages_respects_include_running_default(
+    mock_get_context, mock_get_config
+):
+    from spark_history_mcp.tools.tools import list_slowest_stages
+
+    c = MagicMock()
+    now = datetime.now()
+    running_stage = SimpleNamespace(
+        status="RUNNING",
+        completion_time=None,
+        first_task_launched_time=now,
+    )
+
+    c.list_stages.return_value = [running_stage]
+    mock_get_context.return_value = make_ctx(c)
+    mock_get_config.return_value = SimpleNamespace(include_running_defaults=True)
+
+    result = list_slowest_stages(app_id="app", n=1)
+    assert result == [running_stage]
+
+
 @patch("spark_history_mcp.tools.tools.mcp.get_context")
 def test_list_stages_and_slowest_stages(mock_get_context):
     from spark_history_mcp.tools.tools import list_slowest_stages, list_stages
