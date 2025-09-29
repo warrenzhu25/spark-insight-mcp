@@ -159,6 +159,30 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
             summary["average_executors"] = round(avg_executors, 1)
             summary["utilization_efficiency_percent"] = round(utilization_efficiency, 1)
 
+        # Calculate executor utilization (task time vs available executor time)
+        app_end_time_ms = end_time.timestamp() * 1000
+        total_executor_time_ms = 0
+        executor_cores = app.cores_per_executor or 1
+
+        for executor in executors:
+            add_time = getattr(executor, "add_time", None)
+            if add_time:
+                add_time_ms = add_time.timestamp() * 1000
+                remove_time = getattr(executor, "remove_time", None)
+                if remove_time:
+                    remove_time_ms = remove_time.timestamp() * 1000
+                else:
+                    remove_time_ms = app_end_time_ms
+                total_executor_time_ms += remove_time_ms - add_time_ms
+
+        if total_executor_time_ms > 0:
+            # total_duration is already in milliseconds from Spark API
+            total_task_time_ms = summary["total_duration"]
+            executor_utilization = (
+                total_task_time_ms / (total_executor_time_ms * executor_cores)
+            ) * 100
+            summary["executor_utilization_percent"] = round(executor_utilization, 2)
+
     return summary
 
 

@@ -254,6 +254,82 @@ def test_get_executor_and_summary(mock_get_context):
 
 
 @patch("spark_history_mcp.tools.tools.mcp.get_context")
+def test_get_executor_summary_with_utilization(mock_get_context):
+    from spark_history_mcp.tools.tools import get_executor_summary
+
+    c = MagicMock()
+    now = datetime.now()
+
+    # executors with timing info
+    exec1 = SimpleNamespace(
+        id="1",
+        is_active=True,
+        disk_used=100,
+        completed_tasks=2,
+        failed_tasks=0,
+        total_duration=5000,  # 5 seconds in ms
+        total_gc_time=100,
+        total_input_bytes=1024,
+        total_shuffle_read=2048,
+        total_shuffle_write=4096,
+        memory_metrics=SimpleNamespace(
+            used_on_heap_storage_memory=10, used_off_heap_storage_memory=20
+        ),
+        add_time=now,
+        remove_time=now + timedelta(seconds=10),
+    )
+    exec2 = SimpleNamespace(
+        id="2",
+        is_active=False,
+        disk_used=200,
+        completed_tasks=1,
+        failed_tasks=1,
+        total_duration=3000,  # 3 seconds in ms
+        total_gc_time=50,
+        total_input_bytes=512,
+        total_shuffle_read=1024,
+        total_shuffle_write=2048,
+        memory_metrics=SimpleNamespace(
+            used_on_heap_storage_memory=5, used_off_heap_storage_memory=5
+        ),
+        add_time=now,
+        remove_time=now + timedelta(seconds=10),
+    )
+    c.list_all_executors.return_value = [exec1, exec2]
+
+    # app with timing and cores info
+    app = SimpleNamespace(
+        id="app-1",
+        name="Test App",
+        cores_per_executor=2,
+        attempts=[
+            SimpleNamespace(
+                start_time=now,
+                end_time=now + timedelta(seconds=10),
+            )
+        ],
+    )
+    c.get_application.return_value = app
+    mock_get_context.return_value = make_ctx(c)
+
+    # Test summary with executor utilization
+    summary = get_executor_summary("app-1")
+
+    # Basic aggregations
+    assert summary["total_executors"] == 2
+    assert summary["active_executors"] == 1
+    assert summary["total_duration"] == 8000  # 5000 + 3000
+
+    # Executor utilization calculation
+    # total_task_time = 8000 ms (5000 + 3000)
+    # total_executor_time = 2 executors * 10 seconds * 1000 ms = 20000 ms
+    # executor_cores = 2
+    # utilization = (8000 / (20000 * 2)) * 100 = 20%
+    assert "executor_utilization_percent" in summary
+    assert summary["executor_utilization_percent"] == 20.0
+
+
+@patch("spark_history_mcp.tools.tools.mcp.get_context")
 def test_analyze_failed_tasks(mock_get_context):
     from spark_history_mcp.tools.tools import analyze_failed_tasks
 
