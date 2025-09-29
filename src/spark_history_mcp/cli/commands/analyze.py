@@ -6,13 +6,7 @@ Commands for performing Spark performance analysis and insights.
 
 from typing import Optional
 
-try:
-    import click
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-
+from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
@@ -51,6 +45,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -80,7 +75,7 @@ if CLI_AVAILABLE:
         ctx,
         app_id: str,
         server: Optional[str],
-        format: str,
+        output_format: str,
         include_auto_scaling: bool,
         include_shuffle_skew: bool,
         include_failed_tasks: bool,
@@ -88,7 +83,7 @@ if CLI_AVAILABLE:
     ):
         """Get comprehensive application insights."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -114,7 +109,9 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error analyzing application {app_id}: {e}") from e
+            raise click.ClickException(
+                f"Error analyzing application {app_id}: {e}"
+            ) from e
 
     @analyze.command("bottlenecks")
     @click.argument("app_id")
@@ -125,15 +122,18 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def bottlenecks(ctx, app_id: str, server: Optional[str], top_n: int, format: str):
+    def bottlenecks(
+        ctx, app_id: str, server: Optional[str], top_n: int, output_format: str
+    ):
         """Identify performance bottlenecks in the application."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -156,7 +156,9 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error analyzing bottlenecks for {app_id}: {e}") from e
+            raise click.ClickException(
+                f"Error analyzing bottlenecks for {app_id}: {e}"
+            ) from e
 
     @analyze.command("auto-scaling")
     @click.argument("app_id")
@@ -170,17 +172,22 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
     def auto_scaling(
-        ctx, app_id: str, server: Optional[str], target_duration: int, format: str
+        ctx,
+        app_id: str,
+        server: Optional[str],
+        target_duration: int,
+        output_format: str,
     ):
         """Analyze auto-scaling recommendations."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -225,6 +232,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -236,11 +244,11 @@ if CLI_AVAILABLE:
         server: Optional[str],
         shuffle_threshold: int,
         skew_ratio: float,
-        format: str,
+        output_format: str,
     ):
         """Analyze shuffle data skew issues."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -284,6 +292,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -295,11 +304,11 @@ if CLI_AVAILABLE:
         server: Optional[str],
         analysis_type: str,
         top_n: int,
-        format: str,
+        output_format: str,
     ):
         """Find slowest jobs, stages, or SQL queries."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -359,13 +368,19 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
     def compare(
-        ctx, app_id1: str, app_id2: str, server: Optional[str], top_n: int, format: str
+        ctx,
+        app_id1: str,
+        app_id2: str,
+        server: Optional[str],
+        top_n: int,
+        output_format: str,
     ):
         """
         Compare performance between two applications.
@@ -385,7 +400,7 @@ if CLI_AVAILABLE:
         click.echo()
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -413,10 +428,4 @@ if CLI_AVAILABLE:
             ) from e
 
 else:
-    # Fallback when CLI dependencies not available
-    def analyze():
-        import sys
-        sys.stderr.write(
-            "CLI dependencies not installed. Install with: uv add click rich tabulate\n"
-        )
-        return None
+    analyze = cli_unavailable_stub("analyze")

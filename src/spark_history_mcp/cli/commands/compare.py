@@ -5,17 +5,10 @@ Commands for comparing multiple Spark applications with stateful context managem
 """
 
 import json
-import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
-try:
-    import click
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-
+from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
@@ -1248,9 +1241,4 @@ if CLI_AVAILABLE:
         )
 
 else:
-    # Fallback when CLI dependencies not available
-    def compare():
-        sys.stdout.write(
-            "CLI dependencies not installed. Install with: uv add click rich tabulate\n"
-        )
-        return None
+    compare = cli_unavailable_stub("compare")

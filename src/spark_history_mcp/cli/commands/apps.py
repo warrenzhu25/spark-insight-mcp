@@ -7,14 +7,8 @@ Commands for listing and inspecting Spark applications.
 from pathlib import Path
 from typing import Optional
 
-try:
-    import click
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-
 from spark_history_mcp.api.spark_client import SparkRestClient
+from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
 from spark_history_mcp.config.config import Config
 
 if CLI_AVAILABLE:
@@ -25,16 +19,16 @@ def load_config(config_path: Path) -> Config:
     """Load configuration with error handling."""
     try:
         return Config.from_file(str(config_path))
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         if CLI_AVAILABLE:
-            raise click.ClickException(f"Configuration file not found: {config_path}")
-        else:
-            raise RuntimeError(f"Configuration file not found: {config_path}")
-    except Exception as e:
+            raise click.ClickException(
+                f"Configuration file not found: {config_path}"
+            ) from err
+        raise RuntimeError(f"Configuration file not found: {config_path}") from err
+    except Exception as err:
         if CLI_AVAILABLE:
-            raise click.ClickException(f"Error loading configuration: {e}")
-        else:
-            raise RuntimeError(f"Error loading configuration: {e}")
+            raise click.ClickException(f"Error loading configuration: {err}") from err
+        raise RuntimeError(f"Error loading configuration: {err}") from err
 
 
 def get_spark_client(
@@ -76,6 +70,7 @@ def is_application_id(identifier: str) -> bool:
 
 def create_mock_context(client):
     """Create mock context for MCP tool functions."""
+
     class MockContext:
         def __init__(self, client):
             self.request_context = MockRequestContext(client)
@@ -92,7 +87,9 @@ def create_mock_context(client):
     return MockContext(client)
 
 
-def resolve_app_identifier(client, identifier: str, server: Optional[str] = None) -> str:
+def resolve_app_identifier(
+    client, identifier: str, server: Optional[str] = None
+) -> str:
     """Resolve application name to ID if needed, return ID."""
     if is_application_id(identifier):
         return identifier  # Already an ID
@@ -115,6 +112,7 @@ def resolve_app_identifier(client, identifier: str, server: Optional[str] = None
             self.clients = {"default": client}
 
     import spark_history_mcp.tools.tools as tools_module
+
     original_get_context = getattr(tools_module.mcp, "get_context", None)
     tools_module.mcp.get_context = lambda: MockContext(client)
 
@@ -123,12 +121,14 @@ def resolve_app_identifier(client, identifier: str, server: Optional[str] = None
             server=server,
             app_name=identifier,
             search_type="contains",  # Fuzzy match
-            limit=1  # Get only the latest
+            limit=1,  # Get only the latest
         )
 
         if not apps:
             if CLI_AVAILABLE:
-                raise click.ClickException(f"No application found matching name: {identifier}")
+                raise click.ClickException(
+                    f"No application found matching name: {identifier}"
+                )
             else:
                 raise RuntimeError(f"No application found matching name: {identifier}")
 
@@ -158,6 +158,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -170,11 +171,11 @@ if CLI_AVAILABLE:
         limit: Optional[int],
         name: Optional[str],
         name_exact: Optional[str],
-        format: str,
+        output_format: str,
     ):
         """List Spark applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -222,8 +223,8 @@ if CLI_AVAILABLE:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
 
-        except Exception as e:
-            raise click.ClickException(f"Error listing applications: {e}")
+        except Exception as err:
+            raise click.ClickException(f"Error listing applications: {err}") from err
 
     @apps.command("show")
     @click.argument("app_id")
@@ -231,15 +232,16 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def show_app(ctx, app_id: str, server: Optional[str], format: str):
+    def show_app(ctx, app_id: str, server: Optional[str], output_format: str):
         """Show detailed information about a specific application."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -273,8 +275,10 @@ if CLI_AVAILABLE:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
 
-        except Exception as e:
-            raise click.ClickException(f"Error getting application {app_id}: {e}")
+        except Exception as err:
+            raise click.ClickException(
+                f"Error getting application {app_id}: {err}"
+            ) from err
 
     @apps.command("jobs")
     @click.argument("app_id")
@@ -283,15 +287,18 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def list_jobs(ctx, app_id: str, server: Optional[str], status: tuple, format: str):
+    def list_jobs(
+        ctx, app_id: str, server: Optional[str], status: tuple, output_format: str
+    ):
         """List jobs for a specific application."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -328,8 +335,10 @@ if CLI_AVAILABLE:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
 
-        except Exception as e:
-            raise click.ClickException(f"Error listing jobs for {app_id}: {e}")
+        except Exception as err:
+            raise click.ClickException(
+                f"Error listing jobs for {app_id}: {err}"
+            ) from err
 
     @apps.command("stages")
     @click.argument("app_id")
@@ -338,17 +347,18 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
     def list_stages(
-        ctx, app_id: str, server: Optional[str], status: tuple, format: str
+        ctx, app_id: str, server: Optional[str], status: tuple, output_format: str
     ):
         """List stages for a specific application."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
@@ -385,8 +395,10 @@ if CLI_AVAILABLE:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
 
-        except Exception as e:
-            raise click.ClickException(f"Error listing stages for {app_id}: {e}")
+        except Exception as err:
+            raise click.ClickException(
+                f"Error listing stages for {app_id}: {err}"
+            ) from err
 
     @apps.command("summary")
     @click.argument("app_identifier", metavar="APP_ID_OR_NAME")
@@ -394,12 +406,15 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def summary_app(ctx, app_identifier: str, server: Optional[str], format: str):
+    def summary_app(
+        ctx, app_identifier: str, server: Optional[str], output_format: str
+    ):
         """Get comprehensive performance summary for a specific application.
 
         APP_ID_OR_NAME can be either:
@@ -409,22 +424,20 @@ if CLI_AVAILABLE:
         When using names, returns summary for the latest matching application.
         """
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         # Field labels for human-readable output
-        FIELD_LABELS = {
+        field_labels = {
             # Remove redundant fields (already in title)
             "application_id": None,  # Skip - in title
             "application_name": None,  # Skip - in title
             "analysis_timestamp": None,  # Skip - not needed in display
-
             # Time metrics
             "application_duration_minutes": "Duration (Min)",
             "total_executor_runtime_minutes": "Executor Runtime (Min)",
             "executor_cpu_time_minutes": "CPU Time (Min)",
             "jvm_gc_time_minutes": "GC Time (Min)",
             "executor_utilization_percent": "Executor Utilization (%)",
-
             # Data processing metrics
             "input_data_size_gb": "Input Data (GB)",
             "output_data_size_gb": "Output Data (GB)",
@@ -432,24 +445,21 @@ if CLI_AVAILABLE:
             "shuffle_write_size_gb": "Shuffle Write (GB)",
             "memory_spilled_gb": "Memory Spilled (GB)",
             "disk_spilled_gb": "Disk Spilled (GB)",
-
             # Performance metrics
             "shuffle_read_wait_time_minutes": "Shuffle Read Wait (Min)",
             "shuffle_write_time_minutes": "Shuffle Write Time (Min)",
             "failed_tasks": "Failed Tasks",
-
             # Stage metrics
             "total_stages": "Total Stages",
             "completed_stages": "Completed Stages",
-            "failed_stages": "Failed Stages"
+            "failed_stages": "Failed Stages",
         }
 
         try:
             client = get_spark_client(config_path, server)
 
-            from spark_history_mcp.tools import get_app_summary, list_applications
-
             import spark_history_mcp.tools.tools as tools_module
+            from spark_history_mcp.tools import get_app_summary, list_applications
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
@@ -464,11 +474,13 @@ if CLI_AVAILABLE:
                         server=server,
                         app_name=app_identifier,
                         search_type="contains",  # Fuzzy match
-                        limit=1  # Get only the latest
+                        limit=1,  # Get only the latest
                     )
 
                     if not apps:
-                        raise click.ClickException(f"No application found matching name: {app_identifier}")
+                        raise click.ClickException(
+                            f"No application found matching name: {app_identifier}"
+                        )
 
                     app_id = apps[0].id  # Return the latest match
 
@@ -479,11 +491,13 @@ if CLI_AVAILABLE:
                 title = f"Application Summary - {app_name} ({app_id})"
 
                 # Transform for human/table formats, keep original for JSON
-                if format != "json":
+                if output_format != "json":
                     display_data = {}
                     for key, value in summary_data.items():
-                        readable_label = FIELD_LABELS.get(key, key)
-                        if readable_label is not None:  # Skip None values (redundant fields)
+                        readable_label = field_labels.get(key, key)
+                        if (
+                            readable_label is not None
+                        ):  # Skip None values (redundant fields)
                             display_data[readable_label] = value
                     formatter.output(display_data, title)
                 else:
@@ -492,13 +506,10 @@ if CLI_AVAILABLE:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
 
-        except Exception as e:
-            raise click.ClickException(f"Error getting summary for application {app_identifier}: {e}")
+        except Exception as err:
+            raise click.ClickException(
+                f"Error getting summary for application {app_identifier}: {err}"
+            ) from err
 
 else:
-    # Fallback when CLI dependencies not available
-    def apps():
-        print(
-            "CLI dependencies not installed. Install with: uv add click rich tabulate"
-        )
-        return None
+    apps = cli_unavailable_stub("apps")
