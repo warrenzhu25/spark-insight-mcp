@@ -139,8 +139,8 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
             active_count = 0
 
             for executor in executors:
-                add_time = executor.add_time
-                remove_time = executor.remove_time or end_time
+                add_time = getattr(executor, "add_time", None)
+                remove_time = getattr(executor, "remove_time", None) or end_time
 
                 if add_time and add_time <= interval_time < remove_time:
                     active_count += 1
