@@ -12,7 +12,6 @@ from difflib import SequenceMatcher
 from typing import List, Optional
 
 from ..models.spark_types import StageData
-
 from .common import get_config
 
 
@@ -53,7 +52,9 @@ def match_stages(
     """
     cfg = get_config()
     sim_thresh = (
-        similarity_threshold if similarity_threshold is not None else cfg.stage_match_similarity
+        similarity_threshold
+        if similarity_threshold is not None
+        else cfg.stage_match_similarity
     )
 
     matches: List[StageMatch] = []
@@ -83,4 +84,3 @@ def match_stages(
     # Highest similarity first
     matches.sort(key=lambda m: (m.similarity, m.overlap_seconds), reverse=True)
     return matches
-

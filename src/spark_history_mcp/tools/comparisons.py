@@ -17,12 +17,21 @@ from .application import get_app_summary as _get_app_summary_impl
 from .common import get_config, resolve_legacy_tool
 from .recommendations import (
     apply_rules as apply_rec_rules,
-    default_rules as default_rec_rules,
-    prioritize as prioritize_recs,
+)
+from .recommendations import (
     dedupe as dedupe_recs,
 )
-from .schema import validate_output, CompareAppPerformanceOutput
+from .recommendations import (
+    default_rules as default_rec_rules,
+)
+from .recommendations import (
+    prioritize as prioritize_recs,
+)
+from .schema import CompareAppPerformanceOutput, validate_output
 from .timelines import merge_consecutive_intervals
+
+# Import functions that we'll use in helper functions
+# These are defined later in this file, so we'll need to reference them carefully
 
 
 def _get_mcp_context() -> Optional[object]:
@@ -95,135 +104,22 @@ def compare_app_performance(
     """
     client = _resolve_client(server)
 
-    # Get application info via fetchers to populate caches used downstream
-    try:
-        app1 = fetcher_tools.fetch_app(app_id1, server)
-    except Exception as e:
-        return {
-            "schema_version": 1,
-            "applications": {
-                "app1": {"id": app_id1, "name": "Unknown", "error": f"Failed to fetch: {str(e)}"},
-                "app2": {"id": app_id2, "name": "Unknown"},
-            },
-            "aggregated_overview": {
-                "error": f"Failed to fetch application {app_id1}: {str(e)}"
-            },
-            "stage_deep_dive": {
-                "error": f"Failed to fetch application {app_id1}: {str(e)}",
-                "applications": {
-                    "app1": {"id": app_id1, "name": "Unknown"},
-                    "app2": {"id": app_id2, "name": "Unknown"},
-                },
-                "top_stage_differences": [],
-                "analysis_parameters": {
-                    "requested_top_n": top_n,
-                    "similarity_threshold": similarity_threshold,
-                    "available_stages_app1": 0,
-                    "available_stages_app2": 0,
-                    "matched_stages": 0,
-                },
-                "stage_summary": {
-                    "matched_stages": 0,
-                    "total_time_difference_seconds": 0.0,
-                    "average_time_difference_seconds": 0.0,
-                    "max_time_difference_seconds": 0.0,
-                },
-            },
-            "error": f"Failed to fetch application {app_id1}: {str(e)}",
-            "recommendations": [],
-            "key_recommendations": [],
-        }
-
-    try:
-        app2 = fetcher_tools.fetch_app(app_id2, server)
-    except Exception as e:
-        return {
-            "schema_version": 1,
-            "applications": {
-                "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
-                "app2": {"id": app_id2, "name": "Unknown", "error": f"Failed to fetch: {str(e)}"},
-            },
-            "aggregated_overview": {
-                "error": f"Failed to fetch application {app_id2}: {str(e)}"
-            },
-            "stage_deep_dive": {
-                "error": f"Failed to fetch application {app_id2}: {str(e)}",
-                "applications": {
-                    "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
-                    "app2": {"id": app_id2, "name": "Unknown"},
-                },
-                "top_stage_differences": [],
-                "analysis_parameters": {
-                    "requested_top_n": top_n,
-                    "similarity_threshold": similarity_threshold,
-                    "available_stages_app1": 0,
-                    "available_stages_app2": 0,
-                    "matched_stages": 0,
-                },
-                "stage_summary": {
-                    "matched_stages": 0,
-                    "total_time_difference_seconds": 0.0,
-                    "average_time_difference_seconds": 0.0,
-                    "max_time_difference_seconds": 0.0,
-                },
-            },
-            "error": f"Failed to fetch application {app_id2}: {str(e)}",
-            "recommendations": [],
-            "key_recommendations": [],
-        }
+    # Safely fetch both applications with centralized error handling
+    app1, app2, error_response = _fetch_applications_safely(
+        app_id1, app_id2, server, top_n, similarity_threshold
+    )
+    if error_response:
+        return error_response
 
     # PHASE 1: AGGREGATED APPLICATION OVERVIEW
-    # Use specialized comparison tools for aggregated overview with hardcoded defaults
-    try:
-        executor_comparison = compare_app_executors(
-            app_id1, app_id2, server, significance_threshold=significance_threshold, show_only_significant=True
-        )
-    except Exception as e:
-        executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
-
-    try:
-        stage_comparison = compare_app_stages_aggregated(
-            app_id1, app_id2, server, significance_threshold=significance_threshold, show_only_significant=True
-        )
-    except Exception as e:
-        stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
-
-    # Create streamlined aggregated overview using specialized tools
-    aggregated_overview = {
-        "application_summary": {},
-        "job_performance": {},
-        "stage_metrics": stage_comparison,
-        "executor_performance": executor_comparison,
-    }
+    aggregated_overview = _build_aggregated_overview(
+        app_id1, app_id2, server, significance_threshold
+    )
 
     # PHASE 2: STAGE-LEVEL DEEP DIVE ANALYSIS
-    # Use the new find_top_stage_differences tool for stage analysis
-    try:
-        stage_analysis = find_top_stage_differences(
-            app_id1, app_id2, server, top_n, similarity_threshold=similarity_threshold
-        )
-    except Exception as e:
-        stage_analysis = {
-            "error": f"Failed to analyze stage differences: {str(e)}",
-            "applications": {
-                "app1": {"id": app_id1, "name": getattr(app1, 'name', 'Unknown')},
-                "app2": {"id": app_id2, "name": getattr(app2, 'name', 'Unknown')},
-            },
-            "top_stage_differences": [],
-            "analysis_parameters": {
-                "requested_top_n": top_n,
-                "similarity_threshold": 0.6,
-                "available_stages_app1": 0,
-                "available_stages_app2": 0,
-                "matched_stages": 0,
-            },
-            "stage_summary": {
-                "matched_stages": 0,
-                "total_time_difference_seconds": 0.0,
-                "average_time_difference_seconds": 0.0,
-                "max_time_difference_seconds": 0.0,
-            },
-        }
+    stage_analysis = _analyze_stage_deep_dive(
+        app_id1, app_id2, server, top_n, similarity_threshold, app1, app2
+    )
 
     # Generate basic recommendations even if stage analysis fails
     basic_recommendations = []
@@ -274,7 +170,9 @@ def compare_app_performance(
 
     # Calculate summary statistics for compatibility
     if detailed_comparisons:
-        time_diffs = [comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons]
+        time_diffs = [
+            comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons
+        ]
         total_time_diff = sum(time_diffs)
         avg_time_diff = total_time_diff / len(time_diffs)
         max_time_diff = max(time_diffs)
@@ -310,9 +208,7 @@ def compare_app_performance(
         and isinstance(aggregated_overview["stage_metrics"], dict)
         and "recommendations" in aggregated_overview["stage_metrics"]
     ):
-        recommendations.extend(
-            aggregated_overview["stage_metrics"]["recommendations"]
-        )
+        recommendations.extend(aggregated_overview["stage_metrics"]["recommendations"])
 
     # STAGE-LEVEL RECOMMENDATIONS (existing logic continues below)
 
@@ -353,7 +249,8 @@ def compare_app_performance(
     sorted_recommendations = prioritize_recs(dedupe_recs(recommendations), top_n=9999)
     filtered_recommendations = sorted_recommendations[:5]
 
-    # Extract simplified executor summary
+    # Extract simplified executor summary from aggregated overview
+    executor_comparison = aggregated_overview.get("executor_performance", {})
     executor_summary = {}
     if isinstance(executor_comparison, dict) and "error" not in executor_comparison:
         # Extract key metrics from executor comparison
@@ -361,14 +258,16 @@ def compare_app_performance(
             "memory_efficiency": executor_comparison.get("memory_efficiency", {}),
             "task_efficiency": executor_comparison.get("task_efficiency", {}),
             "gc_efficiency": executor_comparison.get("gc_efficiency", {}),
-            "summary": executor_comparison.get("summary", {})
+            "summary": executor_comparison.get("summary", {}),
         }
     else:
         executor_summary = executor_comparison
 
     # Get app summary comparison using the new tool
     try:
-        app_summary_diff = compare_app_summaries(app_id1, app_id2, server, significance_threshold)
+        app_summary_diff = compare_app_summaries(
+            app_id1, app_id2, server, significance_threshold
+        )
     except Exception as e:
         app_summary_diff = {
             "error": f"Failed to get app summary comparison: {str(e)}",
@@ -408,8 +307,11 @@ def compare_app_performance(
 
     # Sort the result by mixed metrics (change percentages and ratios)
     # Optionally validate against schema in debug mode
-    result = validate_output(CompareAppPerformanceOutput, result, enabled=get_config().debug_validate_schema)
+    result = validate_output(
+        CompareAppPerformanceOutput, result, enabled=get_config().debug_validate_schema
+    )
     return sort_comparison_data(result, sort_key="mixed")
+
 
 @mcp.tool()
 def compare_app_summaries(
@@ -448,10 +350,16 @@ def compare_app_summaries(
     exclude_fields = {"application_id", "application_name", "analysis_timestamp"}
 
     # Filter to only comparable numeric metrics, using exact field names from get_app_summary
-    app1_metrics = {k: v for k, v in app1_summary.items()
-                   if k not in exclude_fields and isinstance(v, (int, float))}
-    app2_metrics = {k: v for k, v in app2_summary.items()
-                   if k not in exclude_fields and isinstance(v, (int, float))}
+    app1_metrics = {
+        k: v
+        for k, v in app1_summary.items()
+        if k not in exclude_fields and isinstance(v, (int, float))
+    }
+    app2_metrics = {
+        k: v
+        for k, v in app2_summary.items()
+        if k not in exclude_fields and isinstance(v, (int, float))
+    }
 
     # Add application IDs for identification
     app1_metrics["application_id"] = app1_summary.get("application_id", app_id1)
@@ -486,7 +394,10 @@ def compare_app_summaries(
             change_value = extract_percentage_value(change_str)
 
             # Only include metrics that meet the significance threshold
-            if change_value >= (significance_threshold * 100) or metric_name == "application_id":
+            if (
+                change_value >= (significance_threshold * 100)
+                or metric_name == "application_id"
+            ):
                 diff[f"{metric_name}_change"] = change_str
                 filtered_app1_metrics[metric_name] = app1_metrics[metric_name]
                 filtered_app2_metrics[metric_name] = app2_metrics[metric_name]
@@ -503,12 +414,13 @@ def compare_app_summaries(
             "total_metrics": len(app1_metrics) - 1,  # Exclude application_id
             "significant_metrics": len(diff),
             "significance_threshold": significance_threshold,
-            "filtering_applied": len(diff) < len(app1_metrics) - 1
-        }
+            "filtering_applied": len(diff) < len(app1_metrics) - 1,
+        },
     }
 
     # Sort the result by difference percentage (descending)
     return sort_comparison_data(result, sort_key="change")
+
 
 @mcp.tool()
 def find_top_stage_differences(
@@ -541,8 +453,12 @@ def find_top_stage_differences(
     app1 = fetcher_tools.fetch_app(app_id1, server)
     app2 = fetcher_tools.fetch_app(app_id2, server)
 
-    stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server, with_summaries=True)
-    stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server, with_summaries=True)
+    stages1 = fetcher_tools.fetch_stages(
+        app_id=app_id1, server=server, with_summaries=True
+    )
+    stages2 = fetcher_tools.fetch_stages(
+        app_id=app_id2, server=server, with_summaries=True
+    )
 
     if not stages1 or not stages2:
         return {
@@ -729,7 +645,9 @@ def find_top_stage_differences(
     )
     avg_diff = total_diff / len(detailed_comparisons) if detailed_comparisons else 0.0
     max_diff = (
-        max(comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons)
+        max(
+            comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons
+        )
         if detailed_comparisons
         else 0.0
     )
@@ -896,19 +814,35 @@ def compare_stages(
 
     # Dynamic stage metrics comparison - include all numeric fields from stage objects
     exclude_fields = {
-        "status", "stage_id", "attempt_id", "submission_time",
-        "first_task_launched_time", "completion_time", "failure_reason", "name"
+        "status",
+        "stage_id",
+        "attempt_id",
+        "submission_time",
+        "first_task_launched_time",
+        "completion_time",
+        "failure_reason",
+        "name",
     }
 
     # Convert stage objects to dictionaries and filter numeric fields
-    stage1_dict = stage1.model_dump() if hasattr(stage1, 'model_dump') else stage1.__dict__
-    stage2_dict = stage2.model_dump() if hasattr(stage2, 'model_dump') else stage2.__dict__
+    stage1_dict = (
+        stage1.model_dump() if hasattr(stage1, "model_dump") else stage1.__dict__
+    )
+    stage2_dict = (
+        stage2.model_dump() if hasattr(stage2, "model_dump") else stage2.__dict__
+    )
 
     # Get all comparable numeric metrics
-    stage1_metrics = {k: v for k, v in stage1_dict.items()
-                     if k not in exclude_fields and isinstance(v, (int, float)) and v is not None}
-    stage2_metrics = {k: v for k, v in stage2_dict.items()
-                     if k not in exclude_fields and isinstance(v, (int, float)) and v is not None}
+    stage1_metrics = {
+        k: v
+        for k, v in stage1_dict.items()
+        if k not in exclude_fields and isinstance(v, (int, float)) and v is not None
+    }
+    stage2_metrics = {
+        k: v
+        for k, v in stage2_dict.items()
+        if k not in exclude_fields and isinstance(v, (int, float)) and v is not None
+    }
 
     # Dynamic comparison for all available metrics
     for metric_name in stage1_metrics:
@@ -930,20 +864,35 @@ def compare_stages(
         dist2 = stage2.task_metrics_distributions
 
         # Dynamic task distribution metrics comparison - include all available distribution fields
-        exclude_dist_fields = {"quantiles", "shuffle_read_metrics", "shuffle_write_metrics", "input_metrics", "output_metrics", "peak_memory_metrics"}
+        exclude_dist_fields = {
+            "quantiles",
+            "shuffle_read_metrics",
+            "shuffle_write_metrics",
+            "input_metrics",
+            "output_metrics",
+            "peak_memory_metrics",
+        }
 
         # Get all distribution fields from the objects
-        dist1_dict = dist1.model_dump() if hasattr(dist1, 'model_dump') else dist1.__dict__
-        dist2_dict = dist2.model_dump() if hasattr(dist2, 'model_dump') else dist2.__dict__
+        dist1_dict = (
+            dist1.model_dump() if hasattr(dist1, "model_dump") else dist1.__dict__
+        )
+        dist2_dict = (
+            dist2.model_dump() if hasattr(dist2, "model_dump") else dist2.__dict__
+        )
 
         # Find all sequence fields that are comparable (both exist and have proper format)
         distribution_fields = []
         for field_name in dist1_dict:
-            if (field_name not in exclude_dist_fields and
-                field_name in dist2_dict and
-                isinstance(dist1_dict[field_name], (list, tuple)) and
-                isinstance(dist2_dict[field_name], (list, tuple))):
-                distribution_fields.append((field_name, dist1_dict[field_name], dist2_dict[field_name]))
+            if (
+                field_name not in exclude_dist_fields
+                and field_name in dist2_dict
+                and isinstance(dist1_dict[field_name], (list, tuple))
+                and isinstance(dist2_dict[field_name], (list, tuple))
+            ):
+                distribution_fields.append(
+                    (field_name, dist1_dict[field_name], dist2_dict[field_name])
+                )
 
         for metric_name, vals1, vals2 in distribution_fields:
             if vals1 and vals2 and len(vals1) >= 5 and len(vals2) >= 5:
@@ -2009,19 +1958,29 @@ def compare_app_executors(
             }
 
         # Dynamic executor performance ratios - include all numeric fields from executor summaries
-        exclude_fields = {"active_executors"}  # active_executors is calculated differently
+        exclude_fields = {
+            "active_executors"
+        }  # active_executors is calculated differently
 
         # Filter to only comparable numeric metrics from get_executor_summary
-        app1_metrics = {k: v for k, v in exec_summary1.items()
-                       if k not in exclude_fields and isinstance(v, (int, float))}
-        app2_metrics = {k: v for k, v in exec_summary2.items()
-                       if k not in exclude_fields and isinstance(v, (int, float))}
+        app1_metrics = {
+            k: v
+            for k, v in exec_summary1.items()
+            if k not in exclude_fields and isinstance(v, (int, float))
+        }
+        app2_metrics = {
+            k: v
+            for k, v in exec_summary2.items()
+            if k not in exclude_fields and isinstance(v, (int, float))
+        }
 
         # Calculate dynamic performance ratios with proper zero handling
         executor_comparison = {}
         for metric in app1_metrics.keys():
             if metric in app2_metrics:
-                ratio = _calculate_safe_ratio(app1_metrics[metric], app2_metrics[metric])
+                ratio = _calculate_safe_ratio(
+                    app1_metrics[metric], app2_metrics[metric]
+                )
                 executor_comparison[f"{metric}_ratio"] = ratio
 
         # Calculate efficiency metrics
@@ -2361,12 +2320,20 @@ def compare_app_stages_aggregated(
     try:
         # Get stages from both applications - try with summaries first, fallback if needed
         try:
-            stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server, with_summaries=True)
-            stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server, with_summaries=True)
+            stages1 = fetcher_tools.fetch_stages(
+                app_id=app_id1, server=server, with_summaries=True
+            )
+            stages2 = fetcher_tools.fetch_stages(
+                app_id=app_id2, server=server, with_summaries=True
+            )
         except Exception as e:
             if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
-                stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server, with_summaries=False)
-                stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server, with_summaries=False)
+                stages1 = fetcher_tools.fetch_stages(
+                    app_id=app_id1, server=server, with_summaries=False
+                )
+                stages2 = fetcher_tools.fetch_stages(
+                    app_id=app_id2, server=server, with_summaries=False
+                )
             else:
                 raise e
 
@@ -2619,6 +2586,7 @@ def compare_app_stages_aggregated(
 
 # Helper functions that are missing from the refactoring
 
+
 def _compare_environments(
     client, app_id1: str, app_id2: str, filter_auto_generated: bool = True
 ) -> Dict[str, Any]:
@@ -2643,8 +2611,12 @@ def _compare_environments(
         return {
             "spark_properties": {
                 "different": different_props,
-                "app1_only": {k: v for k, v in spark_props1.items() if k not in spark_props2},
-                "app2_only": {k: v for k, v in spark_props2.items() if k not in spark_props1},
+                "app1_only": {
+                    k: v for k, v in spark_props1.items() if k not in spark_props2
+                },
+                "app2_only": {
+                    k: v for k, v in spark_props2.items() if k not in spark_props1
+                },
             }
         }
     except Exception as e:
@@ -2672,7 +2644,7 @@ def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str
 def _calculate_safe_ratio(val1, val2):
     """Calculate a safe ratio avoiding division by zero."""
     if val2 == 0:
-        return float('inf') if val1 > 0 else 1.0
+        return float("inf") if val1 > 0 else 1.0
     return val1 / val2
 
 
@@ -2718,8 +2690,10 @@ def sort_comparison_data(data, sort_key="ratio"):
             try:
                 data["comparisons"] = sorted(
                     comparisons,
-                    key=lambda x: x.get(sort_key, 0) if isinstance(x.get(sort_key), (int, float)) else 0,
-                    reverse=True
+                    key=lambda x: x.get(sort_key, 0)
+                    if isinstance(x.get(sort_key), (int, float))
+                    else 0,
+                    reverse=True,
                 )
             except (TypeError, KeyError):
                 pass  # Keep original order if sorting fails
@@ -2916,3 +2890,184 @@ def _build_executor_analysis(stage1, stage2) -> Dict[str, Any]:
         "insights": insights,
         "recommendations": recommendations,
     }
+
+
+# Helper functions for compare_app_performance refactoring
+def _create_app_fetch_error_response(
+    app_id1: str,
+    app_id2: str,
+    failed_app_id: str,
+    error_msg: str,
+    top_n: int,
+    similarity_threshold: float,
+    app1_name: str = "Unknown",
+) -> Dict[str, Any]:
+    """Create standardized error response for application fetch failures."""
+    return {
+        "schema_version": 1,
+        "applications": {
+            "app1": {
+                "id": app_id1,
+                "name": app1_name if failed_app_id != app_id1 else "Unknown",
+                "error": f"Failed to fetch: {error_msg}"
+                if failed_app_id == app_id1
+                else None,
+            },
+            "app2": {
+                "id": app_id2,
+                "name": "Unknown",
+                "error": f"Failed to fetch: {error_msg}"
+                if failed_app_id == app_id2
+                else None,
+            },
+        },
+        "aggregated_overview": {
+            "error": f"Failed to fetch application {failed_app_id}: {error_msg}"
+        },
+        "stage_deep_dive": {
+            "error": f"Failed to fetch application {failed_app_id}: {error_msg}",
+            "applications": {
+                "app1": {
+                    "id": app_id1,
+                    "name": app1_name if failed_app_id != app_id1 else "Unknown",
+                },
+                "app2": {"id": app_id2, "name": "Unknown"},
+            },
+            "top_stage_differences": [],
+            "analysis_parameters": {
+                "requested_top_n": top_n,
+                "similarity_threshold": similarity_threshold,
+                "available_stages_app1": 0,
+                "available_stages_app2": 0,
+                "matched_stages": 0,
+            },
+            "stage_summary": {
+                "matched_stages": 0,
+                "total_time_difference_seconds": 0.0,
+                "average_time_difference_seconds": 0.0,
+                "max_time_difference_seconds": 0.0,
+            },
+        },
+        "error": f"Failed to fetch application {failed_app_id}: {error_msg}",
+        "recommendations": [],
+        "key_recommendations": [],
+    }
+
+
+def _fetch_applications_safely(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str],
+    top_n: int,
+    similarity_threshold: float,
+) -> tuple[Any, Any, Optional[Dict[str, Any]]]:
+    """
+    Safely fetch both applications with error handling.
+
+    Returns:
+        tuple: (app1, app2, error_response) where error_response is None on success
+    """
+    # Fetch first application
+    try:
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+    except Exception as e:
+        error_response = _create_app_fetch_error_response(
+            app_id1, app_id2, app_id1, str(e), top_n, similarity_threshold
+        )
+        return None, None, error_response
+
+    # Fetch second application
+    try:
+        app2 = fetcher_tools.fetch_app(app_id2, server)
+    except Exception as e:
+        error_response = _create_app_fetch_error_response(
+            app_id1,
+            app_id2,
+            app_id2,
+            str(e),
+            top_n,
+            similarity_threshold,
+            app1_name=getattr(app1, "name", "Unknown"),
+        )
+        return app1, None, error_response
+
+    return app1, app2, None
+
+
+def _build_aggregated_overview(
+    app_id1: str, app_id2: str, server: Optional[str], significance_threshold: float
+) -> Dict[str, Any]:
+    """Build the aggregated application overview section."""
+    # PHASE 1: AGGREGATED APPLICATION OVERVIEW
+    # Use specialized comparison tools for aggregated overview with hardcoded defaults
+    try:
+        executor_comparison = compare_app_executors(
+            app_id1,
+            app_id2,
+            server,
+            significance_threshold=significance_threshold,
+            show_only_significant=True,
+        )
+    except Exception as e:
+        executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
+
+    try:
+        stage_comparison = compare_app_stages_aggregated(
+            app_id1,
+            app_id2,
+            server,
+            significance_threshold=significance_threshold,
+            show_only_significant=True,
+        )
+    except Exception as e:
+        stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
+
+    # Create streamlined aggregated overview using specialized tools
+    return {
+        "application_summary": {},
+        "job_performance": {},
+        "stage_metrics": stage_comparison,
+        "executor_performance": executor_comparison,
+    }
+
+
+def _analyze_stage_deep_dive(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str],
+    top_n: int,
+    similarity_threshold: float,
+    app1: Any,
+    app2: Any,
+) -> Dict[str, Any]:
+    """Perform stage-level deep dive analysis."""
+    # PHASE 2: STAGE-LEVEL DEEP DIVE ANALYSIS
+    # Use the new find_top_stage_differences tool for stage analysis
+    try:
+        stage_analysis = find_top_stage_differences(
+            app_id1, app_id2, server, top_n, similarity_threshold=similarity_threshold
+        )
+    except Exception as e:
+        stage_analysis = {
+            "error": f"Failed to analyze stage differences: {str(e)}",
+            "applications": {
+                "app1": {"id": app_id1, "name": getattr(app1, "name", "Unknown")},
+                "app2": {"id": app_id2, "name": getattr(app2, "name", "Unknown")},
+            },
+            "top_stage_differences": [],
+            "analysis_parameters": {
+                "requested_top_n": top_n,
+                "similarity_threshold": 0.6,
+                "available_stages_app1": 0,
+                "available_stages_app2": 0,
+                "matched_stages": 0,
+            },
+            "stage_summary": {
+                "matched_stages": 0,
+                "total_time_difference_seconds": 0.0,
+                "average_time_difference_seconds": 0.0,
+                "max_time_difference_seconds": 0.0,
+            },
+        }
+
+    return stage_analysis

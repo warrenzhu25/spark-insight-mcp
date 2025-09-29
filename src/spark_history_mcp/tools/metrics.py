@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..models.spark_types import StageStatus
-
 from .common import bytes_to_gb, get_config, ms_to_min, ns_to_min
 
 
@@ -18,83 +17,106 @@ def summarize_app(app, stages, executors) -> Dict[str, Any]:
     Keeps behavior aligned with current tools.get_app_summary implementation.
     """
     if not app.attempts:
-        return {"error": "No application attempts found", "application_id": getattr(app, 'id', None)}
+        return {
+            "error": "No application attempts found",
+            "application_id": getattr(app, "id", None),
+        }
 
     attempt = app.attempts[-1]
 
-    total_runtime_min = ms_to_min(getattr(attempt, 'duration', 0))
+    total_runtime_min = ms_to_min(getattr(attempt, "duration", 0))
 
-    total_executor_runtime_ms = sum(getattr(stage, 'executor_run_time', 0) or 0 for stage in stages)
+    total_executor_runtime_ms = sum(
+        getattr(stage, "executor_run_time", 0) or 0 for stage in stages
+    )
     total_executor_runtime_min = ms_to_min(total_executor_runtime_ms)
 
-    total_executor_cpu_time_ns = sum(getattr(stage, 'executor_cpu_time', 0) or 0 for stage in stages)
+    total_executor_cpu_time_ns = sum(
+        getattr(stage, "executor_cpu_time", 0) or 0 for stage in stages
+    )
     total_executor_cpu_time_min = ns_to_min(total_executor_cpu_time_ns)
 
-    total_gc_time_ms = sum(getattr(stage, 'jvm_gc_time', 0) or 0 for stage in stages)
+    total_gc_time_ms = sum(getattr(stage, "jvm_gc_time", 0) or 0 for stage in stages)
     total_gc_time_min = ms_to_min(total_gc_time_ms)
 
-    if getattr(attempt, 'end_time', None) and getattr(attempt, 'start_time', None):
+    if getattr(attempt, "end_time", None) and getattr(attempt, "start_time", None):
         app_end_time_ms = attempt.end_time.timestamp() * 1000
     else:
         app_end_time_ms = None
 
     total_executor_time_ms = 0
-    executor_cores = getattr(app, 'cores_per_executor', 1) or 1
+    executor_cores = getattr(app, "cores_per_executor", 1) or 1
     for executor in executors:
-        if getattr(executor, 'add_time', None):
+        if getattr(executor, "add_time", None):
             add_time_ms = executor.add_time.timestamp() * 1000
-            if getattr(executor, 'remove_time', None):
+            if getattr(executor, "remove_time", None):
                 remove_time_ms = executor.remove_time.timestamp() * 1000
             elif app_end_time_ms:
                 remove_time_ms = app_end_time_ms
             else:
                 continue
-            total_executor_time_ms += (remove_time_ms - add_time_ms)
+            total_executor_time_ms += remove_time_ms - add_time_ms
 
     executor_utilization = 0.0
     if total_executor_time_ms > 0:
-        executor_utilization = (total_executor_runtime_ms / (total_executor_time_ms * executor_cores)) * 100
+        executor_utilization = (
+            total_executor_runtime_ms / (total_executor_time_ms * executor_cores)
+        ) * 100
 
-    total_input_gb = bytes_to_gb(sum(getattr(stage, 'input_bytes', 0) or 0 for stage in stages))
-    total_output_gb = bytes_to_gb(sum(getattr(stage, 'output_bytes', 0) or 0 for stage in stages))
-    total_shuffle_read_gb = bytes_to_gb(sum(getattr(stage, 'shuffle_read_bytes', 0) or 0 for stage in stages))
-    total_shuffle_write_gb = bytes_to_gb(sum(getattr(stage, 'shuffle_write_bytes', 0) or 0 for stage in stages))
-    total_memory_spilled_gb = bytes_to_gb(sum(getattr(stage, 'memory_bytes_spilled', 0) or 0 for stage in stages))
-    total_disk_spilled_gb = bytes_to_gb(sum(getattr(stage, 'disk_bytes_spilled', 0) or 0 for stage in stages))
+    total_input_gb = bytes_to_gb(
+        sum(getattr(stage, "input_bytes", 0) or 0 for stage in stages)
+    )
+    total_output_gb = bytes_to_gb(
+        sum(getattr(stage, "output_bytes", 0) or 0 for stage in stages)
+    )
+    total_shuffle_read_gb = bytes_to_gb(
+        sum(getattr(stage, "shuffle_read_bytes", 0) or 0 for stage in stages)
+    )
+    total_shuffle_write_gb = bytes_to_gb(
+        sum(getattr(stage, "shuffle_write_bytes", 0) or 0 for stage in stages)
+    )
+    total_memory_spilled_gb = bytes_to_gb(
+        sum(getattr(stage, "memory_bytes_spilled", 0) or 0 for stage in stages)
+    )
+    total_disk_spilled_gb = bytes_to_gb(
+        sum(getattr(stage, "disk_bytes_spilled", 0) or 0 for stage in stages)
+    )
 
     total_shuffle_fetch_wait_time_ns = 0
     total_shuffle_write_time_ns = 0
-    total_failed_tasks = sum(getattr(stage, 'num_failed_tasks', 0) or 0 for stage in stages)
+    total_failed_tasks = sum(
+        getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
+    )
 
     for stage in stages:
-        dist = getattr(stage, 'task_metrics_distributions', None)
+        dist = getattr(stage, "task_metrics_distributions", None)
         if not dist:
             continue
 
         if (
-            getattr(dist, 'shuffle_read_metrics', None)
-            and getattr(dist.shuffle_read_metrics, 'fetch_wait_time', None)
+            getattr(dist, "shuffle_read_metrics", None)
+            and getattr(dist.shuffle_read_metrics, "fetch_wait_time", None)
             and len(dist.shuffle_read_metrics.fetch_wait_time) >= 3
         ):
             median_fetch_wait = dist.shuffle_read_metrics.fetch_wait_time[2]
-            num_tasks = getattr(stage, 'num_tasks', 0) or 0
+            num_tasks = getattr(stage, "num_tasks", 0) or 0
             total_shuffle_fetch_wait_time_ns += median_fetch_wait * num_tasks
 
         if (
-            getattr(dist, 'shuffle_write_metrics', None)
-            and getattr(dist.shuffle_write_metrics, 'write_time', None)
+            getattr(dist, "shuffle_write_metrics", None)
+            and getattr(dist.shuffle_write_metrics, "write_time", None)
             and len(dist.shuffle_write_metrics.write_time) >= 3
         ):
             median_write_time = dist.shuffle_write_metrics.write_time[2]
-            num_tasks = getattr(stage, 'num_tasks', 0) or 0
+            num_tasks = getattr(stage, "num_tasks", 0) or 0
             total_shuffle_write_time_ns += median_write_time * num_tasks
 
     shuffle_fetch_wait_min = ns_to_min(total_shuffle_fetch_wait_time_ns)
     shuffle_write_time_min = ns_to_min(total_shuffle_write_time_ns)
 
     summary = {
-        "application_id": getattr(app, 'id', None),
-        "application_name": getattr(app, 'name', None),
+        "application_id": getattr(app, "id", None),
+        "application_name": getattr(app, "name", None),
         "analysis_timestamp": datetime.now().isoformat(),
         "application_duration_minutes": round(total_runtime_min, 2),
         "total_executor_runtime_minutes": round(total_executor_runtime_min, 2),
@@ -111,8 +133,12 @@ def summarize_app(app, stages, executors) -> Dict[str, Any]:
         "shuffle_write_time_minutes": round(shuffle_write_time_min, 2),
         "failed_tasks": total_failed_tasks,
         "total_stages": len(stages),
-        "completed_stages": len([s for s in stages if getattr(s, 'status', None) == StageStatus.COMPLETE]),
-        "failed_stages": len([s for s in stages if getattr(s, 'status', None) == StageStatus.FAILED]),
+        "completed_stages": len(
+            [s for s in stages if getattr(s, "status", None) == StageStatus.COMPLETE]
+        ),
+        "failed_stages": len(
+            [s for s in stages if getattr(s, "status", None) == StageStatus.FAILED]
+        ),
     }
     return summary
 
@@ -128,7 +154,9 @@ def compute_utilization(
     executor_cores should be the cores per executor. app_start_end may contain
     (start_ms, end_ms) to bound active time when executor.remove_time missing.
     """
-    total_executor_runtime_ms = sum(getattr(s, "executor_run_time", 0) or 0 for s in stages)
+    total_executor_runtime_ms = sum(
+        getattr(s, "executor_run_time", 0) or 0 for s in stages
+    )
     total_executor_time_ms = 0
     app_end_ms = app_start_end[1] if app_start_end else None
     for e in executors:
@@ -140,10 +168,12 @@ def compute_utilization(
                 rm_ms = app_end_ms
             else:
                 continue
-            total_executor_time_ms += (rm_ms - add_ms)
+            total_executor_time_ms += rm_ms - add_ms
     if total_executor_time_ms <= 0 or not executor_cores:
         return 0.0
-    return (total_executor_runtime_ms / (total_executor_time_ms * executor_cores)) * 100.0
+    return (
+        total_executor_runtime_ms / (total_executor_time_ms * executor_cores)
+    ) * 100.0
 
 
 def compare_numeric_maps(

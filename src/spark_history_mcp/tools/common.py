@@ -10,14 +10,13 @@ This module centralizes:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, TypeVar
-
 import sys
-
-from ..core.app import mcp
+from typing import Any, Callable, Optional, TypeVar
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
+from ..core.app import mcp
 
 BYTES_IN_GB = 1024 * 1024 * 1024
 NS_PER_MIN = 1000 * 1000 * 1000 * 60
@@ -40,12 +39,14 @@ class ToolConfig(BaseSettings):
 
     # Comparison and significance thresholds
     significance_threshold: float = Field(
-        default=SIGNIFICANCE_DEFAULT, description="Default significance threshold for comparisons"
+        default=SIGNIFICANCE_DEFAULT,
+        description="Default significance threshold for comparisons",
     )
 
     # Matching thresholds
     stage_match_similarity: float = Field(
-        default=0.75, description="Minimum name similarity (0-1) to consider stages a match"
+        default=0.75,
+        description="Minimum name similarity (0-1) to consider stages a match",
     )
     time_overlap_window_s: int = Field(
         default=300, description="Window in seconds for considering stage time overlap"
@@ -65,12 +66,15 @@ class ToolConfig(BaseSettings):
         default=0.2, description="GC time / executor runtime threshold"
     )
     high_spill_bytes: int = Field(
-        default=500 * 1024 * 1024, description="Spill threshold in bytes (default 500MB)"
+        default=500 * 1024 * 1024,
+        description="Spill threshold in bytes (default 500MB)",
     )
     min_stage_duration_s: int = Field(
         default=10, description="Minimum stage duration in seconds for analysis"
     )
-    min_task_count: int = Field(default=10, description="Minimum tasks for reliable stats")
+    min_task_count: int = Field(
+        default=10, description="Minimum tasks for reliable stats"
+    )
 
     # SQL pagination and defaults
     sql_page_size: int = Field(default=100, description="Page size for SQL listings")
@@ -192,9 +196,7 @@ def get_client(ctx, server: Optional[str] = None):
     Mirrors logic used across tools to pick a named client or the default.
     """
     if ctx is None:
-        raise ValueError(
-            "Spark MCP context is not available outside of a request"
-        )
+        raise ValueError("Spark MCP context is not available outside of a request")
     clients = ctx.request_context.lifespan_context.clients
     default_client = ctx.request_context.lifespan_context.default_client
 

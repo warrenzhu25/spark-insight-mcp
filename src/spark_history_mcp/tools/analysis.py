@@ -9,7 +9,7 @@ detection, and failure analysis.
 import heapq
 import statistics
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ..core.app import mcp
 from .common import get_client_or_default
@@ -158,6 +158,7 @@ def get_job_bottlenecks(
 
     return bottlenecks
 
+
 @mcp.tool()
 def analyze_auto_scaling(
     app_id: str, server: Optional[str] = None, target_stage_duration_minutes: int = 2
@@ -256,7 +257,11 @@ def analyze_auto_scaling(
 
     recommendations: Dict[str, Dict[str, Any]] = {}
 
-    if current_initial == "Not set" or not current_initial.isdigit() or recommended_initial != int(current_initial):
+    if (
+        current_initial == "Not set"
+        or not current_initial.isdigit()
+        or recommended_initial != int(current_initial)
+    ):
         recommendations["initial_executors"] = {
             "type": "auto_scaling",
             "priority": "medium",
@@ -270,7 +275,11 @@ def analyze_auto_scaling(
             },
         }
 
-    if current_max == "Not set" or not current_max.isdigit() or recommended_max != int(current_max):
+    if (
+        current_max == "Not set"
+        or not current_max.isdigit()
+        or recommended_max != int(current_max)
+    ):
         recommendations["max_executors"] = {
             "type": "auto_scaling",
             "priority": "medium",
@@ -308,6 +317,7 @@ def analyze_auto_scaling(
             },
         },
     }
+
 
 @mcp.tool()
 def analyze_shuffle_skew(
@@ -348,8 +358,8 @@ def analyze_shuffle_skew(
             stages = client.list_stages(app_id=app_id, with_summaries=False)
         else:
             raise e
-    shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
 
+    shuffle_threshold_bytes = shuffle_threshold_gb * 1024 * 1024 * 1024
     skewed_stages = []
 
     for stage in stages:
@@ -373,64 +383,17 @@ def analyze_shuffle_skew(
             "executor_skew": None,
         }
 
-        # Check task-level skew
-        try:
-            task_summary = getattr(stage, "task_metrics_distributions", None)
-            quantiles = getattr(task_summary, "shuffle_write_bytes", None)
+        # Analyze task-level skew
+        task_skew_result = _analyze_stage_task_skew(
+            stage, client, app_id, skew_ratio_threshold
+        )
+        if task_skew_result:
+            stage_skew_info["task_skew"] = task_skew_result
 
-            needs_summary_fetch = not quantiles or len(quantiles) < 5
-            if needs_summary_fetch:
-                try:
-                    task_summary = client.get_stage_task_summary(
-                        app_id=app_id,
-                        stage_id=stage.stage_id,
-                        attempt_id=getattr(stage, "attempt_id", 0),
-                    )
-                    if task_summary:
-                        stage.task_metrics_distributions = task_summary
-                        quantiles = getattr(task_summary, "shuffle_write_bytes", None)
-                except Exception:
-                    task_summary = None
-                    quantiles = None
-
-            if quantiles and len(quantiles) >= 5:
-                median = quantiles[2]  # 50th percentile
-                max_val = quantiles[4]  # 100th percentile (max)
-
-                if median > 0:
-                    task_skew_ratio = max_val / median
-                    stage_skew_info["task_skew"] = {
-                        "skew_ratio": round(task_skew_ratio, 2),
-                        "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
-                        "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
-                        "is_skewed": task_skew_ratio > skew_ratio_threshold,
-                    }
-        except Exception:
-            # Skip task-level analysis if it fails
-            pass
-
-        # Check executor-level skew using stage.executor_metrics_distributions
-        if (
-            stage.executor_metrics_distributions
-            and stage.executor_metrics_distributions.shuffle_write
-        ):
-            executor_quantiles = stage.executor_metrics_distributions.shuffle_write
-            if len(executor_quantiles) >= 5:
-                exec_median = executor_quantiles[2]  # 50th percentile
-                exec_max = executor_quantiles[4]  # 100th percentile (max)
-
-                if exec_median > 0:
-                    exec_skew_ratio = exec_max / exec_median
-                    stage_skew_info["executor_skew"] = {
-                        "skew_ratio": round(exec_skew_ratio, 2),
-                        "max_executor_shuffle_write_mb": round(
-                            exec_max / (1024 * 1024), 2
-                        ),
-                        "median_executor_shuffle_write_mb": round(
-                            exec_median / (1024 * 1024), 2
-                        ),
-                        "is_skewed": exec_skew_ratio > skew_ratio_threshold,
-                    }
+        # Analyze executor-level skew
+        executor_skew_result = _analyze_stage_executor_skew(stage, skew_ratio_threshold)
+        if executor_skew_result:
+            stage_skew_info["executor_skew"] = executor_skew_result
 
         # Add stage to skewed list if either task or executor skew is detected
         is_task_skewed = (
@@ -459,47 +422,13 @@ def analyze_shuffle_skew(
     # Sort by max skew ratio (highest first)
     skewed_stages.sort(key=lambda x: x["max_skew_ratio"], reverse=True)
 
-    recommendations = []
-    if skewed_stages:
-        task_skewed_count = sum(
-            1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]
-        )
-        executor_skewed_count = sum(
-            1
-            for s in skewed_stages
-            if s["executor_skew"] and s["executor_skew"]["is_skewed"]
-        )
+    # Generate recommendations
+    recommendations = _generate_shuffle_skew_recommendations(skewed_stages)
 
-        if task_skewed_count > 0:
-            recommendations.append(
-                {
-                    "type": "data_partitioning",
-                    "priority": "high",
-                    "issue": f"Found {task_skewed_count} stages with task-level shuffle skew",
-                    "suggestion": "Consider repartitioning data by key distribution or using salting techniques",
-                }
-            )
-
-        if executor_skewed_count > 0:
-            recommendations.append(
-                {
-                    "type": "resource_allocation",
-                    "priority": "high",
-                    "issue": f"Found {executor_skewed_count} stages with executor-level shuffle skew",
-                    "suggestion": "Check executor resource allocation, network issues, or host-specific problems",
-                }
-            )
-
-        max_skew = max(s["max_skew_ratio"] for s in skewed_stages)
-        if max_skew > 10:
-            recommendations.append(
-                {
-                    "type": "performance",
-                    "priority": "critical",
-                    "issue": f"Extreme skew detected (ratio: {max_skew})",
-                    "suggestion": "Investigate data distribution and consider custom partitioning strategies",
-                }
-            )
+    # Build summary
+    summary = _build_shuffle_skew_summary(
+        stages, skewed_stages, shuffle_threshold_bytes
+    )
 
     return {
         "application_id": app_id,
@@ -509,32 +438,10 @@ def analyze_shuffle_skew(
             "skew_ratio_threshold": skew_ratio_threshold,
         },
         "skewed_stages": skewed_stages,
-        "summary": {
-            "total_stages_analyzed": len(
-                [
-                    s
-                    for s in stages
-                    if s.shuffle_write_bytes
-                    and s.shuffle_write_bytes >= shuffle_threshold_bytes
-                ]
-            ),
-            "skewed_stages_count": len(skewed_stages),
-            "task_skewed_count": sum(
-                1
-                for s in skewed_stages
-                if s["task_skew"] and s["task_skew"]["is_skewed"]
-            ),
-            "executor_skewed_count": sum(
-                1
-                for s in skewed_stages
-                if s["executor_skew"] and s["executor_skew"]["is_skewed"]
-            ),
-            "max_skew_ratio": max([s["max_skew_ratio"] for s in skewed_stages])
-            if skewed_stages
-            else 0,
-        },
+        "summary": summary,
         "recommendations": recommendations,
     }
+
 
 @mcp.tool()
 def analyze_failed_tasks(
@@ -655,4 +562,150 @@ def analyze_failed_tasks(
             else "low",
         },
         "recommendations": recommendations,
+    }
+
+
+# Helper functions for analyze_shuffle_skew refactoring
+def _analyze_stage_task_skew(
+    stage, client, app_id: str, skew_ratio_threshold: float
+) -> Optional[Dict[str, Any]]:
+    """Analyze task-level shuffle skew for a stage."""
+    try:
+        task_summary = getattr(stage, "task_metrics_distributions", None)
+        quantiles = getattr(task_summary, "shuffle_write_bytes", None)
+
+        needs_summary_fetch = not quantiles or len(quantiles) < 5
+        if needs_summary_fetch:
+            try:
+                task_summary = client.get_stage_task_summary(
+                    app_id=app_id,
+                    stage_id=stage.stage_id,
+                    attempt_id=getattr(stage, "attempt_id", 0),
+                )
+                if task_summary:
+                    stage.task_metrics_distributions = task_summary
+                    quantiles = getattr(task_summary, "shuffle_write_bytes", None)
+            except Exception:
+                return None
+
+        if quantiles and len(quantiles) >= 5:
+            median = quantiles[2]  # 50th percentile
+            max_val = quantiles[4]  # 100th percentile (max)
+
+            if median > 0:
+                task_skew_ratio = max_val / median
+                return {
+                    "skew_ratio": round(task_skew_ratio, 2),
+                    "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
+                    "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
+                    "is_skewed": task_skew_ratio > skew_ratio_threshold,
+                }
+    except Exception:
+        # Skip task-level analysis if it fails
+        pass
+    return None
+
+
+def _analyze_stage_executor_skew(
+    stage, skew_ratio_threshold: float
+) -> Optional[Dict[str, Any]]:
+    """Analyze executor-level shuffle skew for a stage."""
+    if (
+        stage.executor_metrics_distributions
+        and stage.executor_metrics_distributions.shuffle_write
+    ):
+        executor_quantiles = stage.executor_metrics_distributions.shuffle_write
+        if len(executor_quantiles) >= 5:
+            exec_median = executor_quantiles[2]  # 50th percentile
+            exec_max = executor_quantiles[4]  # 100th percentile (max)
+
+            if exec_median > 0:
+                exec_skew_ratio = exec_max / exec_median
+                return {
+                    "skew_ratio": round(exec_skew_ratio, 2),
+                    "max_executor_shuffle_write_mb": round(exec_max / (1024 * 1024), 2),
+                    "median_executor_shuffle_write_mb": round(
+                        exec_median / (1024 * 1024), 2
+                    ),
+                    "is_skewed": exec_skew_ratio > skew_ratio_threshold,
+                }
+    return None
+
+
+def _generate_shuffle_skew_recommendations(
+    skewed_stages: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Generate recommendations based on shuffle skew analysis."""
+    recommendations = []
+    if not skewed_stages:
+        return recommendations
+
+    task_skewed_count = sum(
+        1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]
+    )
+    executor_skewed_count = sum(
+        1
+        for s in skewed_stages
+        if s["executor_skew"] and s["executor_skew"]["is_skewed"]
+    )
+
+    if task_skewed_count > 0:
+        recommendations.append(
+            {
+                "type": "data_partitioning",
+                "priority": "high",
+                "issue": f"Found {task_skewed_count} stages with task-level shuffle skew",
+                "suggestion": "Consider repartitioning data by key distribution or using salting techniques",
+            }
+        )
+
+    if executor_skewed_count > 0:
+        recommendations.append(
+            {
+                "type": "resource_allocation",
+                "priority": "high",
+                "issue": f"Found {executor_skewed_count} stages with executor-level shuffle skew",
+                "suggestion": "Check executor resource allocation, network issues, or host-specific problems",
+            }
+        )
+
+    max_skew = max(s["max_skew_ratio"] for s in skewed_stages)
+    if max_skew > 10:
+        recommendations.append(
+            {
+                "type": "performance",
+                "priority": "critical",
+                "issue": f"Extreme skew detected (ratio: {max_skew})",
+                "suggestion": "Investigate data distribution and consider custom partitioning strategies",
+            }
+        )
+
+    return recommendations
+
+
+def _build_shuffle_skew_summary(
+    stages, skewed_stages: List[Dict[str, Any]], shuffle_threshold_bytes: int
+) -> Dict[str, Any]:
+    """Build summary statistics for shuffle skew analysis."""
+    return {
+        "total_stages_analyzed": len(
+            [
+                s
+                for s in stages
+                if s.shuffle_write_bytes
+                and s.shuffle_write_bytes >= shuffle_threshold_bytes
+            ]
+        ),
+        "skewed_stages_count": len(skewed_stages),
+        "task_skewed_count": sum(
+            1 for s in skewed_stages if s["task_skew"] and s["task_skew"]["is_skewed"]
+        ),
+        "executor_skewed_count": sum(
+            1
+            for s in skewed_stages
+            if s["executor_skew"] and s["executor_skew"]["is_skewed"]
+        ),
+        "max_skew_ratio": max([s["max_skew_ratio"] for s in skewed_stages])
+        if skewed_stages
+        else 0,
     }

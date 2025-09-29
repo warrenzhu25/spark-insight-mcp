@@ -13,10 +13,8 @@ from ..models.spark_types import (
     JobExecutionStatus,
     StageStatus,
 )
-
-from .common import get_client, get_server_key, get_active_mcp_context
-
 from . import analysis as analysis_tools
+from .common import get_active_mcp_context, get_client, get_server_key
 
 # Basic per-process caches keyed by (server_key, namespace, identifiers...)
 _CACHE: Dict[Tuple[Any, ...], Any] = {}
@@ -28,9 +26,7 @@ def _resolve_client(server: Optional[str]):
         client = analysis_tools.get_client_or_default(ctx, server)
     except Exception:
         if ctx is None:
-            raise ValueError(
-                "Spark MCP context is not available outside of a request"
-            )
+            raise ValueError("Spark MCP context is not available outside of a request")
         client = get_client(ctx, server)
     use_cache = ctx is not None and not isinstance(client, mock.Mock)
     return client, use_cache
@@ -106,7 +102,9 @@ def fetch_stages(
     )
 
 
-def fetch_executors(app_id: str, server: Optional[str] = None, include_inactive: bool = True):
+def fetch_executors(
+    app_id: str, server: Optional[str] = None, include_inactive: bool = True
+):
     client, use_cache = _resolve_client(server)
 
     # list_all_executors already includes inactive in most SHS implementations
@@ -213,4 +211,6 @@ def fetch_sql_pages(
         return results
 
     # Fallback
-    return client.get_sql_list(app_id, details=details, plan_description=plan_description)
+    return client.get_sql_list(
+        app_id, details=details, plan_description=plan_description
+    )

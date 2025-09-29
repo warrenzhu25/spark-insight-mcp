@@ -23,6 +23,7 @@ from spark_history_mcp.prompts import (
 )
 
 __all__ = [
+    "mcp",
     "performance",
     "troubleshooting",
     "optimization",
