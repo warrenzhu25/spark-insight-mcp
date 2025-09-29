@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from spark_history_mcp.models.spark_types import StageStatus
+from ..models.spark_types import StageStatus
 
 from .common import bytes_to_gb, get_config, ms_to_min, ns_to_min
 

@@ -8,16 +8,16 @@ metadata, environment configuration, and high-level application insights.
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.models.spark_types import ApplicationInfo, StageStatus
-from spark_history_mcp.tools.analysis import (
+from ..core.app import mcp
+from ..models.spark_types import ApplicationInfo, StageStatus
+from .analysis import (
     analyze_auto_scaling,
     analyze_failed_tasks,
     analyze_shuffle_skew,
 )
-from spark_history_mcp.tools.common import get_client_or_default
-from spark_history_mcp.tools.executors import analyze_executor_utilization
-from spark_history_mcp.tools.fetchers import fetch_app
+from .common import get_client_or_default
+from .executors import analyze_executor_utilization
+from .fetchers import fetch_app
 
 
 @mcp.tool()
@@ -76,6 +76,12 @@ def list_applications(
     """
     import re
 
+    valid_search_types = ["exact", "contains", "regex"]
+    if search_type not in valid_search_types:
+        raise ValueError(
+            f"search_type must be one of {valid_search_types}, got: {search_type}"
+        )
+
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
@@ -92,13 +98,6 @@ def list_applications(
     # If no name filtering is requested, return as-is
     if not app_name:
         return applications
-
-    # Validate search_type
-    valid_search_types = ["exact", "contains", "regex"]
-    if search_type not in valid_search_types:
-        raise ValueError(
-            f"search_type must be one of {valid_search_types}, got: {search_type}"
-        )
 
     # Filter applications by name based on search type
     matching_apps = []

@@ -5,14 +5,19 @@ backward compatibility with existing tests and imports.
 """
 
 # Import everything from the modular tools
-from spark_history_mcp.tools.analysis import *  # noqa: F401,F403
-from spark_history_mcp.tools.application import *  # noqa: F401,F403
-from spark_history_mcp.tools.comparisons import *  # noqa: F401,F403
-from spark_history_mcp.tools.executors import *  # noqa: F401,F403
-from spark_history_mcp.tools.jobs_stages import *  # noqa: F401,F403
+from .analysis import *  # noqa: F401,F403
+from .application import *  # noqa: F401,F403
+from .comparisons import *  # noqa: F401,F403
+from .comparisons import (  # noqa: F401
+    _compare_environments,
+    _compare_sql_execution_plans,
+)
+from .executors import *  # noqa: F401,F403
+from .jobs_stages import *  # noqa: F401,F403
+from .jobs_stages import _build_dependencies_from_dag_data  # noqa: F401
 
 # Import common utilities that might be used by tests
-from spark_history_mcp.tools.common import get_client_or_default, get_config  # noqa: F401
+from .common import get_client_or_default, get_config  # noqa: F401
 
 # Import the MCP app instance for tests that patch it
-from spark_history_mcp.core.app import mcp  # noqa: F401
+from ..core.app import mcp  # noqa: F401

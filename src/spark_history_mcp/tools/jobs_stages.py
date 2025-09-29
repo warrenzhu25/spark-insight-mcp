@@ -8,9 +8,9 @@ including performance metrics, SQL queries, and stage dependencies.
 import heapq
 from typing import Any, Dict, List, Optional
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.models.mcp_types import JobSummary, SqlQuerySummary
-from spark_history_mcp.models.spark_types import (
+from ..core.app import mcp
+from ..models.mcp_types import JobSummary, SqlQuerySummary
+from ..models.spark_types import (
     ExecutionData,
     JobData,
     JobExecutionStatus,
@@ -18,8 +18,8 @@ from spark_history_mcp.models.spark_types import (
     StageData,
     TaskMetricDistributions,
 )
-from spark_history_mcp.tools.common import get_client_or_default, get_config
-from spark_history_mcp.tools.fetchers import (
+from .common import get_client_or_default, get_config
+from .fetchers import (
     fetch_jobs,
     fetch_stage_attempt,
     fetch_stage_attempts,
@@ -374,6 +374,7 @@ def get_stage_task_summary(
     stage_id: int,
     attempt_id: int = 0,
     server: Optional[str] = None,
+    quantiles: Optional[str] = "0.05,0.25,0.5,0.75,0.95",
 ) -> TaskMetricDistributions:
     """
     Get a summary of task metrics for a specific stage.
@@ -386,6 +387,7 @@ def get_stage_task_summary(
         stage_id: The stage ID
         attempt_id: The stage attempt ID (default: 0)
         server: Optional server name to use (uses default if not specified)
+        quantiles: Comma-separated quantiles string to request from the server
 
     Returns:
         TaskMetricDistributions object containing metric distributions
@@ -393,9 +395,15 @@ def get_stage_task_summary(
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
-    return client.get_stage_task_summary(
-        app_id=app_id, stage_id=stage_id, attempt_id=attempt_id
-    )
+    kwargs = {
+        "app_id": app_id,
+        "stage_id": stage_id,
+        "attempt_id": attempt_id,
+    }
+    if quantiles:
+        kwargs["quantiles"] = quantiles
+
+    return client.get_stage_task_summary(**kwargs)
 
 @mcp.tool()
 def list_slowest_sql_queries(

@@ -9,9 +9,9 @@ import statistics
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.tools.common import get_client_or_default
-from spark_history_mcp.tools.fetchers import fetch_executors
+from ..core.app import mcp
+from .common import get_client_or_default
+from .fetchers import fetch_executors
 
 
 @mcp.tool()

@@ -11,10 +11,10 @@ import statistics
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.tools.common import get_client_or_default
-from spark_history_mcp.tools.executors import get_executor_summary
-from spark_history_mcp.tools.jobs_stages import list_slowest_jobs, list_slowest_stages
+from ..core.app import mcp
+from .common import get_client_or_default
+from .executors import get_executor_summary
+from .jobs_stages import list_slowest_jobs, list_slowest_stages
 
 
 @mcp.tool()
@@ -254,40 +254,35 @@ def analyze_auto_scaling(
     )
     current_max = spark_props.get("spark.dynamicAllocation.maxExecutors", "Not set")
 
-    # Generate recommendations as a list to match other analysis functions
-    recommendations = []
+    recommendations: Dict[str, Dict[str, Any]] = {}
 
-    if not current_initial.isdigit() or recommended_initial != int(current_initial):
-        recommendations.append(
-            {
-                "type": "auto_scaling",
-                "priority": "medium",
-                "issue": f"Initial executors could be optimized (current: {current_initial})",
-                "suggestion": f"Set spark.dynamicAllocation.initialExecutors to {recommended_initial}",
-                "configuration": {
-                    "parameter": "spark.dynamicAllocation.initialExecutors",
-                    "current_value": current_initial,
-                    "recommended_value": str(recommended_initial),
-                    "description": "Based on stages running in first 2 minutes",
-                },
-            }
-        )
+    if current_initial == "Not set" or not current_initial.isdigit() or recommended_initial != int(current_initial):
+        recommendations["initial_executors"] = {
+            "type": "auto_scaling",
+            "priority": "medium",
+            "issue": f"Initial executors could be optimized (current: {current_initial})",
+            "suggestion": f"Set spark.dynamicAllocation.initialExecutors to {recommended_initial}",
+            "configuration": {
+                "parameter": "spark.dynamicAllocation.initialExecutors",
+                "current_value": current_initial,
+                "recommended_value": str(recommended_initial),
+                "description": "Based on stages running in first 2 minutes",
+            },
+        }
 
-    if not current_max.isdigit() or recommended_max != int(current_max):
-        recommendations.append(
-            {
-                "type": "auto_scaling",
-                "priority": "medium",
-                "issue": f"Max executors could be optimized (current: {current_max})",
-                "suggestion": f"Set spark.dynamicAllocation.maxExecutors to {recommended_max}",
-                "configuration": {
-                    "parameter": "spark.dynamicAllocation.maxExecutors",
-                    "current_value": current_max,
-                    "recommended_value": str(recommended_max),
-                    "description": "Based on peak concurrent stage demand",
-                },
-            }
-        )
+    if current_max == "Not set" or not current_max.isdigit() or recommended_max != int(current_max):
+        recommendations["max_executors"] = {
+            "type": "auto_scaling",
+            "priority": "medium",
+            "issue": f"Max executors could be optimized (current: {current_max})",
+            "suggestion": f"Set spark.dynamicAllocation.maxExecutors to {recommended_max}",
+            "configuration": {
+                "parameter": "spark.dynamicAllocation.maxExecutors",
+                "current_value": current_max,
+                "recommended_value": str(recommended_max),
+                "description": "Based on peak concurrent stage demand",
+            },
+        }
 
     return {
         "application_id": app_id,
@@ -380,23 +375,36 @@ def analyze_shuffle_skew(
 
         # Check task-level skew
         try:
-            task_summary = stage.task_metrics_distributions
+            task_summary = getattr(stage, "task_metrics_distributions", None)
+            quantiles = getattr(task_summary, "shuffle_write_bytes", None)
 
-            if task_summary.shuffle_write_bytes:
-                # Extract quantiles (typically [min, 25th, 50th, 75th, max])
-                quantiles = task_summary.shuffle_write_bytes
-                if len(quantiles) >= 5:
-                    median = quantiles[2]  # 50th percentile
-                    max_val = quantiles[4]  # 100th percentile (max)
+            needs_summary_fetch = not quantiles or len(quantiles) < 5
+            if needs_summary_fetch:
+                try:
+                    task_summary = client.get_stage_task_summary(
+                        app_id=app_id,
+                        stage_id=stage.stage_id,
+                        attempt_id=getattr(stage, "attempt_id", 0),
+                    )
+                    if task_summary:
+                        stage.task_metrics_distributions = task_summary
+                        quantiles = getattr(task_summary, "shuffle_write_bytes", None)
+                except Exception:
+                    task_summary = None
+                    quantiles = None
 
-                    if median > 0:
-                        task_skew_ratio = max_val / median
-                        stage_skew_info["task_skew"] = {
-                            "skew_ratio": round(task_skew_ratio, 2),
-                            "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
-                            "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
-                            "is_skewed": task_skew_ratio > skew_ratio_threshold,
-                        }
+            if quantiles and len(quantiles) >= 5:
+                median = quantiles[2]  # 50th percentile
+                max_val = quantiles[4]  # 100th percentile (max)
+
+                if median > 0:
+                    task_skew_ratio = max_val / median
+                    stage_skew_info["task_skew"] = {
+                        "skew_ratio": round(task_skew_ratio, 2),
+                        "max_shuffle_write_mb": round(max_val / (1024 * 1024), 2),
+                        "median_shuffle_write_mb": round(median / (1024 * 1024), 2),
+                        "is_skewed": task_skew_ratio > skew_ratio_threshold,
+                    }
         except Exception:
             # Skip task-level analysis if it fails
             pass

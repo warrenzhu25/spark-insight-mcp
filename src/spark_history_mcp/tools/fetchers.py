@@ -7,60 +7,72 @@ tools remain thin and avoid duplication.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
+from unittest import mock
 
-from spark_history_mcp.core.app import mcp
-from spark_history_mcp.models.spark_types import (
+from ..models.spark_types import (
     JobExecutionStatus,
     StageStatus,
 )
 
-from .common import get_client, get_server_key
+from .common import get_client, get_server_key, get_active_mcp_context
+
+from . import analysis as analysis_tools
 
 # Basic per-process caches keyed by (server_key, namespace, identifiers...)
 _CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 
-def _cache_get(key: Tuple[Any, ...]):
+def _resolve_client(server: Optional[str]):
+    ctx = get_active_mcp_context()
+    try:
+        client = analysis_tools.get_client_or_default(ctx, server)
+    except Exception:
+        if ctx is None:
+            raise ValueError(
+                "Spark MCP context is not available outside of a request"
+            )
+        client = get_client(ctx, server)
+    use_cache = ctx is not None and not isinstance(client, mock.Mock)
+    return client, use_cache
+
+
+def _cache_get(key: Tuple[Any, ...], use_cache: bool):
+    if not use_cache:
+        return None
     return _CACHE.get(key)
 
 
-def _cache_set(key: Tuple[Any, ...], value: Any):
-    _CACHE[key] = value
+def _cache_set(key: Tuple[Any, ...], value: Any, use_cache: bool):
+    if use_cache:
+        _CACHE[key] = value
     return value
 
 
 def fetch_app(app_id: str, server: Optional[str] = None):
-    # Prefer legacy shim to keep unit tests compatible where it's patched
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, use_cache = _resolve_client(server)
     key = (get_server_key(server), "app", app_id)
-    cached = _cache_get(key)
+    cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(key, client.get_application(app_id))
+    return _cache_set(key, client.get_application(app_id), use_cache)
 
 
 def fetch_jobs(
     app_id: str, server: Optional[str] = None, status: Optional[List[str]] = None
 ):
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, use_cache = _resolve_client(server)
 
     job_statuses = None
     if status:
         job_statuses = [JobExecutionStatus.from_string(s) for s in status]
 
     key = (get_server_key(server), "jobs", app_id, tuple(sorted(status or [])))
-    cached = _cache_get(key)
+    cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(key, client.list_jobs(app_id=app_id, status=job_statuses))
+    return _cache_set(
+        key, client.list_jobs(app_id=app_id, status=job_statuses), use_cache
+    )
 
 
 def fetch_stages(
@@ -69,11 +81,7 @@ def fetch_stages(
     status: Optional[List[str]] = None,
     with_summaries: bool = False,
 ):
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, use_cache = _resolve_client(server)
 
     stage_statuses = None
     if status:
@@ -86,7 +94,7 @@ def fetch_stages(
         tuple(sorted(status or [])),
         bool(with_summaries),
     )
-    cached = _cache_get(key)
+    cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
     return _cache_set(
@@ -94,22 +102,19 @@ def fetch_stages(
         client.list_stages(
             app_id=app_id, status=stage_statuses, with_summaries=with_summaries
         ),
+        use_cache,
     )
 
 
 def fetch_executors(app_id: str, server: Optional[str] = None, include_inactive: bool = True):
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, use_cache = _resolve_client(server)
 
     # list_all_executors already includes inactive in most SHS implementations
     key = (get_server_key(server), "executors", app_id, bool(include_inactive))
-    cached = _cache_get(key)
+    cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(key, client.list_all_executors(app_id=app_id))
+    return _cache_set(key, client.list_all_executors(app_id=app_id), use_cache)
 
 
 def fetch_stage_attempt(
@@ -119,11 +124,7 @@ def fetch_stage_attempt(
     server: Optional[str] = None,
     with_summaries: bool = False,
 ):
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, use_cache = _resolve_client(server)
     key = (
         get_server_key(server),
         "stage_attempt",
@@ -132,7 +133,7 @@ def fetch_stage_attempt(
         int(attempt_id),
         bool(with_summaries),
     )
-    cached = _cache_get(key)
+    cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
     return _cache_set(
@@ -144,6 +145,7 @@ def fetch_stage_attempt(
             details=False,
             with_summaries=with_summaries,
         ),
+        use_cache,
     )
 
 
@@ -153,11 +155,7 @@ def fetch_stage_attempts(
     server: Optional[str] = None,
     with_summaries: bool = False,
 ):
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, use_cache = _resolve_client(server)
     key = (
         get_server_key(server),
         "stage_attempts",
@@ -165,7 +163,7 @@ def fetch_stage_attempts(
         int(stage_id),
         bool(with_summaries),
     )
-    cached = _cache_get(key)
+    cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
     return _cache_set(
@@ -176,6 +174,7 @@ def fetch_stage_attempts(
             details=False,
             with_summaries=with_summaries,
         ),
+        use_cache,
     )
 
 
@@ -191,11 +190,7 @@ def fetch_sql_pages(
 
     If paging is not supported by the client, falls back to a single call.
     """
-    try:
-        from .analysis import get_client_or_default as _shim
-        client = _shim(mcp.get_context(), server)
-    except Exception:
-        client = get_client(mcp.get_context(), server)
+    client, _ = _resolve_client(server)
 
     # Try an API that supports paging; otherwise use the simple list
     if hasattr(client, "get_sql_list_paged"):

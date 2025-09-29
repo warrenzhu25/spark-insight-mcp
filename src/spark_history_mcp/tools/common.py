@@ -10,8 +10,11 @@ This module centralizes:
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any, Callable, Optional, TypeVar
+
+import sys
+
+from ..core.app import mcp
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -90,12 +93,6 @@ class ToolConfig(BaseSettings):
     }
 
 
-@lru_cache(maxsize=1)
-def _base_config() -> ToolConfig:
-    """Load base config from environment once (env_prefix=SHS_)."""
-    return ToolConfig()
-
-
 def get_config(**overrides: Any) -> ToolConfig:
     """Resolve tool configuration.
 
@@ -105,9 +102,11 @@ def get_config(**overrides: Any) -> ToolConfig:
     Returns:
         ToolConfig instance combining env/defaults with overrides.
     """
+    base_config = ToolConfig()
     if not overrides:
-        return _base_config()
-    merged = _base_config().model_dump()
+        return base_config
+
+    merged = base_config.model_dump()
     merged.update({k: v for k, v in overrides.items() if v is not None})
     return ToolConfig(**merged)
 
@@ -139,6 +138,7 @@ def pct_change(val1: float, val2: float) -> str:
 
 
 T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def safe_get(fn: Callable[[], T], default: Optional[T] = None) -> Optional[T]:
@@ -152,11 +152,49 @@ def safe_get(fn: Callable[[], T], default: Optional[T] = None) -> Optional[T]:
         return default
 
 
+def resolve_legacy_tool(name: str, fallback: F) -> F:
+    """Return a callable patched via the legacy ``tools`` module if available.
+
+    Many unit tests patch ``spark_history_mcp.tools.tools`` functions directly.
+    After the refactor to modular packages those patches no longer affected the
+    imported callables captured at module load time. This helper checks whether
+    the legacy module defines an override and, if so, returns it.
+    """
+
+    tools_module = sys.modules.get("spark_history_mcp.tools.tools")
+    if tools_module:
+        candidate = getattr(tools_module, name, None)
+        if callable(candidate):
+            return candidate  # type: ignore[return-value]
+    return fallback
+
+
+def get_active_mcp_context():
+    """Return the active MCP request context if one exists."""
+
+    try:
+        return mcp.get_context()
+    except ValueError:
+        pass
+
+    tools_module = sys.modules.get("spark_history_mcp.tools.tools")
+    if tools_module:
+        try:
+            return tools_module.mcp.get_context()
+        except Exception:
+            return None
+    return None
+
+
 def get_client(ctx, server: Optional[str] = None):
     """Resolve a Spark client from MCP context and optional server name.
 
     Mirrors logic used across tools to pick a named client or the default.
     """
+    if ctx is None:
+        raise ValueError(
+            "Spark MCP context is not available outside of a request"
+        )
     clients = ctx.request_context.lifespan_context.clients
     default_client = ctx.request_context.lifespan_context.default_client
 
@@ -177,5 +215,27 @@ def get_server_key(server: Optional[str]) -> str:
 
 
 def get_client_or_default(ctx, server_name: Optional[str] = None):
-    """Backward-compatible alias widely used across tool modules."""
+    """Backward-compatible alias widely used across tool modules.
+
+    Older tests patch ``spark_history_mcp.tools.tools.get_client_or_default`` in
+    place. When we refactored into modular packages those patches no longer hit
+    this helper because modules captured the original function reference. To
+    preserve the legacy behaviour we look for a patched implementation on the
+    legacy ``tools`` module and delegate to it when present.
+    """
+
+    tools_module = sys.modules.get("spark_history_mcp.tools.tools")
+    if tools_module:
+        patched_getter = getattr(tools_module, "get_client_or_default", None)
+        if patched_getter and patched_getter is not get_client_or_default:
+            return patched_getter(ctx, server_name)
+
+    analysis_module = sys.modules.get("spark_history_mcp.tools.analysis")
+    if analysis_module:
+        patched_getter = getattr(analysis_module, "get_client_or_default", None)
+        if patched_getter and patched_getter is not get_client_or_default:
+            return patched_getter(ctx, server_name)
+
+    if ctx is None:
+        ctx = get_active_mcp_context()
     return get_client(ctx, server_name)
