@@ -1381,7 +1381,7 @@ class TestSparkInsightTools(unittest.TestCase):
         """Helper to create mock executor"""
         mock_executor = MagicMock(spec=ExecutorSummary)
         mock_executor.id = exec_id
-        mock_executor.host = host
+        mock_executor.host_port = f"{host}:12345"
         mock_executor.failed_tasks = failed_tasks
         mock_executor.completed_tasks = completed_tasks
         mock_executor.is_active = is_active

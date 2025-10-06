@@ -492,10 +492,12 @@ def analyze_failed_tasks(
     problematic_executors = []
     for executor in executors:
         if executor.failed_tasks and executor.failed_tasks >= failure_threshold:
+            # Extract host from host_port (format: "host:port")
+            host = executor.host_port.split(":")[0] if executor.host_port else "unknown"
             problematic_executors.append(
                 {
                     "executor_id": executor.id,
-                    "host": executor.host,
+                    "host": host,
                     "failed_tasks": executor.failed_tasks,
                     "completed_tasks": executor.completed_tasks,
                     "failure_rate": round(
@@ -602,7 +604,7 @@ def _analyze_stage_task_skew(
                 }
     except Exception:
         # Skip task-level analysis if it fails
-        pass
+        return None
     return None
 
 
