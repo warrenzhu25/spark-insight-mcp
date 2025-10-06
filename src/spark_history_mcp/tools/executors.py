@@ -10,8 +10,9 @@ from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from ..core.app import mcp
-from .common import get_client_or_default
+from .common import DEFAULT_INTERVAL_MINUTES, MAX_INTERVALS, get_client_or_default
 from .fetchers import fetch_executors
+from .timelines import build_app_executor_timeline
 
 
 @mcp.tool()
@@ -321,4 +322,72 @@ def get_resource_usage_timeline(
             ),
             "peak_cores": max([r["total_cores"] for r in resource_timeline] + [0]),
         },
+    }
+
+
+@mcp.tool()
+def get_app_executor_timeline(
+    app_id: str,
+    server: Optional[str] = None,
+    interval_minutes: int = DEFAULT_INTERVAL_MINUTES,
+    max_intervals: int = MAX_INTERVALS,
+) -> Dict[str, Any]:
+    """
+    Get interval-based executor timeline for a Spark application.
+
+    Provides a timeline of active executor counts at regular intervals throughout
+    the application lifecycle. This is useful for analyzing resource allocation
+    patterns and comparing applications.
+
+    Args:
+        app_id: The Spark application ID
+        server: Optional server name to use (uses default if not specified)
+        interval_minutes: Time interval in minutes for timeline sampling (default: 1)
+        max_intervals: Maximum number of intervals to return (default: 10000)
+
+    Returns:
+        Dictionary containing app info, simplified timeline with active executor counts,
+        and summary statistics
+    """
+    ctx = mcp.get_context()
+    client = get_client_or_default(ctx, server)
+
+    # Get application info
+    app = client.get_application(app_id)
+
+    # Get all executors
+    executors = client.list_all_executors(app_id=app_id)
+
+    # Get stages
+    stages = client.list_stages(app_id=app_id)
+
+    # Build full timeline using helper
+    result = build_app_executor_timeline(
+        app=app,
+        executors=executors,
+        stages=stages,
+        interval_minutes=interval_minutes,
+        max_intervals=max_intervals,
+    )
+
+    if not result:
+        return {
+            "error": "Unable to build timeline - application has no timing information",
+            "application_id": app_id,
+        }
+
+    # Simplify timeline to only include active executor count
+    simplified_timeline = [
+        {
+            "interval_start": entry["interval_start"],
+            "interval_end": entry["interval_end"],
+            "active_executor_count": entry["active_executor_count"],
+        }
+        for entry in result["timeline"]
+    ]
+
+    return {
+        "app_info": result["app_info"],
+        "timeline": simplified_timeline,
+        "summary": result["summary"],
     }
