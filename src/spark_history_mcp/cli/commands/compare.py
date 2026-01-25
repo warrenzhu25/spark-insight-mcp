@@ -673,6 +673,42 @@ if CLI_AVAILABLE:
             format, ctx.obj.get("quiet", False), show_all_metrics=show_all
         )
 
+        def _top_metric_differences(
+            metrics: dict, limit: int = 5
+        ) -> list[dict[str, object]]:
+            """Return the top metric diffs by absolute percent change."""
+            diffs: list[dict[str, object]] = []
+            for key, value in metrics.items():
+                if isinstance(value, tuple) and len(value) == 3:
+                    left_val, right_val, percent_change = value
+                    if not isinstance(percent_change, (int, float)):
+                        continue
+                    if not isinstance(left_val, (int, float)) or not isinstance(
+                        right_val, (int, float)
+                    ):
+                        continue
+                    if isinstance(left_val, bool) or isinstance(right_val, bool):
+                        continue
+                    diffs.append(
+                        {
+                            "metric": key,
+                            "left": left_val,
+                            "right": right_val,
+                            "percent_change": percent_change,
+                        }
+                    )
+
+            non_zero = [d for d in diffs if d["percent_change"] != 0]
+            zeros = [d for d in diffs if d["percent_change"] == 0]
+
+            non_zero.sort(
+                key=lambda d: abs(float(d["percent_change"])), reverse=True
+            )
+            zeros.sort(key=lambda d: str(d["metric"]))
+
+            ordered = non_zero + zeros
+            return ordered[:limit]
+
         try:
             client = get_spark_client(config_path, server)
 
@@ -690,15 +726,36 @@ if CLI_AVAILABLE:
             save_comparison_context(app_id1, app_id2, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_application_metrics
+            from spark_history_mcp.tools.tools import (
+                compare_app_executor_timeline,
+                compare_app_performance,
+                compare_application_metrics,
+            )
 
             original_get_context = getattr(tools_module.mcp, "get_context", None)
             tools_module.mcp.get_context = lambda: create_mock_context(client)
 
             try:
-                comparison_data = compare_application_metrics(
+                comparison_data = compare_app_performance(
+                    app_id1=app_id1,
+                    app_id2=app_id2,
+                    server=server,
+                    top_n=top_n,
+                )
+
+                metrics_comparison = compare_application_metrics(
                     app_id1=app_id1, app_id2=app_id2, server=server
                 )
+                comparison_data["top_metrics_differences"] = _top_metric_differences(
+                    metrics_comparison, limit=5
+                )
+
+                comparison_data["executor_timeline_comparison"] = (
+                    compare_app_executor_timeline(
+                        app_id1=app_id1, app_id2=app_id2, server=server
+                    )
+                )
+
                 formatter.output(comparison_data)
 
                 if not ctx.obj.get("quiet", False):

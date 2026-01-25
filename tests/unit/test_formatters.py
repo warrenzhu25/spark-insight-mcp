@@ -70,3 +70,53 @@ def test_performance_metrics_show_all_includes_extra_metrics(monkeypatch):
     assert "Input Data" in metric_cells
     assert "Total Duration" in metric_cells
     assert "Shuffle Read" in metric_cells
+
+
+def test_top_metric_differences_table(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(formatters_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    formatter._format_top_metrics_differences(
+        [
+            {
+                "metric": "duration_ms",
+                "left": 1000,
+                "right": 2000,
+                "percent_change": 100.0,
+            },
+            {
+                "metric": "total_input_bytes",
+                "left": 1024,
+                "right": 2048,
+                "percent_change": 100.0,
+            },
+        ]
+    )
+
+    table = dummy_console.printed[-1]
+    metric_cells = _get_metric_cells(table)
+    assert "duration_ms" in metric_cells
+    assert "total_input_bytes" in metric_cells
+
+
+def test_environment_comparison_table(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(formatters_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    formatter._format_environment_comparison(
+        {
+            "spark_properties": {
+                "different": {"spark.executor.memory": {"app1": "2g", "app2": "4g"}},
+                "app1_only": {},
+                "app2_only": {},
+                "performance_impact_analysis": [],
+            },
+            "runtime_environment": {"differences": []},
+            "system_properties": {"key_differences": {}},
+        }
+    )
+
+    table = dummy_console.printed[0]
+    assert "Environment Differences" in str(table.title)

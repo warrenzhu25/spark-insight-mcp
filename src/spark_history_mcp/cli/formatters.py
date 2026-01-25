@@ -410,9 +410,92 @@ class OutputFormatter:
         if "aggregated_overview" in data:
             self._format_performance_metrics(data["aggregated_overview"])
 
+        # 2b. Top application-level metric differences
+        if "top_metrics_differences" in data:
+            self._format_top_metrics_differences(data["top_metrics_differences"])
+
         # 3. Stage Differences table SECOND (detailed breakdown)
         if "stage_deep_dive" in data:
             self._format_stage_differences(data["stage_deep_dive"])
+
+        # 4. Environment comparison summary
+        if "environment_comparison" in data:
+            self._format_environment_comparison(data["environment_comparison"])
+
+        # 5. Executor timeline comparison summary
+        if "executor_timeline_comparison" in data:
+            self._format_timeline_comparison_result(
+                data["executor_timeline_comparison"]
+            )
+
+    def _format_top_metrics_differences(self, metrics: List[Dict[str, Any]]) -> None:
+        """Format top application-level metric differences."""
+        if not metrics:
+            return
+
+        table = Table(title="Top Metric Differences")
+        table.add_column("Metric", style="cyan")
+        table.add_column("App1", style="blue")
+        table.add_column("App2", style="blue")
+        table.add_column("Change", style="magenta")
+
+        for item in metrics:
+            metric_key = item.get("metric", "unknown")
+            left_val = item.get("left")
+            right_val = item.get("right")
+            percent_change = item.get("percent_change", 0)
+
+            if isinstance(left_val, (int, float)) and isinstance(
+                right_val, (int, float)
+            ):
+                if "bytes" in str(metric_key).lower():
+                    left_formatted = self._format_bytes(left_val)
+                    right_formatted = self._format_bytes(right_val)
+                elif (
+                    "time" in str(metric_key).lower()
+                    or "duration" in str(metric_key).lower()
+                ):
+                    left_formatted = self._format_duration(left_val)
+                    right_formatted = self._format_duration(right_val)
+                else:
+                    left_formatted = f"{left_val:,}"
+                    right_formatted = f"{right_val:,}"
+            else:
+                left_formatted = str(left_val) if left_val is not None else "N/A"
+                right_formatted = str(right_val) if right_val is not None else "N/A"
+
+            if percent_change > 0:
+                change_formatted = f"[red]+{percent_change:.1f}%[/red]"
+            elif percent_change < 0:
+                change_formatted = f"[green]{percent_change:.1f}%[/green]"
+            else:
+                change_formatted = "0.0%"
+
+            table.add_row(
+                str(metric_key), left_formatted, right_formatted, change_formatted
+            )
+
+        console.print(table)
+
+    def _format_environment_comparison(self, env: Dict[str, Any]) -> None:
+        """Format environment/configuration differences summary."""
+        spark_props = env.get("spark_properties", {})
+        diff_props = spark_props.get("different", {})
+        if not diff_props:
+            return
+
+        table = Table(title="Environment Differences")
+        table.add_column("Property", style="cyan")
+        table.add_column("App1", style="blue")
+        table.add_column("App2", style="blue")
+        for prop in sorted(diff_props.keys()):
+            values = diff_props[prop]
+            table.add_row(
+                prop,
+                str(values.get("app1", "N/A")),
+                str(values.get("app2", "N/A")),
+            )
+        console.print(table)
 
     def _format_comparison_header(self, applications: Dict[str, Any]) -> None:
         """Format the applications being compared."""
@@ -881,17 +964,8 @@ class OutputFormatter:
         self, data: Dict[str, Any], title: Optional[str] = None
     ) -> None:
         """Format timeline comparison result in a structured, readable way."""
-        # 1. Application Overview Header
-        self._format_timeline_overview_header(data)
-
-        # 2. Timeline Intervals Table
+        # Show only the timeline intervals table for compact output.
         self._format_timeline_intervals_table(data)
-
-        # 3. Resource Efficiency Panel
-        self._format_timeline_efficiency_panel(data)
-
-        # 4. Performance Summary
-        self._format_timeline_summary(data)
 
     def _format_timeline_overview_header(self, data: Dict[str, Any]) -> None:
         """Format timeline comparison overview header."""
