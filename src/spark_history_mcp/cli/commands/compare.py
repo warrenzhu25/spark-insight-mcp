@@ -701,9 +701,7 @@ if CLI_AVAILABLE:
             non_zero = [d for d in diffs if d["percent_change"] != 0]
             zeros = [d for d in diffs if d["percent_change"] == 0]
 
-            non_zero.sort(
-                key=lambda d: abs(float(d["percent_change"])), reverse=True
-            )
+            non_zero.sort(key=lambda d: abs(float(d["percent_change"])), reverse=True)
             zeros.sort(key=lambda d: str(d["metric"]))
 
             ordered = non_zero + zeros
@@ -727,6 +725,7 @@ if CLI_AVAILABLE:
 
             import spark_history_mcp.tools.tools as tools_module
             from spark_history_mcp.tools.tools import (
+                create_comparison_metrics,
                 compare_app_executor_timeline,
                 compare_app_performance,
                 compare_application_metrics,
@@ -743,12 +742,27 @@ if CLI_AVAILABLE:
                     top_n=top_n,
                 )
 
-                metrics_comparison = compare_application_metrics(
-                    app_id1=app_id1, app_id2=app_id2, server=server
+                stage_overview = comparison_data.get("aggregated_overview", {}).get(
+                    "stage_comparison", {}
                 )
-                comparison_data["top_metrics_differences"] = _top_metric_differences(
-                    metrics_comparison, limit=5
-                )
+                stage_apps = stage_overview.get("applications", {})
+                stage_metrics1 = stage_apps.get("app1", {}).get("stage_metrics", {})
+                stage_metrics2 = stage_apps.get("app2", {}).get("stage_metrics", {})
+
+                if stage_metrics1 and stage_metrics2:
+                    stage_metrics_comparison = create_comparison_metrics(
+                        stage_metrics1, stage_metrics2
+                    )
+                    comparison_data["top_metrics_differences"] = (
+                        _top_metric_differences(stage_metrics_comparison, limit=5)
+                    )
+                else:
+                    metrics_comparison = compare_application_metrics(
+                        app_id1=app_id1, app_id2=app_id2, server=server
+                    )
+                    comparison_data["top_metrics_differences"] = (
+                        _top_metric_differences(metrics_comparison, limit=5)
+                    )
 
                 comparison_data["executor_timeline_comparison"] = (
                     compare_app_executor_timeline(

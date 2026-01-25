@@ -433,7 +433,11 @@ class OutputFormatter:
         if not metrics:
             return
 
-        table = Table(title="Top Metric Differences")
+        def display_metric_name(metric_key: str) -> str:
+            name = metric_key.replace("total_", "")
+            return name.replace("_", " ").title()
+
+        table = Table(title="Top Stage Metric Differences")
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -472,7 +476,10 @@ class OutputFormatter:
                 change_formatted = "0.0%"
 
             table.add_row(
-                str(metric_key), left_formatted, right_formatted, change_formatted
+                display_metric_name(str(metric_key)),
+                left_formatted,
+                right_formatted,
+                change_formatted,
             )
 
         console.print(table)
