@@ -630,6 +630,13 @@ if CLI_AVAILABLE:
         is_flag=True,
         help="Show interactive navigation menu after comparison",
     )
+    @click.option(
+        "--all",
+        "-a",
+        "show_all",
+        is_flag=True,
+        help="Show all metrics instead of top 3",
+    )
     @click.pass_context
     def apps(
         ctx,
@@ -637,8 +644,9 @@ if CLI_AVAILABLE:
         app_identifier2: Optional[str],
         server: Optional[str],
         top_n: int,
-        format: str,
+        format: str,  # noqa: A002
         interactive: bool,
+        show_all: bool,
     ):
         """
         Compare performance between two applications and set comparison context.
@@ -661,7 +669,9 @@ if CLI_AVAILABLE:
             compare apps MyJob "Production ETL"             # Mixed: single word + quoted
         """
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(
+            format, ctx.obj.get("quiet", False), show_all_metrics=show_all
+        )
 
         try:
             client = get_spark_client(config_path, server)
@@ -708,7 +718,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing applications: {e}")
+            raise click.ClickException(f"Error comparing applications: {e}") from e
 
     @compare.command("stages")
     @click.argument("stage_id1", type=int)
@@ -741,7 +751,7 @@ if CLI_AVAILABLE:
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
         significance_threshold: float,
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare specific stages between applications."""
         config_path = ctx.obj["config_path"]
@@ -793,7 +803,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing stages: {e}")
+            raise click.ClickException(f"Error comparing stages: {e}") from e
 
     @compare.command("timeline")
     @click.option(
@@ -822,7 +832,7 @@ if CLI_AVAILABLE:
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
         interval_minutes: int,
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare executor timeline patterns between applications."""
         config_path = ctx.obj["config_path"]
@@ -860,7 +870,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing timelines: {e}")
+            raise click.ClickException(f"Error comparing timelines: {e}") from e
 
     @compare.command("stage-timeline")
     @click.argument("stage_id1", type=int)
@@ -893,7 +903,7 @@ if CLI_AVAILABLE:
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
         interval_minutes: int,
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare executor timeline for specific stages."""
         config_path = ctx.obj["config_path"]
@@ -933,7 +943,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing stage timelines: {e}")
+            raise click.ClickException(f"Error comparing stage timelines: {e}") from e
 
     @compare.command("resources")
     @click.option(
@@ -955,7 +965,7 @@ if CLI_AVAILABLE:
         ctx,
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare resource allocation between applications."""
         config_path = ctx.obj["config_path"]
@@ -990,7 +1000,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing resources: {e}")
+            raise click.ClickException(f"Error comparing resources: {e}") from e
 
     @compare.command("executors")
     @click.option(
@@ -1025,7 +1035,7 @@ if CLI_AVAILABLE:
         server: Optional[str],
         significance_threshold: float,
         show_only_significant: bool,
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare executor performance between applications."""
         config_path = ctx.obj["config_path"]
@@ -1064,7 +1074,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing executors: {e}")
+            raise click.ClickException(f"Error comparing executors: {e}") from e
 
     @compare.command("jobs")
     @click.option(
@@ -1086,7 +1096,7 @@ if CLI_AVAILABLE:
         ctx,
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare job performance between applications."""
         config_path = ctx.obj["config_path"]
@@ -1121,7 +1131,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing jobs: {e}")
+            raise click.ClickException(f"Error comparing jobs: {e}") from e
 
     @compare.command("stages-aggregated")
     @click.option(
@@ -1156,7 +1166,7 @@ if CLI_AVAILABLE:
         server: Optional[str],
         significance_threshold: float,
         show_only_significant: bool,
-        format: str,
+        format: str,  # noqa: A002
     ):
         """Compare aggregated stage metrics between applications."""
         config_path = ctx.obj["config_path"]
@@ -1195,7 +1205,7 @@ if CLI_AVAILABLE:
                     tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
-            raise click.ClickException(f"Error comparing aggregated stages: {e}")
+            raise click.ClickException(f"Error comparing aggregated stages: {e}") from e
 
     @compare.command("status")
     @click.option(
@@ -1206,7 +1216,7 @@ if CLI_AVAILABLE:
         help="Output format",
     )
     @click.pass_context
-    def status(ctx, format: str):
+    def status(ctx, format: str):  # noqa: A002
         """Show current comparison context."""
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -1256,7 +1266,12 @@ if CLI_AVAILABLE:
     )
     @click.pass_context
     def performance(
-        ctx, app_id1: str, app_id2: str, server: Optional[str], top_n: int, format: str
+        ctx,
+        app_id1: str,
+        app_id2: str,
+        server: Optional[str],
+        top_n: int,
+        format: str,  # noqa: A002
     ):
         """Alias for 'compare apps' command."""
         ctx.invoke(
@@ -1271,7 +1286,7 @@ if CLI_AVAILABLE:
 else:
     # Fallback when CLI dependencies not available
     def compare():
-        print(
+        print(  # noqa: T201
             "CLI dependencies not installed. Install with: uv add click rich tabulate"
         )
         return None

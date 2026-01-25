@@ -112,6 +112,7 @@ uv run spark-mcp --cli analyze insights app-20231201-123456
 # Compare applications (new stateful approach)
 uv run spark-mcp --cli compare apps "ETL Pipeline"        # Auto-compare last 2 matching
 uv run spark-mcp --cli compare apps app1 app2             # Compare specific IDs
+uv run spark-mcp --cli compare apps app1 app2 --all       # Show all executor metrics
 
 # Interactive configuration
 uv run spark-mcp --cli config init --interactive

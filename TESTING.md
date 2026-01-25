@@ -131,6 +131,18 @@ Once the MCP Inspector opens in your browser (http://localhost:6274), you can:
 - [ ] No errors in any tool execution
 - [ ] Upstream stage optimizations work (no overwhelming data)
 
+## 🧩 Unit Tests (Quick)
+
+```bash
+# Install dev dependencies
+uv sync --dev
+
+# Run unit tests (directly via the venv Python)
+.venv/bin/python -m pytest -q tests/unit
+```
+
+If `pytest` isn't found on your PATH, use the venv command above.
+
 ## 🛠️ Troubleshooting
 
 ### Common Issues

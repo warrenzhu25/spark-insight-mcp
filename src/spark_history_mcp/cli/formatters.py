@@ -5,6 +5,8 @@ Provides various formatting options for displaying Spark application data
 including JSON, table, and human-readable formats.
 """
 
+# ruff: noqa: T201
+
 import json
 from typing import Any, Dict, List, Optional
 
@@ -28,9 +30,15 @@ if RICH_AVAILABLE:
 class OutputFormatter:
     """Base output formatter with multiple format options."""
 
-    def __init__(self, format_type: str = "human", quiet: bool = False):
+    def __init__(
+        self,
+        format_type: str = "human",
+        quiet: bool = False,
+        show_all_metrics: bool = False,
+    ):
         self.format_type = format_type
         self.quiet = quiet
+        self.show_all_metrics = show_all_metrics
         # Store last app mapping from application list for number references
         self.last_app_mapping: dict[int, str] = {}
 
@@ -551,11 +559,19 @@ class OutputFormatter:
                 app2_metrics = apps.get("app2", {}).get("executor_metrics", {})
 
                 # Dynamically show key executor metrics for overview
-                key_executor_metrics = [
-                    "completed_tasks",
-                    "total_input_bytes",
-                    "total_duration",
-                ]
+                if self.show_all_metrics:
+                    # Show all available metrics
+                    all_metric_keys = set(app1_metrics.keys()) | set(
+                        app2_metrics.keys()
+                    )
+                    key_executor_metrics = sorted(all_metric_keys)
+                else:
+                    # Show only key metrics
+                    key_executor_metrics = [
+                        "completed_tasks",
+                        "total_input_bytes",
+                        "total_duration",
+                    ]
 
                 for metric_key in key_executor_metrics:
                     if metric_key in app1_metrics and metric_key in app2_metrics:

@@ -295,6 +295,9 @@ uv run spark-mcp --cli compare apps app1 app2                 # Compare specific
 # Focus on top differences
 uv run spark-mcp --cli compare apps "Data Processing" --top-n 5
 
+# Show all available executor metrics in the overview
+uv run spark-mcp --cli compare apps "Data Processing" --all
+
 # Resource allocation comparison (uses saved context)
 uv run spark-mcp --cli compare resources
 
