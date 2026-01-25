@@ -560,8 +560,12 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
                 comparison_data, f"Stage Comparison: {stage_id1} vs {stage_id2}"
             )
 
-            # Show post-stage menu if in human format and comparison context exists
-            if formatter.format_type == "human" and load_comparison_context():
+            # Show post-stage menu only if interactive explicitly enabled
+            if (
+                formatter.format_type == "human"
+                and load_comparison_context()
+                and _is_interactive()
+            ):
                 show_post_stage_menu(
                     app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
                 )
@@ -593,7 +597,7 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
             formatter.output(
                 comparison_data, f"Timeline Comparison: {app_id1} vs {app_id2}"
             )
-            if formatter.format_type == "human":
+            if formatter.format_type == "human" and _is_interactive():
                 show_post_timeline_menu(app_id1, app_id2, server, formatter, ctx)
         finally:
             if original_get_context:
@@ -1005,17 +1009,7 @@ if CLI_AVAILABLE:
                     f"Stage Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
 
-                # Show post-stage menu if in human format and comparison context exists
-                if format == "human" and load_comparison_context():
-                    show_post_stage_menu(
-                        app_id1,
-                        app_id2,
-                        stage_id1,
-                        stage_id2,
-                        final_server,
-                        formatter,
-                        ctx,
-                    )
+                # No interactive follow-up unless explicitly requested by compare apps.
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
@@ -1083,7 +1077,7 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Timeline Comparison: {app_id1} vs {app_id2}",
                 )
-                if format == "human":
+                if format == "human" and _is_interactive():
                     show_post_timeline_menu(
                         app_id1, app_id2, final_server, formatter, ctx
                     )
