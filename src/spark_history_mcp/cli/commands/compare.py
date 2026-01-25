@@ -5,6 +5,7 @@ Commands for comparing multiple Spark applications with stateful context managem
 """
 
 import json
+import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -323,6 +324,10 @@ def create_mock_context(client):
     return MockContext(client)
 
 
+def _is_interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 def extract_stage_menu_options(comparison_data):
     """Extract stage differences for interactive menu."""
     stage_dive = comparison_data.get("stage_deep_dive", {})
@@ -344,6 +349,9 @@ def extract_stage_menu_options(comparison_data):
 
 def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, ctx):
     """Show interactive navigation menu after comparison."""
+    if not _is_interactive():
+        click.echo("Interactive menu requires a TTY. Skipping prompt.")
+        return
     try:
         from rich.console import Console
         from rich.panel import Panel
@@ -541,6 +549,9 @@ def show_post_stage_menu(
     app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
 ):
     """Show follow-up options after stage comparison completion."""
+    if not _is_interactive():
+        click.echo("Interactive menu requires a TTY. Skipping prompt.")
+        return
     try:
         from rich.console import Console
         from rich.panel import Panel
@@ -781,69 +792,74 @@ if CLI_AVAILABLE:
                         )
                     else:
                         if format == "human":
-                            try:
-                                from rich.console import Console
-                                from rich.panel import Panel
-
-                                console = Console()
-                            except ImportError:
-                                console = None
-
-                            menu_lines = ["Choose your next analysis:", ""]
-                            menu_lines.extend(
-                                [
-                                    "\\[1] Compare stages 1 vs 1",
-                                    "\\[2] Compare application timeline",
-                                    "\\[q] Continue",
-                                ]
-                            )
-
-                            if console:
-                                content = "\n".join(menu_lines)
-                                console.print(
-                                    Panel(
-                                        content,
-                                        title="What's Next?",
-                                        border_style="green",
-                                    )
+                            if not _is_interactive():
+                                click.echo(
+                                    "Interactive menu requires a TTY. Skipping prompt."
                                 )
                             else:
-                                click.echo("\n" + "=" * 50)
-                                click.echo("What's Next?")
-                                click.echo("=" * 50)
-                                for line in menu_lines:
-                                    click.echo(line)
-                                click.echo("=" * 50)
-
-                            try:
                                 try:
-                                    choice = click.getchar().lower()
-                                    click.echo()
-                                except OSError:
-                                    choice = (
-                                        click.prompt(
-                                            "Enter choice",
-                                            type=str,
-                                            default="q",
-                                        )
-                                        .lower()
-                                        .strip()
-                                    )
+                                    from rich.console import Console
+                                    from rich.panel import Panel
 
-                                if choice == "q":
-                                    pass
-                                elif choice == "1":
-                                    execute_stage_comparison(
-                                        1, 1, server, formatter, ctx
-                                    )
-                                elif choice == "2":
-                                    execute_timeline_comparison(
-                                        app_id1, app_id2, server, formatter, ctx
+                                    console = Console()
+                                except ImportError:
+                                    console = None
+
+                                menu_lines = ["Choose your next analysis:", ""]
+                                menu_lines.extend(
+                                    [
+                                        "\\[1] Compare stages 1 vs 1",
+                                        "\\[2] Compare application timeline",
+                                        "\\[q] Continue",
+                                    ]
+                                )
+
+                                if console:
+                                    content = "\n".join(menu_lines)
+                                    console.print(
+                                        Panel(
+                                            content,
+                                            title="What's Next?",
+                                            border_style="green",
+                                        )
                                     )
                                 else:
-                                    click.echo(f"Invalid choice: {choice}")
-                            except (KeyboardInterrupt, EOFError):
-                                click.echo("\nExiting interactive mode.")
+                                    click.echo("\n" + "=" * 50)
+                                    click.echo("What's Next?")
+                                    click.echo("=" * 50)
+                                    for line in menu_lines:
+                                        click.echo(line)
+                                    click.echo("=" * 50)
+
+                                try:
+                                    try:
+                                        choice = click.getchar().lower()
+                                        click.echo()
+                                    except OSError:
+                                        choice = (
+                                            click.prompt(
+                                                "Enter choice",
+                                                type=str,
+                                                default="q",
+                                            )
+                                            .lower()
+                                            .strip()
+                                        )
+
+                                    if choice == "q":
+                                        pass
+                                    elif choice == "1":
+                                        execute_stage_comparison(
+                                            1, 1, server, formatter, ctx
+                                        )
+                                    elif choice == "2":
+                                        execute_timeline_comparison(
+                                            app_id1, app_id2, server, formatter, ctx
+                                        )
+                                    else:
+                                        click.echo(f"Invalid choice: {choice}")
+                                except (KeyboardInterrupt, EOFError):
+                                    click.echo("\nExiting interactive mode.")
                         else:
                             click.echo(
                                 "Use 'compare stages' or 'compare timeline' for detailed analysis"

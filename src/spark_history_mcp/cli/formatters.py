@@ -136,28 +136,27 @@ class OutputFormatter:
         elif isinstance(data, StageData):
             self._format_stage(data)
         elif isinstance(data, dict):
-            if self._is_standardized_comparison_result(data):
+            # Prefer specific comparison formatters before standardized formats.
+            if self._is_comparison_result(data):
+                self._format_comparison_result(data, title)
+            elif self._is_stage_comparison_result(data):
+                self._format_stage_comparison_result(data, title)
+            elif self._is_timeline_comparison_result(data):
+                self._format_timeline_comparison_result(data, title)
+            elif self._is_executor_comparison_result(data):
+                self._format_executor_comparison_result(data, title)
+            elif self._is_job_comparison_result(data):
+                self._format_job_comparison_result(data, title)
+            elif self._is_aggregated_stage_comparison_result(data):
+                self._format_aggregated_stage_comparison_result(data, title)
+            elif self._is_resource_comparison_result(data):
+                self._format_resource_comparison_result(data, title)
+            elif self._is_standardized_comparison_result(data):
                 self._format_standardized_comparison_result(data, title)
             elif self._is_standardized_metrics_result(data):
                 self._format_standardized_metrics_result(data, title)
             else:
-                # Fallback to existing specific formatters for backward compatibility
-                if self._is_comparison_result(data):
-                    self._format_comparison_result(data, title)
-                elif self._is_stage_comparison_result(data):
-                    self._format_stage_comparison_result(data, title)
-                elif self._is_timeline_comparison_result(data):
-                    self._format_timeline_comparison_result(data, title)
-                elif self._is_executor_comparison_result(data):
-                    self._format_executor_comparison_result(data, title)
-                elif self._is_job_comparison_result(data):
-                    self._format_job_comparison_result(data, title)
-                elif self._is_aggregated_stage_comparison_result(data):
-                    self._format_aggregated_stage_comparison_result(data, title)
-                elif self._is_resource_comparison_result(data):
-                    self._format_resource_comparison_result(data, title)
-                else:
-                    self._format_dict(data)
+                self._format_dict(data)
         else:
             console.print(str(data))
 
