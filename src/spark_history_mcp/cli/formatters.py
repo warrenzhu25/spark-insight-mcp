@@ -31,6 +31,8 @@ class OutputFormatter:
     def __init__(self, format_type: str = "human", quiet: bool = False):
         self.format_type = format_type
         self.quiet = quiet
+        # Store last app mapping from application list for number references
+        self.last_app_mapping: dict[int, str] = {}
 
     def output(self, data: Any, title: Optional[str] = None) -> None:
         """Output data in the specified format."""
@@ -187,15 +189,22 @@ class OutputFormatter:
                 console.print(f"{i}. {item}")
 
     def _format_application_list(self, apps: List[ApplicationInfo]) -> None:
-        """Format list of applications as a rich table."""
+        """Format list of applications as a rich table with numbered references."""
+        # Clear and rebuild app mapping
+        self.last_app_mapping = {}
+
         table = Table(title="Spark Applications")
+        table.add_column("#", style="dim", justify="right")
         table.add_column("Application ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Status", style="magenta")
         table.add_column("Duration", style="yellow")
         table.add_column("Start Time", style="blue")
 
-        for app in apps:
+        for idx, app in enumerate(apps, 1):
+            # Store mapping for number references
+            self.last_app_mapping[idx] = app.id
+
             attempt = app.attempts[0] if app.attempts else None
             if attempt:
                 duration = f"{attempt.duration // 1000}s" if attempt.duration else "N/A"
@@ -208,7 +217,9 @@ class OutputFormatter:
             else:
                 duration = status = start_time = "N/A"
 
-            table.add_row(app.id, app.name or "Unnamed", status, duration, start_time)
+            table.add_row(
+                str(idx), app.id, app.name or "Unnamed", status, duration, start_time
+            )
 
         console.print(table)
 

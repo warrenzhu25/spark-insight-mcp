@@ -19,6 +19,12 @@ from spark_history_mcp.config.config import Config
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.formatters import OutputFormatter
+    from spark_history_mcp.cli.session import (
+        format_session_hint,
+        is_number_ref,
+        resolve_number_ref,
+        save_app_refs,
+    )
 
 
 def load_config(config_path: Path) -> Config:
@@ -35,6 +41,33 @@ def load_config(config_path: Path) -> Config:
             raise click.ClickException(f"Error loading configuration: {e}")
         else:
             raise RuntimeError(f"Error loading configuration: {e}")
+
+
+def resolve_app_id_arg(identifier: str) -> str:
+    """
+    Resolve an app identifier to an app ID.
+
+    Handles number references (1, 2, 3...) by looking up the saved mapping.
+    Returns the identifier unchanged if it's not a number ref.
+
+    Args:
+        identifier: Number ref like "1" or app ID like "app-123"
+
+    Returns:
+        The resolved app ID
+
+    Raises:
+        click.ClickException: If number ref not found in session
+    """
+    if is_number_ref(identifier):
+        app_id = resolve_number_ref(int(identifier))
+        if app_id:
+            click.echo(f"Resolved #{identifier} to: {app_id}")
+            return app_id
+        raise click.ClickException(
+            f"#{identifier} not found. Run 'apps list' first to set up references."
+        )
+    return identifier
 
 
 def get_spark_client(
@@ -149,6 +182,11 @@ if CLI_AVAILABLE:
             try:
                 apps = list_applications(server=server, **params)
                 formatter.output(apps, "Spark Applications")
+
+                # Save app references for number shorthand
+                if formatter.last_app_mapping and format == "human":
+                    save_app_refs(formatter.last_app_mapping, server)
+                    click.echo(format_session_hint(len(formatter.last_app_mapping)))
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
@@ -169,6 +207,9 @@ if CLI_AVAILABLE:
     @click.pass_context
     def show_app(ctx, app_id: str, server: Optional[str], format: str):
         """Show detailed information about a specific application."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -221,6 +262,9 @@ if CLI_AVAILABLE:
     @click.pass_context
     def list_jobs(ctx, app_id: str, server: Optional[str], status: tuple, format: str):
         """List jobs for a specific application."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -278,6 +322,9 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], status: tuple, format: str
     ):
         """List stages for a specific application."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 

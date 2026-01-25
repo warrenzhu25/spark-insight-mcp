@@ -19,6 +19,7 @@ except ImportError:
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
     from spark_history_mcp.cli.formatters import OutputFormatter
+    from spark_history_mcp.cli.session import is_number_ref, resolve_number_ref
 
 
 def get_session_file() -> Path:
@@ -179,6 +180,27 @@ def resolve_app_name_to_recent_apps(
             tools_module.mcp.get_context = original_get_context
 
 
+def resolve_single_number_ref(identifier: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve a number reference to an app ID.
+
+    Args:
+        identifier: The identifier to check and resolve
+
+    Returns:
+        Tuple of (resolved_app_id, feedback_message) if it's a number ref,
+        (None, None) if it's not a number ref
+    """
+    if is_number_ref(identifier):
+        app_id = resolve_number_ref(int(identifier))
+        if app_id:
+            return app_id, f"Resolved #{identifier} to: {app_id}"
+        raise click.ClickException(
+            f"#{identifier} not found. Run 'apps list' first to set up references."
+        )
+    return None, None
+
+
 def resolve_app_identifiers(
     identifier1: str, identifier2: Optional[str], client, server: Optional[str] = None
 ) -> Tuple[str, str, Optional[str]]:
@@ -188,6 +210,33 @@ def resolve_app_identifiers(
     Returns:
         Tuple of (app_id1, app_id2, feedback_message)
     """
+    # First, try to resolve number refs for both identifiers
+    resolved1, feedback1 = resolve_single_number_ref(identifier1)
+    if identifier2:
+        resolved2, feedback2 = resolve_single_number_ref(identifier2)
+    else:
+        resolved2, feedback2 = None, None
+
+    # If both are resolved as number refs, return them
+    if resolved1 and resolved2:
+        feedback_parts = []
+        if feedback1:
+            feedback_parts.append(feedback1)
+        if feedback2:
+            feedback_parts.append(feedback2)
+        return (
+            resolved1,
+            resolved2,
+            "\n".join(feedback_parts) if feedback_parts else None,
+        )
+
+    # If first is a single number ref with no second identifier - error
+    if resolved1 and not identifier2:
+        raise click.ClickException(
+            "When using number references, provide two numbers. "
+            "Example: compare apps 1 2"
+        )
+
     if identifier2 is None:
         # Single identifier - treat as name and find 2 recent matching apps
         if is_app_id(identifier1):
@@ -214,12 +263,19 @@ def resolve_app_identifiers(
 
     else:
         # Two identifiers - resolve each one
-        resolved_id1 = identifier1
-        resolved_id2 = identifier2
+        # Use already-resolved number refs or original identifiers
+        resolved_id1 = resolved1 if resolved1 else identifier1
+        resolved_id2 = resolved2 if resolved2 else identifier2
         feedback_parts = []
 
-        # Resolve first identifier if it looks like a name
-        if not is_app_id(identifier1):
+        # Add feedback for number refs that were resolved above
+        if feedback1:
+            feedback_parts.append(feedback1)
+        if feedback2:
+            feedback_parts.append(feedback2)
+
+        # Resolve first identifier if it looks like a name (and wasn't a number ref)
+        if not resolved1 and not is_app_id(identifier1):
             try:
                 resolved_id1, _, apps1 = resolve_app_name_to_recent_apps(
                     identifier1, client, server, 1
@@ -231,8 +287,8 @@ def resolve_app_identifiers(
                 # If name resolution fails, treat as literal ID
                 pass
 
-        # Resolve second identifier if it looks like a name
-        if not is_app_id(identifier2):
+        # Resolve second identifier if it looks like a name (and wasn't a number ref)
+        if not resolved2 and not is_app_id(identifier2):
             try:
                 resolved_id2, _, apps2 = resolve_app_name_to_recent_apps(
                     identifier2, client, server, 1

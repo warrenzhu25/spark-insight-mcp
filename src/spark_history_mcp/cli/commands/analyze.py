@@ -17,6 +17,34 @@ except ImportError:
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
     from spark_history_mcp.cli.formatters import OutputFormatter
+    from spark_history_mcp.cli.session import is_number_ref, resolve_number_ref
+
+
+def resolve_app_id_arg(identifier: str) -> str:
+    """
+    Resolve an app identifier to an app ID.
+
+    Handles number references (1, 2, 3...) by looking up the saved mapping.
+    Returns the identifier unchanged if it's not a number ref.
+
+    Args:
+        identifier: Number ref like "1" or app ID like "app-123"
+
+    Returns:
+        The resolved app ID
+
+    Raises:
+        click.ClickException: If number ref not found in session
+    """
+    if is_number_ref(identifier):
+        app_id = resolve_number_ref(int(identifier))
+        if app_id:
+            click.echo(f"Resolved #{identifier} to: {app_id}")
+            return app_id
+        raise click.ClickException(
+            f"#{identifier} not found. Run 'apps list' first to set up references."
+        )
+    return identifier
 
 
 def create_mock_context(client):
@@ -87,6 +115,9 @@ if CLI_AVAILABLE:
         include_executor_utilization: bool,
     ):
         """Get comprehensive application insights."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -132,6 +163,9 @@ if CLI_AVAILABLE:
     @click.pass_context
     def bottlenecks(ctx, app_id: str, server: Optional[str], top_n: int, format: str):
         """Identify performance bottlenecks in the application."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -179,6 +213,9 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], target_duration: int, format: str
     ):
         """Analyze auto-scaling recommendations."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -239,6 +276,9 @@ if CLI_AVAILABLE:
         format: str,
     ):
         """Analyze shuffle data skew issues."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -298,6 +338,9 @@ if CLI_AVAILABLE:
         format: str,
     ):
         """Find slowest jobs, stages, or SQL queries."""
+        # Resolve number references
+        app_id = resolve_app_id_arg(app_id)
+
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
 
@@ -373,6 +416,10 @@ if CLI_AVAILABLE:
         ⚠️  DEPRECATED: Use 'compare apps' instead.
         This command will be removed in a future version.
         """
+        # Resolve number references
+        app_id1 = resolve_app_id_arg(app_id1)
+        app_id2 = resolve_app_id_arg(app_id2)
+
         # Show deprecation warning
         click.echo(
             "⚠️  WARNING: 'analyze compare' is deprecated. Use 'compare apps' instead.",

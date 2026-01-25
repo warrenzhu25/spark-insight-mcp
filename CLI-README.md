@@ -103,6 +103,73 @@ uv run spark-mcp --cli apps executors app-20240315-123456 --include-inactive
 uv run spark-mcp --cli apps executor-summary app-20240315-123456
 ```
 
+## 🔢 Numbered App References
+
+After running `apps list`, you can use **numbers** instead of full app IDs in subsequent commands. This makes workflows much faster and easier.
+
+### How It Works
+
+```bash
+# Step 1: List apps - note the # column showing row numbers
+uv run spark-mcp --cli apps list --limit 5
+
+#                    Spark Applications
+# # | Application ID          | Name    | Status    | Duration
+# 1 | app-20231201-123456     | ETL-1   | Completed | 30s
+# 2 | app-20231201-234567     | ETL-2   | Completed | 45s
+# 3 | app-20231201-345678     | ETL-3   | Completed | 60s
+#
+# Tip: Use numbers 1-3 to reference these apps. Example: compare apps 1 2
+
+# Step 2: Use numbers instead of app IDs
+uv run spark-mcp --cli apps show 1
+# Resolved #1 to: app-20231201-123456
+# [App details...]
+
+uv run spark-mcp --cli compare apps 1 2
+# Resolved #1 to: app-20231201-123456
+# Resolved #2 to: app-20231201-234567
+# [Comparison results...]
+
+uv run spark-mcp --cli analyze insights 1
+# Resolved #1 to: app-20231201-123456
+# [Insights...]
+```
+
+### Supported Commands
+
+Number references work in all commands that accept an app ID:
+
+| Command | Example |
+|---------|---------|
+| `apps show` | `apps show 1` |
+| `apps jobs` | `apps jobs 1` |
+| `apps stages` | `apps stages 1` |
+| `compare apps` | `compare apps 1 2` |
+| `analyze insights` | `analyze insights 1` |
+| `analyze bottlenecks` | `analyze bottlenecks 1` |
+| `analyze auto-scaling` | `analyze auto-scaling 1` |
+| `analyze shuffle-skew` | `analyze shuffle-skew 1` |
+| `analyze slowest` | `analyze slowest 1` |
+
+### Session Timeout
+
+- References are saved for **1 hour** after running `apps list`
+- After 1 hour, run `apps list` again to refresh the references
+- References are stored in `~/.config/spark-history-mcp/app-refs-session.json`
+
+### Valid Number Formats
+
+| Input | Valid? | Notes |
+|-------|--------|-------|
+| `1` | ✅ | Valid number reference |
+| `10` | ✅ | Multi-digit numbers work |
+| `0` | ❌ | Zero is not valid |
+| `01` | ❌ | Leading zeros are not valid |
+| `-1` | ❌ | Negative numbers are not valid |
+| `1a` | ❌ | Not a pure number |
+| `app-1` | ❌ | Treated as app ID, not a number |
+
 ## 🔍 Analysis (`analyze`)
 
 ### Comprehensive Insights
@@ -199,18 +266,22 @@ uv run spark-mcp --cli compare apps ETLPipeline
 ### 🎯 Stateful Workflow
 
 ```bash
-# Step 1: Set comparison context (compares apps and saves context)
-uv run spark-mcp --cli compare apps "ETL Pipeline"                    # Auto-compare last 2
-# Or with specific app IDs:
-uv run spark-mcp --cli compare apps app-20231201-123 app-20231202-456
+# Step 1: List apps to see available applications and get number references
+uv run spark-mcp --cli apps list --limit 5
+# Shows numbered list: 1, 2, 3...
 
-# Step 2: Use saved context for detailed analysis
+# Step 2: Set comparison context using numbers or app IDs
+uv run spark-mcp --cli compare apps 1 2                               # Use numbers from list
+uv run spark-mcp --cli compare apps "ETL Pipeline"                    # Auto-compare last 2
+uv run spark-mcp --cli compare apps app-20231201-123 app-20231202-456 # Specific IDs
+
+# Step 3: Use saved context for detailed analysis
 uv run spark-mcp --cli compare stages 1 1        # Compare stage 1 in both apps
 uv run spark-mcp --cli compare timeline          # Timeline comparison
 uv run spark-mcp --cli compare resources         # Resource comparison
 uv run spark-mcp --cli compare executors         # Executor performance
 
-# Step 3: Override context when needed
+# Step 4: Override context when needed
 uv run spark-mcp --cli compare jobs --apps "Daily ETL" "Weekly ETL"
 ```
 
@@ -663,14 +734,14 @@ done
 ## 🎓 Learning Path
 
 ### Beginner
-1. Start with `apps list` to see available applications
-2. Use `apps show` to examine specific applications
-3. Try `analyze insights` for comprehensive analysis
+1. Start with `apps list` to see available applications (note the numbered list!)
+2. Use `apps show 1` to examine the first application (using number reference)
+3. Try `analyze insights 1` for comprehensive analysis
 
 ### Intermediate
-4. Learn `analyze compare` for performance comparisons
-5. Use `analyze bottlenecks` to identify issues
-6. Explore `analyze slowest` for component analysis
+4. Use `compare apps 1 2` for quick performance comparisons
+5. Use `analyze bottlenecks 1` to identify issues
+6. Explore `analyze slowest 1` for component analysis
 
 ### Advanced
 7. Script with JSON output and jq processing
@@ -709,5 +780,11 @@ uv run spark-mcp --cli analyze insights --help
 
 🎯 **Ready to analyze your Spark applications?** Start with:
 ```bash
+# List apps (note the numbers 1, 2, 3...)
 uv run spark-mcp --cli apps list --limit 5
+
+# Then use numbers for quick access
+uv run spark-mcp --cli apps show 1           # Show first app
+uv run spark-mcp --cli analyze insights 1    # Analyze first app
+uv run spark-mcp --cli compare apps 1 2      # Compare first two apps
 ```
