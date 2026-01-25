@@ -194,6 +194,62 @@ if CLI_AVAILABLE:
         except Exception as e:
             raise click.ClickException(f"Error listing applications: {e}")
 
+    @apps.command("compare")
+    @click.argument("app_identifier1")
+    @click.argument("app_identifier2", required=False)
+    @click.option("--server", "-s", help="Server name to use")
+    @click.option(
+        "--top-n",
+        "-n",
+        type=int,
+        default=3,
+        help="Number of top stage differences to analyze",
+    )
+    @click.option(
+        "--format",
+        "-f",
+        type=click.Choice(["human", "json", "table"]),
+        default="human",
+        help="Output format",
+    )
+    @click.option(
+        "--interactive",
+        "-i",
+        is_flag=True,
+        help="Show interactive navigation menu after comparison",
+    )
+    @click.option(
+        "--all",
+        "-a",
+        "show_all",
+        is_flag=True,
+        help="Show all metrics instead of top 3",
+    )
+    @click.pass_context
+    def compare_apps(
+        ctx,
+        app_identifier1: str,
+        app_identifier2: Optional[str],
+        server: Optional[str],
+        top_n: int,
+        format: str,
+        interactive: bool,
+        show_all: bool,
+    ):
+        """Alias for `apps compare`."""
+        from spark_history_mcp.cli.commands.compare import apps as compare_apps_cmd
+
+        ctx.invoke(
+            compare_apps_cmd,
+            app_identifier1=app_identifier1,
+            app_identifier2=app_identifier2,
+            server=server,
+            top_n=top_n,
+            format=format,
+            interactive=interactive,
+            show_all=show_all,
+        )
+
     @apps.command("show")
     @click.argument("app_id")
     @click.option("--server", "-s", help="Server name to use")

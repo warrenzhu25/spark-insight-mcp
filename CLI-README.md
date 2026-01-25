@@ -119,14 +119,14 @@ uv run spark-mcp --cli apps list --limit 5
 # 2 | app-20231201-234567     | ETL-2   | Completed | 45s
 # 3 | app-20231201-345678     | ETL-3   | Completed | 60s
 #
-# Tip: Use numbers 1-3 to reference these apps. Example: compare apps 1 2
+# Tip: Use numbers 1-3 to reference these apps. Example: apps compare 1 2
 
 # Step 2: Use numbers instead of app IDs
 uv run spark-mcp --cli apps show 1
 # Resolved #1 to: app-20231201-123456
 # [App details...]
 
-uv run spark-mcp --cli compare apps 1 2
+uv run spark-mcp --cli apps compare 1 2
 # Resolved #1 to: app-20231201-123456
 # Resolved #2 to: app-20231201-234567
 # [Comparison results...]
@@ -145,7 +145,7 @@ Number references work in all commands that accept an app ID:
 | `apps show` | `apps show 1` |
 | `apps jobs` | `apps jobs 1` |
 | `apps stages` | `apps stages 1` |
-| `compare apps` | `compare apps 1 2` |
+| `apps compare` | `apps compare 1 2` |
 | `analyze insights` | `analyze insights 1` |
 | `analyze bottlenecks` | `analyze bottlenecks 1` |
 | `analyze auto-scaling` | `analyze auto-scaling 1` |
@@ -233,7 +233,7 @@ uv run spark-mcp --cli analyze slowest app-20240315-123456 --type stages --top-n
 uv run spark-mcp --cli analyze compare app1 app2
 
 # ✅ NEW: Use compare command with stateful context
-uv run spark-mcp --cli compare apps app1 app2
+uv run spark-mcp --cli apps compare app1 app2
 ```
 
 ## 🔄 Comparisons (`compare`)
@@ -254,13 +254,13 @@ The `compare` command group provides **stateful multi-app comparisons** with ses
 **Common Mistakes:**
 ```bash
 # ❌ Wrong - shell splits into multiple arguments
-uv run spark-mcp --cli compare apps ETL Pipeline
+uv run spark-mcp --cli apps compare ETL Pipeline
 
 # ✅ Correct - quotes keep it as one argument
-uv run spark-mcp --cli compare apps "ETL Pipeline"
+uv run spark-mcp --cli apps compare "ETL Pipeline"
 
 # ✅ Also correct - single word, no spaces
-uv run spark-mcp --cli compare apps ETLPipeline
+uv run spark-mcp --cli apps compare ETLPipeline
 ```
 
 ### 🎯 Stateful Workflow
@@ -271,9 +271,9 @@ uv run spark-mcp --cli apps list --limit 5
 # Shows numbered list: 1, 2, 3...
 
 # Step 2: Set comparison context using numbers or app IDs
-uv run spark-mcp --cli compare apps 1 2                               # Use numbers from list
-uv run spark-mcp --cli compare apps "ETL Pipeline"                    # Auto-compare last 2
-uv run spark-mcp --cli compare apps app-20231201-123 app-20231202-456 # Specific IDs
+uv run spark-mcp --cli apps compare 1 2                               # Use numbers from list
+uv run spark-mcp --cli apps compare "ETL Pipeline"                    # Auto-compare last 2
+uv run spark-mcp --cli apps compare app-20231201-123 app-20231202-456 # Specific IDs
 
 # Step 3: Use saved context for detailed analysis
 uv run spark-mcp --cli compare stages 1 1        # Compare stage 1 in both apps
@@ -289,14 +289,14 @@ uv run spark-mcp --cli compare jobs --apps "Daily ETL" "Weekly ETL"
 
 ```bash
 # Basic app performance comparison (sets context)
-uv run spark-mcp --cli compare apps "ETL Pipeline"            # Auto-compare last 2
-uv run spark-mcp --cli compare apps app1 app2                 # Compare specific IDs
+uv run spark-mcp --cli apps compare "ETL Pipeline"            # Auto-compare last 2
+uv run spark-mcp --cli apps compare app1 app2                 # Compare specific IDs
 
 # Focus on top differences
-uv run spark-mcp --cli compare apps "Data Processing" --top-n 5
+uv run spark-mcp --cli apps compare "Data Processing" --top-n 5
 
 # Show all available executor metrics in the overview
-uv run spark-mcp --cli compare apps "Data Processing" --all
+uv run spark-mcp --cli apps compare "Data Processing" --all
 
 # Resource allocation comparison (uses saved context)
 uv run spark-mcp --cli compare resources
@@ -361,7 +361,7 @@ uv run spark-mcp --cli compare timeline --apps different-app1 different-app2
 uv run spark-mcp --cli compare executors --significance-threshold 0.3 --show-all
 
 # Combine with different servers
-uv run spark-mcp --cli compare apps prod-app staging-app --server production
+uv run spark-mcp --cli apps compare prod-app staging-app --server production
 uv run spark-mcp --cli compare stages 1 1 --server staging
 ```
 
@@ -742,7 +742,7 @@ done
 3. Try `analyze insights 1` for comprehensive analysis
 
 ### Intermediate
-4. Use `compare apps 1 2` for quick performance comparisons
+4. Use `apps compare 1 2` for quick performance comparisons
 5. Use `analyze bottlenecks 1` to identify issues
 6. Explore `analyze slowest 1` for component analysis
 
@@ -789,5 +789,5 @@ uv run spark-mcp --cli apps list --limit 5
 # Then use numbers for quick access
 uv run spark-mcp --cli apps show 1           # Show first app
 uv run spark-mcp --cli analyze insights 1    # Analyze first app
-uv run spark-mcp --cli compare apps 1 2      # Compare first two apps
+uv run spark-mcp --cli apps compare 1 2      # Compare first two apps
 ```

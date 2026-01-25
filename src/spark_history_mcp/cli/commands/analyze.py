@@ -413,7 +413,7 @@ if CLI_AVAILABLE:
         """
         Compare performance between two applications.
 
-        ⚠️  DEPRECATED: Use 'compare apps' instead.
+        ⚠️  DEPRECATED: Use 'apps compare' instead.
         This command will be removed in a future version.
         """
         # Resolve number references
@@ -422,11 +422,11 @@ if CLI_AVAILABLE:
 
         # Show deprecation warning
         click.echo(
-            "⚠️  WARNING: 'analyze compare' is deprecated. Use 'compare apps' instead.",
+            "⚠️  WARNING: 'analyze compare' is deprecated. Use 'apps compare' instead.",
             err=True,
         )
         click.echo(
-            f"   New command: spark-mcp --cli compare apps {app_id1} {app_id2}",
+            f"   New command: spark-mcp --cli apps compare {app_id1} {app_id2}",
             err=True,
         )
         click.echo()

@@ -79,7 +79,7 @@ def get_app_context(
     if context is None:
         raise click.ClickException(
             "No comparison context found. "
-            "Run 'compare apps <app1> <app2>' first to set context, "
+            "Run 'apps compare <app1> <app2>' first to set context, "
             "or provide --apps <app1> <app2> to override."
         )
 
@@ -151,7 +151,7 @@ def resolve_app_name_to_recent_apps(
                     f"Tips:\n"
                     f"  • Try a partial name: 'ETL' instead of 'ETL Pipeline Job'\n"
                     f"  • Check spelling and capitalization\n"
-                    f"  • Use exact app IDs if known: compare apps app1 app2\n"
+                    f"  • Use exact app IDs if known: apps compare app1 app2\n"
                     f"  • List available apps: apps list --name '{app_name}'"
                 )
             else:
@@ -161,7 +161,7 @@ def resolve_app_name_to_recent_apps(
                     f"Found: {apps[0].id} - {apps[0].name}\n\n"
                     f"Tips:\n"
                     f"  • Try a broader search term\n"
-                    f"  • Use specific app IDs: compare apps {apps[0].id} <other-app-id>"
+                    f"  • Use specific app IDs: apps compare {apps[0].id} <other-app-id>"
                 )
 
         if len(apps) > limit:
@@ -235,7 +235,7 @@ def resolve_app_identifiers(
     if resolved1 and not identifier2:
         raise click.ClickException(
             "When using number references, provide two numbers. "
-            "Example: compare apps 1 2"
+            "Example: apps compare 1 2"
         )
 
     if identifier2 is None:
@@ -245,8 +245,8 @@ def resolve_app_identifiers(
                 f"When providing a single argument, it should be an application name, "
                 f"not an app ID. Provided: '{identifier1}'\n\n"
                 f"Usage:\n"
-                f"  compare apps 'App Name'    # Auto-compare 2 recent matching apps\n"
-                f"  compare apps app1 app2     # Compare specific app IDs\n\n"
+                f"  apps compare 'App Name'    # Auto-compare 2 recent matching apps\n"
+                f"  apps compare app1 app2     # Compare specific app IDs\n\n"
                 f'Note: Use quotes around names with spaces: "ETL Pipeline"'
             )
 
@@ -826,11 +826,11 @@ if CLI_AVAILABLE:
             • Special characters: quotes recommended ("My-App@Production")
 
         Examples:
-            compare apps app-123 app-456                    # Compare by IDs
-            compare apps "ETL Pipeline"                     # Auto-compare last 2 matching
-            compare apps ETLPipeline                        # Single word, no quotes needed
-            compare apps "Daily Job" "Weekly Job"           # Compare by names with spaces
-            compare apps MyJob "Production ETL"             # Mixed: single word + quoted
+            apps compare app-123 app-456                    # Compare by IDs
+            apps compare "ETL Pipeline"                     # Auto-compare last 2 matching
+            apps compare ETLPipeline                        # Single word, no quotes needed
+            apps compare "Daily Job" "Weekly Job"           # Compare by names with spaces
+            apps compare MyJob "Production ETL"             # Mixed: single word + quoted
         """
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(
@@ -1009,7 +1009,7 @@ if CLI_AVAILABLE:
                     f"Stage Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
 
-                # No interactive follow-up unless explicitly requested by compare apps.
+                # No interactive follow-up unless explicitly requested by apps compare.
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
@@ -1442,7 +1442,7 @@ if CLI_AVAILABLE:
                 formatter.output({"status": "no_context"})
             else:
                 click.echo("No comparison context set.")
-                click.echo("Run 'compare apps <app1> <app2>' to set context.")
+                click.echo("Run 'apps compare <app1> <app2>' to set context.")
         else:
             app_id1, app_id2, server = context
             context_data = {
@@ -1489,7 +1489,7 @@ if CLI_AVAILABLE:
         top_n: int,
         format: str,  # noqa: A002
     ):
-        """Alias for 'compare apps' command."""
+        """Alias for 'apps compare' command."""
         ctx.invoke(
             apps,
             app_id1=app_id1,
