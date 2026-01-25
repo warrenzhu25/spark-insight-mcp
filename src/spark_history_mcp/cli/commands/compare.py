@@ -328,6 +328,103 @@ def _is_interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
+def _top_metric_differences(metrics: dict, limit: int = 5) -> list[dict[str, object]]:
+    """Return the top metric diffs by absolute percent change."""
+    diffs: list[dict[str, object]] = []
+    for key, value in metrics.items():
+        if isinstance(value, tuple) and len(value) == 3:
+            left_val, right_val, percent_change = value
+            if not isinstance(percent_change, (int, float)):
+                continue
+            if not isinstance(left_val, (int, float)) or not isinstance(
+                right_val, (int, float)
+            ):
+                continue
+            if isinstance(left_val, bool) or isinstance(right_val, bool):
+                continue
+            diffs.append(
+                {
+                    "metric": key,
+                    "left": left_val,
+                    "right": right_val,
+                    "percent_change": percent_change,
+                }
+            )
+
+    non_zero = [d for d in diffs if d["percent_change"] != 0]
+    zeros = [d for d in diffs if d["percent_change"] == 0]
+
+    non_zero.sort(key=lambda d: abs(float(d["percent_change"])), reverse=True)
+    zeros.sort(key=lambda d: str(d["metric"]))
+
+    ordered = non_zero + zeros
+    return ordered[:limit]
+
+
+def execute_app_comparison(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str],
+    formatter,
+    ctx,
+    top_n: int = 3,
+) -> None:
+    """Execute application comparison and render formatted output."""
+    config_path = ctx.obj["config_path"]
+    client = get_spark_client(config_path, server)
+
+    import spark_history_mcp.tools.tools as tools_module
+    from spark_history_mcp.tools.tools import (
+        compare_app_executor_timeline,
+        compare_app_performance,
+        compare_application_metrics,
+        create_comparison_metrics,
+    )
+
+    original_get_context = getattr(tools_module.mcp, "get_context", None)
+    tools_module.mcp.get_context = lambda: create_mock_context(client)
+
+    try:
+        comparison_data = compare_app_performance(
+            app_id1=app_id1,
+            app_id2=app_id2,
+            server=server,
+            top_n=top_n,
+        )
+
+        stage_overview = comparison_data.get("aggregated_overview", {}).get(
+            "stage_comparison", {}
+        )
+        stage_apps = stage_overview.get("applications", {})
+        stage_metrics1 = stage_apps.get("app1", {}).get("stage_metrics", {})
+        stage_metrics2 = stage_apps.get("app2", {}).get("stage_metrics", {})
+
+        if stage_metrics1 and stage_metrics2:
+            stage_metrics_comparison = create_comparison_metrics(
+                stage_metrics1, stage_metrics2
+            )
+            comparison_data["top_metrics_differences"] = _top_metric_differences(
+                stage_metrics_comparison, limit=5
+            )
+        else:
+            metrics_comparison = compare_application_metrics(
+                app_id1=app_id1, app_id2=app_id2, server=server
+            )
+            comparison_data["top_metrics_differences"] = _top_metric_differences(
+                metrics_comparison, limit=5
+            )
+
+        comparison_data["executor_timeline_comparison"] = compare_app_executor_timeline(
+            app_id1=app_id1, app_id2=app_id2, server=server
+        )
+
+        formatter.output(comparison_data)
+        return comparison_data
+    finally:
+        if original_get_context:
+            tools_module.mcp.get_context = original_get_context
+
+
 def extract_stage_menu_options(comparison_data):
     """Extract stage differences for interactive menu."""
     stage_dive = comparison_data.get("stage_deep_dive", {})
@@ -496,6 +593,8 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
             formatter.output(
                 comparison_data, f"Timeline Comparison: {app_id1} vs {app_id2}"
             )
+            if formatter.format_type == "human":
+                show_post_timeline_menu(app_id1, app_id2, server, formatter, ctx)
         finally:
             if original_get_context:
                 tools_module.mcp.get_context = original_get_context
@@ -610,6 +709,56 @@ def show_post_stage_menu(
         click.echo("\nExiting interactive mode.")
 
 
+def show_post_timeline_menu(app_id1, app_id2, server, formatter, ctx):
+    """Show follow-up options after timeline comparison completion."""
+    if not _is_interactive():
+        click.echo("Interactive menu requires a TTY. Skipping prompt.")
+        return
+
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
+    menu_lines = ["Choose your next analysis:", ""]
+    menu_lines.extend(
+        [
+            "\\[a] Compare Applications",
+            "\\[q] Continue",
+        ]
+    )
+
+    if console:
+        content = "\n".join(menu_lines)
+        console.print(Panel(content, title="What's Next?", border_style="green"))
+    else:
+        click.echo("\n" + "=" * 50)
+        click.echo("What's Next?")
+        click.echo("=" * 50)
+        for line in menu_lines:
+            click.echo(line)
+        click.echo("=" * 50)
+
+    try:
+        try:
+            choice = click.getchar().lower()
+            click.echo()
+        except OSError:
+            choice = click.prompt("Enter choice", type=str, default="q").lower()
+
+        if choice == "q":
+            return
+        if choice == "a":
+            execute_app_comparison(app_id1, app_id2, server, formatter, ctx)
+        else:
+            click.echo(f"Invalid choice: {choice}")
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nExiting interactive mode.")
+
+
 if CLI_AVAILABLE:
 
     @click.group(name="compare")
@@ -684,40 +833,6 @@ if CLI_AVAILABLE:
             format, ctx.obj.get("quiet", False), show_all_metrics=show_all
         )
 
-        def _top_metric_differences(
-            metrics: dict, limit: int = 5
-        ) -> list[dict[str, object]]:
-            """Return the top metric diffs by absolute percent change."""
-            diffs: list[dict[str, object]] = []
-            for key, value in metrics.items():
-                if isinstance(value, tuple) and len(value) == 3:
-                    left_val, right_val, percent_change = value
-                    if not isinstance(percent_change, (int, float)):
-                        continue
-                    if not isinstance(left_val, (int, float)) or not isinstance(
-                        right_val, (int, float)
-                    ):
-                        continue
-                    if isinstance(left_val, bool) or isinstance(right_val, bool):
-                        continue
-                    diffs.append(
-                        {
-                            "metric": key,
-                            "left": left_val,
-                            "right": right_val,
-                            "percent_change": percent_change,
-                        }
-                    )
-
-            non_zero = [d for d in diffs if d["percent_change"] != 0]
-            zeros = [d for d in diffs if d["percent_change"] == 0]
-
-            non_zero.sort(key=lambda d: abs(float(d["percent_change"])), reverse=True)
-            zeros.sort(key=lambda d: str(d["metric"]))
-
-            ordered = non_zero + zeros
-            return ordered[:limit]
-
         try:
             client = get_spark_client(config_path, server)
 
@@ -734,140 +849,91 @@ if CLI_AVAILABLE:
             # Save comparison context
             save_comparison_context(app_id1, app_id2, server)
 
-            import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import (
-                create_comparison_metrics,
-                compare_app_executor_timeline,
-                compare_app_performance,
-                compare_application_metrics,
+            comparison_data = execute_app_comparison(
+                app_id1, app_id2, server, formatter, ctx, top_n=top_n
             )
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
-                comparison_data = compare_app_performance(
-                    app_id1=app_id1,
-                    app_id2=app_id2,
-                    server=server,
-                    top_n=top_n,
-                )
-
-                stage_overview = comparison_data.get("aggregated_overview", {}).get(
-                    "stage_comparison", {}
-                )
-                stage_apps = stage_overview.get("applications", {})
-                stage_metrics1 = stage_apps.get("app1", {}).get("stage_metrics", {})
-                stage_metrics2 = stage_apps.get("app2", {}).get("stage_metrics", {})
-
-                if stage_metrics1 and stage_metrics2:
-                    stage_metrics_comparison = create_comparison_metrics(
-                        stage_metrics1, stage_metrics2
-                    )
-                    comparison_data["top_metrics_differences"] = (
-                        _top_metric_differences(stage_metrics_comparison, limit=5)
+            if not ctx.obj.get("quiet", False):
+                click.echo(f"\n✓ Comparison context saved: {app_id1} vs {app_id2}")
+                if interactive and format == "human":
+                    # Show interactive menu for further navigation
+                    show_interactive_menu(
+                        comparison_data, app_id1, app_id2, server, formatter, ctx
                     )
                 else:
-                    metrics_comparison = compare_application_metrics(
-                        app_id1=app_id1, app_id2=app_id2, server=server
-                    )
-                    comparison_data["top_metrics_differences"] = (
-                        _top_metric_differences(metrics_comparison, limit=5)
-                    )
-
-                comparison_data["executor_timeline_comparison"] = (
-                    compare_app_executor_timeline(
-                        app_id1=app_id1, app_id2=app_id2, server=server
-                    )
-                )
-
-                formatter.output(comparison_data)
-
-                if not ctx.obj.get("quiet", False):
-                    click.echo(f"\n✓ Comparison context saved: {app_id1} vs {app_id2}")
-                    if interactive and format == "human":
-                        # Show interactive menu for further navigation
-                        show_interactive_menu(
-                            comparison_data, app_id1, app_id2, server, formatter, ctx
-                        )
-                    else:
-                        if format == "human":
-                            if not _is_interactive():
-                                click.echo(
-                                    "Interactive menu requires a TTY. Skipping prompt."
-                                )
-                            else:
-                                try:
-                                    from rich.console import Console
-                                    from rich.panel import Panel
-
-                                    console = Console()
-                                except ImportError:
-                                    console = None
-
-                                menu_lines = ["Choose your next analysis:", ""]
-                                menu_lines.extend(
-                                    [
-                                        "\\[1] Compare stages 1 vs 1",
-                                        "\\[2] Compare application timeline",
-                                        "\\[q] Continue",
-                                    ]
-                                )
-
-                                if console:
-                                    content = "\n".join(menu_lines)
-                                    console.print(
-                                        Panel(
-                                            content,
-                                            title="What's Next?",
-                                            border_style="green",
-                                        )
-                                    )
-                                else:
-                                    click.echo("\n" + "=" * 50)
-                                    click.echo("What's Next?")
-                                    click.echo("=" * 50)
-                                    for line in menu_lines:
-                                        click.echo(line)
-                                    click.echo("=" * 50)
-
-                                try:
-                                    try:
-                                        choice = click.getchar().lower()
-                                        click.echo()
-                                    except OSError:
-                                        choice = (
-                                            click.prompt(
-                                                "Enter choice",
-                                                type=str,
-                                                default="q",
-                                            )
-                                            .lower()
-                                            .strip()
-                                        )
-
-                                    if choice == "q":
-                                        pass
-                                    elif choice == "1":
-                                        execute_stage_comparison(
-                                            1, 1, server, formatter, ctx
-                                        )
-                                    elif choice == "2":
-                                        execute_timeline_comparison(
-                                            app_id1, app_id2, server, formatter, ctx
-                                        )
-                                    else:
-                                        click.echo(f"Invalid choice: {choice}")
-                                except (KeyboardInterrupt, EOFError):
-                                    click.echo("\nExiting interactive mode.")
-                        else:
+                    if format == "human":
+                        if not _is_interactive():
                             click.echo(
-                                "Use 'compare stages' or 'compare timeline' for detailed analysis"
+                                "Interactive menu requires a TTY. Skipping prompt."
+                            )
+                        else:
+                            try:
+                                from rich.console import Console
+                                from rich.panel import Panel
+
+                                console = Console()
+                            except ImportError:
+                                console = None
+
+                            menu_lines = ["Choose your next analysis:", ""]
+                            menu_lines.extend(
+                                [
+                                    "\\[1] Compare stages 1 vs 1",
+                                    "\\[2] Compare application timeline",
+                                    "\\[q] Continue",
+                                ]
                             )
 
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
+                            if console:
+                                content = "\n".join(menu_lines)
+                                console.print(
+                                    Panel(
+                                        content,
+                                        title="What's Next?",
+                                        border_style="green",
+                                    )
+                                )
+                            else:
+                                click.echo("\n" + "=" * 50)
+                                click.echo("What's Next?")
+                                click.echo("=" * 50)
+                                for line in menu_lines:
+                                    click.echo(line)
+                                click.echo("=" * 50)
+
+                            try:
+                                try:
+                                    choice = click.getchar().lower()
+                                    click.echo()
+                                except OSError:
+                                    choice = (
+                                        click.prompt(
+                                            "Enter choice",
+                                            type=str,
+                                            default="q",
+                                        )
+                                        .lower()
+                                        .strip()
+                                    )
+
+                                if choice == "q":
+                                    pass
+                                elif choice == "1":
+                                    execute_stage_comparison(
+                                        1, 1, server, formatter, ctx
+                                    )
+                                elif choice == "2":
+                                    execute_timeline_comparison(
+                                        app_id1, app_id2, server, formatter, ctx
+                                    )
+                                else:
+                                    click.echo(f"Invalid choice: {choice}")
+                            except (KeyboardInterrupt, EOFError):
+                                click.echo("\nExiting interactive mode.")
+                    else:
+                        click.echo(
+                            "Use 'compare stages' or 'compare timeline' for detailed analysis"
+                        )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing applications: {e}") from e
@@ -1017,6 +1083,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Timeline Comparison: {app_id1} vs {app_id2}",
                 )
+                if format == "human":
+                    show_post_timeline_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
             finally:
                 if original_get_context:
                     tools_module.mcp.get_context = original_get_context
