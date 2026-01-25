@@ -780,9 +780,74 @@ if CLI_AVAILABLE:
                             comparison_data, app_id1, app_id2, server, formatter, ctx
                         )
                     else:
-                        click.echo(
-                            "Use 'compare stages', 'compare timeline', etc. for detailed analysis"
-                        )
+                        if format == "human":
+                            try:
+                                from rich.console import Console
+                                from rich.panel import Panel
+
+                                console = Console()
+                            except ImportError:
+                                console = None
+
+                            menu_lines = ["Choose your next analysis:", ""]
+                            menu_lines.extend(
+                                [
+                                    "\\[1] Compare stages 1 vs 1",
+                                    "\\[2] Compare application timeline",
+                                    "\\[q] Continue",
+                                ]
+                            )
+
+                            if console:
+                                content = "\n".join(menu_lines)
+                                console.print(
+                                    Panel(
+                                        content,
+                                        title="What's Next?",
+                                        border_style="green",
+                                    )
+                                )
+                            else:
+                                click.echo("\n" + "=" * 50)
+                                click.echo("What's Next?")
+                                click.echo("=" * 50)
+                                for line in menu_lines:
+                                    click.echo(line)
+                                click.echo("=" * 50)
+
+                            try:
+                                try:
+                                    choice = click.getchar().lower()
+                                    click.echo()
+                                except OSError:
+                                    choice = (
+                                        click.prompt(
+                                            "Enter choice",
+                                            type=str,
+                                            default="q",
+                                        )
+                                        .lower()
+                                        .strip()
+                                    )
+
+                                if choice == "q":
+                                    pass
+                                elif choice == "1":
+                                    execute_stage_comparison(
+                                        1, 1, server, formatter, ctx
+                                    )
+                                elif choice == "2":
+                                    execute_timeline_comparison(
+                                        app_id1, app_id2, server, formatter, ctx
+                                    )
+                                else:
+                                    click.echo(f"Invalid choice: {choice}")
+                            except (KeyboardInterrupt, EOFError):
+                                click.echo("\nExiting interactive mode.")
+                        else:
+                            click.echo(
+                                "Use 'compare stages' or 'compare timeline' for detailed analysis"
+                            )
 
             finally:
                 if original_get_context:
