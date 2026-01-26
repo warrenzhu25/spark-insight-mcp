@@ -158,7 +158,11 @@ if CLI_AVAILABLE:
     @click.option(
         "--limit", "-n", type=int, help="Maximum number of applications to return"
     )
-    @click.option("--name", help="Filter by application name (contains match)")
+    @click.option(
+        "--name",
+        "-m",
+        help="Filter by application name (contains match)",
+    )
     @click.option("--name-exact", help="Filter by exact application name")
     @click.option(
         "--format",
