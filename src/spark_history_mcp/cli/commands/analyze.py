@@ -6,13 +6,12 @@ Commands for performing Spark performance analysis and insights.
 
 from typing import Optional
 
-try:
-    import click
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-
+from spark_history_mcp.cli._compat import (
+    CLI_AVAILABLE,
+    cli_unavailable_stub,
+    click,
+    patch_tool_context,
+)
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
@@ -47,25 +46,6 @@ def resolve_app_id_arg(identifier: str) -> str:
     return identifier
 
 
-def create_mock_context(client):
-    """Create mock context for MCP tool functions."""
-
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    return MockContext(client)
-
-
 if CLI_AVAILABLE:
 
     @click.group(name="analyze")
@@ -79,6 +59,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -108,7 +89,7 @@ if CLI_AVAILABLE:
         ctx,
         app_id: str,
         server: Optional[str],
-        format: str,
+        output_format: str,
         include_auto_scaling: bool,
         include_shuffle_skew: bool,
         include_failed_tasks: bool,
@@ -119,18 +100,15 @@ if CLI_AVAILABLE:
         app_id = resolve_app_id_arg(app_id)
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import get_application_insights
+            from spark_history_mcp.tools import get_application_insights
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 insights_data = get_application_insights(
                     app_id=app_id,
                     server=server,
@@ -140,12 +118,10 @@ if CLI_AVAILABLE:
                     include_executor_utilization=include_executor_utilization,
                 )
                 formatter.output(insights_data, f"Application Insights for {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
-            raise click.ClickException(f"Error analyzing application {app_id}: {e}")
+        except Exception as err:
+            raise click.ClickException(
+                f"Error analyzing application {app_id}: {err}"
+            ) from err
 
     @analyze.command("bottlenecks")
     @click.argument("app_id")
@@ -156,41 +132,39 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def bottlenecks(ctx, app_id: str, server: Optional[str], top_n: int, format: str):
+    def bottlenecks(
+        ctx, app_id: str, server: Optional[str], top_n: int, output_format: str
+    ):
         """Identify performance bottlenecks in the application."""
         # Resolve number references
         app_id = resolve_app_id_arg(app_id)
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import get_job_bottlenecks
+            from spark_history_mcp.tools import get_job_bottlenecks
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 bottlenecks_data = get_job_bottlenecks(
                     app_id=app_id, server=server, top_n=top_n
                 )
                 formatter.output(
                     bottlenecks_data, f"Performance Bottlenecks for {app_id}"
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
-            raise click.ClickException(f"Error analyzing bottlenecks for {app_id}: {e}")
+        except Exception as err:
+            raise click.ClickException(
+                f"Error analyzing bottlenecks for {app_id}: {err}"
+            ) from err
 
     @analyze.command("auto-scaling")
     @click.argument("app_id")
@@ -204,45 +178,43 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
     def auto_scaling(
-        ctx, app_id: str, server: Optional[str], target_duration: int, format: str
+        ctx,
+        app_id: str,
+        server: Optional[str],
+        target_duration: int,
+        output_format: str,
     ):
         """Analyze auto-scaling recommendations."""
         # Resolve number references
         app_id = resolve_app_id_arg(app_id)
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import analyze_auto_scaling
+            from spark_history_mcp.tools import analyze_auto_scaling
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 scaling_data = analyze_auto_scaling(
                     app_id=app_id,
                     server=server,
                     target_stage_duration_minutes=target_duration,
                 )
                 formatter.output(scaling_data, f"Auto-Scaling Analysis for {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing auto-scaling for {app_id}: {e}"
-            )
+                f"Error analyzing auto-scaling for {app_id}: {err}"
+            ) from err
 
     @analyze.command("shuffle-skew")
     @click.argument("app_id")
@@ -262,6 +234,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -273,25 +246,22 @@ if CLI_AVAILABLE:
         server: Optional[str],
         shuffle_threshold: int,
         skew_ratio: float,
-        format: str,
+        output_format: str,
     ):
         """Analyze shuffle data skew issues."""
         # Resolve number references
         app_id = resolve_app_id_arg(app_id)
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import analyze_shuffle_skew
+            from spark_history_mcp.tools import analyze_shuffle_skew
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 skew_data = analyze_shuffle_skew(
                     app_id=app_id,
                     server=server,
@@ -299,14 +269,10 @@ if CLI_AVAILABLE:
                     skew_ratio_threshold=skew_ratio,
                 )
                 formatter.output(skew_data, f"Shuffle Skew Analysis for {app_id}")
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing shuffle skew for {app_id}: {e}"
-            )
+                f"Error analyzing shuffle skew for {app_id}: {err}"
+            ) from err
 
     @analyze.command("slowest")
     @click.argument("app_id")
@@ -324,6 +290,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -335,32 +302,32 @@ if CLI_AVAILABLE:
         server: Optional[str],
         analysis_type: str,
         top_n: int,
-        format: str,
+        output_format: str,
     ):
         """Find slowest jobs, stages, or SQL queries."""
         # Resolve number references
         app_id = resolve_app_id_arg(app_id)
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
 
             if analysis_type == "jobs":
-                from spark_history_mcp.tools.tools import (
+                from spark_history_mcp.tools import (
                     list_slowest_jobs as analysis_func,
                 )
 
                 title = f"Slowest Jobs for {app_id}"
             elif analysis_type == "stages":
-                from spark_history_mcp.tools.tools import (
+                from spark_history_mcp.tools import (
                     list_slowest_stages as analysis_func,
                 )
 
                 title = f"Slowest Stages for {app_id}"
             elif analysis_type == "sql":
-                from spark_history_mcp.tools.tools import (
+                from spark_history_mcp.tools import (
                     list_slowest_sql_queries as analysis_func,
                 )
 
@@ -368,10 +335,7 @@ if CLI_AVAILABLE:
 
             import spark_history_mcp.tools.tools as tools_module
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 if analysis_type in ["jobs", "stages"]:
                     slowest_data = analysis_func(app_id=app_id, server=server, n=top_n)
                 else:  # sql
@@ -379,14 +343,10 @@ if CLI_AVAILABLE:
                         app_id=app_id, server=server, top_n=top_n
                     )
                 formatter.output(slowest_data, title)
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error analyzing slowest {analysis_type} for {app_id}: {e}"
-            )
+                f"Error analyzing slowest {analysis_type} for {app_id}: {err}"
+            ) from err
 
     @analyze.command("compare", deprecated=True)
     @click.argument("app_id1")
@@ -402,13 +362,19 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
     def compare(
-        ctx, app_id1: str, app_id2: str, server: Optional[str], top_n: int, format: str
+        ctx,
+        app_id1: str,
+        app_id2: str,
+        server: Optional[str],
+        top_n: int,
+        output_format: str,
     ):
         """
         Compare performance between two applications.
@@ -432,37 +398,25 @@ if CLI_AVAILABLE:
         click.echo()
 
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_performance
+            from spark_history_mcp.tools import compare_app_performance
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_performance(
                     app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n
                 )
                 formatter.output(
                     comparison_data, f"Performance Comparison: {app_id1} vs {app_id2}"
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
-
-        except Exception as e:
+        except Exception as err:
             raise click.ClickException(
-                f"Error comparing applications {app_id1} and {app_id2}: {e}"
-            )
+                f"Error comparing applications {app_id1} and {app_id2}: {err}"
+            ) from err
 
 else:
-    # Fallback when CLI dependencies not available
-    def analyze():
-        print(
-            "CLI dependencies not installed. Install with: uv add click rich tabulate"
-        )
-        return None
+    analyze = cli_unavailable_stub("analyze")

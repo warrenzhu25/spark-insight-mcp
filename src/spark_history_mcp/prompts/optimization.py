@@ -64,7 +64,6 @@ def suggest_autoscaling_config(
 analyze_auto_scaling("{app_id}"{server_param}, target_stage_duration_minutes={target_duration_minutes // 60})
 
 # Executor Utilization Context
-analyze_executor_utilization("{app_id}"{server_param})
 get_executor_summary("{app_id}"{server_param})
 
 # Resource Timeline Analysis
@@ -198,7 +197,6 @@ get_application("{app_id}"{server_param})
 get_executor_summary("{app_id}"{server_param})
 
 # Resource Utilization Analysis
-analyze_executor_utilization("{app_id}"{server_param})
 get_resource_usage_timeline("{app_id}"{server_param})
 
 # Performance Context
@@ -532,7 +530,6 @@ get_application_insights("{app_id}"{server_param})
 
 # Executor and Resource Analysis
 get_executor_summary("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Configuration and Environment
 get_environment("{app_id}"{server_param})

@@ -60,7 +60,6 @@ get_job_bottlenecks("{app_id}"{server_param})
 list_slowest_stages("{app_id}"{server_param})
 
 # Resource and Data Analysis
-analyze_executor_utilization("{app_id}"{server_param})
 analyze_shuffle_skew("{app_id}"{server_param})
 
 # Configuration Review
@@ -91,6 +90,15 @@ def investigate_stage_bottlenecks(
     server_param = f', server="{server}"' if server else ""
     stage_focus = f" focusing on stage {stage_id}" if stage_id else ""
 
+    if stage_id is not None:
+        stage_call = f'get_stage("{app_id}", stage_id={stage_id}{server_param})'
+        task_summary_call = (
+            f'get_stage_task_summary("{app_id}", stage_id={stage_id}{server_param})'
+        )
+    else:
+        stage_call = "# Focus on the slowest stages identified above"
+        task_summary_call = "# Get task summaries for problematic stages"
+
     return f"""Perform a detailed stage-level performance investigation for Spark application {app_id}{stage_focus}.
 
 **Stage Analysis Framework:**
@@ -120,10 +128,10 @@ def investigate_stage_bottlenecks(
 ```
 # Stage Performance Analysis
 list_slowest_stages("{app_id}"{server_param})
-{"get_stage(" + f'"{app_id}", {stage_id}' + f"{server_param})" if stage_id else "# Focus on the slowest stages identified above"}
+{stage_call}
 
 # Task-Level Metrics
-{"get_stage_task_summary(" + f'"{app_id}", {stage_id}' + f"{server_param})" if stage_id else "# Get task summaries for problematic stages"}
+{task_summary_call}
 
 # Resource and Data Analysis
 get_resource_usage_timeline("{app_id}"{server_param})
@@ -206,7 +214,6 @@ get_executor_summary("{app_id}"{server_param})
 
 # Resource Timeline and Utilization
 get_resource_usage_timeline("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Performance and Configuration Context
 get_job_bottlenecks("{app_id}"{server_param})

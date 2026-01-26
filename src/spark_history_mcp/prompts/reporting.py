@@ -89,7 +89,6 @@ list_slowest_jobs("{app_id}"{server_param})
 
 # Resource and Efficiency Analysis
 get_executor_summary("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 get_resource_usage_timeline("{app_id}"{server_param})
 
 # Specific Issue Analysis
@@ -239,7 +238,6 @@ get_job_bottlenecks("{app_id}"{server_param})
 
 # Resource and Cost Analysis
 get_executor_summary("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Reliability and Failure Analysis
 analyze_failed_tasks("{app_id}"{server_param})
@@ -553,7 +551,6 @@ get_job_bottlenecks("{app_id}"{server_param})
 
 # Resource Efficiency Analysis
 get_executor_summary("{app_id}"{server_param})
-analyze_executor_utilization("{app_id}"{server_param})
 
 # Optimization Potential Assessment
 analyze_auto_scaling("{app_id}"{server_param})

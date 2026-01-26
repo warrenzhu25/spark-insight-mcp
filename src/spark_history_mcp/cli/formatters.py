@@ -8,6 +8,7 @@ including JSON, table, and human-readable formats.
 # ruff: noqa: T201
 
 import json
+import sys
 from typing import Any, Dict, List, Optional
 
 try:
@@ -42,6 +43,11 @@ class OutputFormatter:
         # Store last app mapping from application list for number references
         self.last_app_mapping: dict[int, str] = {}
 
+    def _write_line(self, text: str = "") -> None:
+        """Write a line to stdout for fallback paths."""
+
+        sys.stdout.write(f"{text}\n")
+
     def output(self, data: Any, title: Optional[str] = None) -> None:
         """Output data in the specified format."""
         if self.quiet and self.format_type != "json":
@@ -70,7 +76,7 @@ class OutputFormatter:
         else:
             output = str(data)
 
-        print(json.dumps(output, indent=2, default=str))
+        self._write_line(json.dumps(output, indent=2, default=str))
 
     def _output_table(self, data: Any, title: Optional[str] = None) -> None:
         """Output as table using tabulate."""
@@ -93,7 +99,7 @@ class OutputFormatter:
             if rows:
                 headers = list(rows[0].keys())
                 table_data = [[row.get(h, "") for h in headers] for row in rows]
-                print(tabulate(table_data, headers=headers, tablefmt="grid"))
+                self._write_line(tabulate(table_data, headers=headers, tablefmt="grid"))
             return
 
         # Single object - check for standardized formats first
@@ -111,12 +117,12 @@ class OutputFormatter:
         elif hasattr(data, "__dict__"):
             obj_data = data.__dict__
         else:
-            print(str(data))
+            self._write_line(str(data))
             return
 
         # Create key-value table
         rows = [[k, v] for k, v in obj_data.items()]
-        print(tabulate(rows, headers=["Property", "Value"], tablefmt="grid"))
+        self._write_line(tabulate(rows, headers=["Property", "Value"], tablefmt="grid"))
 
     def _output_human(self, data: Any, title: Optional[str] = None) -> None:
         """Output in human-readable format using Rich."""
@@ -163,21 +169,22 @@ class OutputFormatter:
     def _output_simple(self, data: Any, title: Optional[str] = None) -> None:
         """Simple fallback output when Rich is not available."""
         if title:
-            print(f"\n{title}")
-            print("=" * len(title))
+            self._write_line()
+            self._write_line(title)
+            self._write_line("=" * len(title))
 
         if isinstance(data, list):
             for i, item in enumerate(data, 1):
-                print(f"{i}. {item}")
+                self._write_line(f"{i}. {item}")
         elif hasattr(data, "model_dump"):
             obj_data = data.model_dump()
             for k, v in obj_data.items():
-                print(f"{k}: {v}")
+                self._write_line(f"{k}: {v}")
         elif isinstance(data, dict):
             for k, v in data.items():
-                print(f"{k}: {v}")
+                self._write_line(f"{k}: {v}")
         else:
-            print(str(data))
+            self._write_line(str(data))
 
     def _format_list(self, items: List[Any]) -> None:
         """Format a list of items."""
@@ -200,7 +207,7 @@ class OutputFormatter:
         # Clear and rebuild app mapping
         self.last_app_mapping = {}
 
-        table = Table(title="Spark Applications")
+        table = Table(title="Spark Applications", show_lines=True)
         table.add_column("#", style="dim", justify="right")
         table.add_column("Application ID", style="cyan")
         table.add_column("Name", style="green")
@@ -295,7 +302,7 @@ class OutputFormatter:
 
     def _format_job_list(self, jobs: List[JobData]) -> None:
         """Format list of jobs as a rich table."""
-        table = Table(title="Spark Jobs")
+        table = Table(title="Spark Jobs", show_lines=True)
         table.add_column("Job ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Status", style="magenta")
@@ -320,7 +327,7 @@ class OutputFormatter:
 
     def _format_stage_list(self, stages: List[StageData]) -> None:
         """Format list of stages as a rich table."""
-        table = Table(title="Spark Stages")
+        table = Table(title="Spark Stages", show_lines=True)
         table.add_column("Stage ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Status", style="magenta")
@@ -347,8 +354,11 @@ class OutputFormatter:
         # Look for key patterns that indicate this is a comparison result
         comparison_keys = {
             "applications",
-            "aggregated_overview",
-            "stage_deep_dive",
+            "aggregated_overview",  # Old structure
+            "stage_deep_dive",  # Old structure
+            "performance_comparison",  # New structure
+            "app_summary_diff",  # New structure
+            "key_recommendations",  # New structure
             "recommendations",
             "environment_comparison",
             "sql_execution_plans",
@@ -408,6 +418,9 @@ class OutputFormatter:
         # 2. Performance Metrics table FIRST (overall picture)
         if "aggregated_overview" in data:
             self._format_performance_metrics(data["aggregated_overview"])
+        elif "performance_comparison" in data:
+            # Handle new structure
+            self._format_performance_metrics(data["performance_comparison"])
 
         # 2b. Top application-level metric differences
         if "top_metrics_differences" in data:
@@ -416,6 +429,112 @@ class OutputFormatter:
         # 3. Stage Differences table SECOND (detailed breakdown)
         if "stage_deep_dive" in data:
             self._format_stage_differences(data["stage_deep_dive"])
+        elif (
+            "performance_comparison" in data
+            and "stages" in data["performance_comparison"]
+        ):
+            # Handle new structure - stages are now nested under performance_comparison
+            self._format_stage_differences(data["performance_comparison"]["stages"])
+
+        # 4. App Summary Diff table THIRD (aggregated metrics comparison)
+        if "app_summary_diff" in data:
+            self._format_app_summary_diff(data["app_summary_diff"])
+
+    def _format_app_summary_diff(self, app_summary_diff: Dict[str, Any]) -> None:
+        """Format application summary differences in a table format."""
+        if "diff" not in app_summary_diff:
+            return
+
+        diff_data = app_summary_diff["diff"]
+        app1_summary = app_summary_diff.get("app1_summary", {})
+        app2_summary = app_summary_diff.get("app2_summary", {})
+
+        # Create table
+        table = Table(title="Application Metrics Comparison", show_lines=True)
+        table.add_column("Metric", style="cyan")
+        table.add_column("App1", style="blue")
+        table.add_column("App2", style="blue")
+        table.add_column("Change", style="magenta")
+
+        # Define metric display preferences for formatting
+        metric_display_config = {
+            # Time metrics
+            "application_duration_minutes": ("App Duration (min)", "time"),
+            "total_executor_runtime_minutes": ("Executor Runtime (min)", "time"),
+            "executor_cpu_time_minutes": ("CPU Time (min)", "time"),
+            "jvm_gc_time_minutes": ("GC Time (min)", "time"),
+            "shuffle_read_wait_time_minutes": ("Shuffle Read Wait (min)", "time"),
+            "shuffle_write_time_minutes": ("Shuffle Write Time (min)", "time"),
+            # Size metrics (GB)
+            "input_data_size_gb": ("Input Data (GB)", "size"),
+            "output_data_size_gb": ("Output Data (GB)", "size"),
+            "shuffle_read_size_gb": ("Shuffle Read (GB)", "size"),
+            "shuffle_write_size_gb": ("Shuffle Write (GB)", "size"),
+            "memory_spilled_gb": ("Memory Spilled (GB)", "size"),
+            "disk_spilled_gb": ("Disk Spilled (GB)", "size"),
+            # Percentage metrics
+            "executor_utilization_percent": ("Executor Utilization (%)", "percent"),
+            # Count metrics
+            "total_stages": ("Total Stages", "count"),
+            "completed_stages": ("Completed Stages", "count"),
+            "failed_stages": ("Failed Stages", "count"),
+            "failed_tasks": ("Failed Tasks", "count"),
+        }
+
+        # Use the sorted order from diff keys (already sorted by MCP tool)
+        # Extract metric names from the sorted diff keys (remove '_change' suffix)
+        sorted_metric_names = [
+            key.replace("_change", "")
+            for key in diff_data.keys()
+            if key.endswith("_change")
+        ]
+
+        # Add any metrics that don't have change values (shouldn't normally happen)
+        all_available_metrics = [
+            key for key in app1_summary.keys() if key != "application_id"
+        ]
+        for metric in all_available_metrics:
+            if metric not in sorted_metric_names:
+                sorted_metric_names.append(metric)
+
+        # Use the sorted order from the MCP tool
+        for field_name in sorted_metric_names:
+            # Get display configuration or use field name as fallback
+            if field_name in metric_display_config:
+                display_name, format_type = metric_display_config[field_name]
+            else:
+                # Auto-generate display name from field name
+                display_name = field_name.replace("_", " ").title()
+                format_type = "default"
+
+            app1_val = app1_summary.get(field_name, 0)
+            app2_val = app2_summary.get(field_name, 0)
+
+            # Format values based on type
+            if format_type == "size":
+                app1_str = f"{app1_val:.2f}"
+                app2_str = f"{app2_val:.2f}"
+            elif format_type == "time":
+                app1_str = f"{app1_val:.2f}"
+                app2_str = f"{app2_val:.2f}"
+            elif format_type == "percent":
+                app1_str = f"{app1_val:.1f}"
+                app2_str = f"{app2_val:.1f}"
+            elif isinstance(app1_val, float):
+                app1_str = f"{app1_val:.2f}"
+                app2_str = f"{app2_val:.2f}"
+            else:
+                app1_str = str(app1_val)
+                app2_str = str(app2_val)
+
+            # Get change percentage dynamically
+            change_key = f"{field_name}_change"
+            change_str = diff_data.get(change_key, "N/A")
+
+            table.add_row(display_name, app1_str, app2_str, change_str)
+
+        console.print()  # Empty line for spacing
+        console.print(table)
 
         # 4. Environment comparison summary
         if "environment_comparison" in data:
@@ -524,46 +643,61 @@ class OutputFormatter:
         """Format key insights and summary."""
         summary_items = []
 
-        # Extract key metrics from aggregated overview
+        # Extract key metrics from aggregated overview or performance comparison
+        overview = None
         if "aggregated_overview" in data:
             overview = data["aggregated_overview"]
+        elif "performance_comparison" in data:
+            overview = data["performance_comparison"]
 
-            # Task completion ratio
-            if "executor_comparison" in overview:
-                exec_comp = overview["executor_comparison"]
+        if overview:
+            # Task completion ratio - handle both old and new structure
+            executor_data = overview.get("executor_comparison") or overview.get(
+                "executors", {}
+            )
+            if executor_data:
+                exec_comp = executor_data
                 if "task_completion_ratio_change" in exec_comp:
                     change = exec_comp["task_completion_ratio_change"]
                     summary_items.append(f"• Task completion efficiency: {change}")
 
-        # Stage performance issues
+        # Stage performance issues - handle both old and new structure
+        stage_dive = None
         if "stage_deep_dive" in data:
             stage_dive = data["stage_deep_dive"]
-            if "top_stage_differences" in stage_dive:
-                differences = stage_dive["top_stage_differences"]
-                if differences:
-                    max_diff = max(
-                        (
-                            diff.get("time_difference", {}).get("absolute_seconds", 0)
-                            for diff in differences
-                        ),
-                        default=0,
-                    )
-                    if max_diff > 60:  # More than 1 minute difference
-                        count = sum(
-                            1
-                            for diff in differences
-                            if diff.get("time_difference", {}).get(
-                                "absolute_seconds", 0
-                            )
-                            > 60
-                        )
-                        summary_items.append(
-                            f"• Found {count} stages with >60s time difference"
-                        )
+        elif (
+            "performance_comparison" in data
+            and "stages" in data["performance_comparison"]
+        ):
+            stage_dive = data["performance_comparison"]["stages"]
 
-        # Add recommendations summary
-        if "recommendations" in data:
-            rec_count = len(data["recommendations"])
+        if stage_dive and "top_stage_differences" in stage_dive:
+            differences = stage_dive["top_stage_differences"]
+            if differences:
+                max_diff = max(
+                    (
+                        diff.get("time_difference", {}).get("absolute_seconds", 0)
+                        for diff in differences
+                    ),
+                    default=0,
+                )
+                if max_diff > 60:  # More than 1 minute difference
+                    count = sum(
+                        1
+                        for diff in differences
+                        if diff.get("time_difference", {}).get("absolute_seconds", 0)
+                        > 60
+                    )
+                    summary_items.append(
+                        f"• Found {count} stages with >60s time difference"
+                    )
+
+        # Add recommendations summary - handle both old and new structure
+        recommendations = data.get("recommendations") or data.get(
+            "key_recommendations", []
+        )
+        if recommendations:
+            rec_count = len(recommendations)
             if rec_count > 0:
                 summary_items.append(
                     f"• {rec_count} optimization recommendations available"
@@ -586,7 +720,7 @@ class OutputFormatter:
             return
 
         # Create table
-        table = Table(title="Stage Differences")
+        table = Table(title="Stage Differences", show_lines=True)
         table.add_column("Stage", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -633,7 +767,7 @@ class OutputFormatter:
         if "executor_comparison" not in overview and "stage_comparison" not in overview:
             return
 
-        table = Table(title="Performance Metrics Comparison")
+        table = Table(title="Performance Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -700,7 +834,9 @@ class OutputFormatter:
             stage_comparison = stage_data.get("stage_comparison", {})
 
             # Dynamically iterate through all ratio change metrics
-            for metric_key in sorted(stage_comparison.keys()):
+            # Sort stage comparison metrics by difference ratio (descending)
+            # Metrics are already sorted by the MCP tool, use existing order
+            for metric_key in stage_comparison.keys():
                 if metric_key.endswith("_ratio_change"):
                     change = stage_comparison[metric_key]
                     display_name = self._get_stage_metric_display_name(metric_key)
@@ -854,19 +990,40 @@ class OutputFormatter:
     def _format_stage_performance_metrics(self, data: Dict[str, Any]) -> None:
         """Format stage performance metrics in a comparison table with all available metrics."""
         sig_diff = data.get("significant_differences", {})
+        stage_metrics = sig_diff.get("stage_metrics", {})
         task_dist = sig_diff.get("task_distributions", {})
         exec_dist = sig_diff.get("executor_distributions", {})
 
-        if not task_dist and not exec_dist:
+        if not stage_metrics and not task_dist and not exec_dist:
             return
 
-        table = Table(title="Performance Metrics Comparison")
+        table = Table(title="Performance Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
         table.add_column("Change", style="magenta")
 
-        # Add all task distribution metrics dynamically
+        # Sort stage-level metrics by difference ratio (descending)
+        # Metrics are already sorted by the MCP tool, use existing order
+        for metric_key in stage_metrics.keys():
+            metric_data = stage_metrics[metric_key]
+            display_name = self._get_metric_display_name(metric_key)
+
+            # Format values based on metric type
+            if "bytes" in metric_key.lower():
+                app1_val = self._format_bytes(metric_data.get("stage1", 0))
+                app2_val = self._format_bytes(metric_data.get("stage2", 0))
+            elif "time" in metric_key.lower() or "duration" in metric_key.lower():
+                app1_val = self._format_milliseconds(metric_data.get("stage1", 0))
+                app2_val = self._format_milliseconds(metric_data.get("stage2", 0))
+            else:
+                app1_val = str(metric_data.get("stage1", 0))
+                app2_val = str(metric_data.get("stage2", 0))
+
+            change = metric_data.get("change", "N/A")
+            table.add_row(display_name, app1_val, app2_val, change)
+
+        # Metrics are already sorted by the MCP tool, use existing order
         for metric_key in task_dist.keys():
             metric_data = task_dist[metric_key]
             display_name = self._get_metric_display_name(metric_key)
@@ -901,7 +1058,7 @@ class OutputFormatter:
                 change = max_data.get("change", "N/A")
                 table.add_row(f"Max {display_name}", app1_val, app2_val, change)
 
-        # Add executor distribution metrics if available
+        # Metrics are already sorted by the MCP tool, use existing order
         for metric_key in exec_dist.keys():
             metric_data = exec_dist[metric_key]
             display_name = f"Executor {self._get_metric_display_name(metric_key)}"
@@ -926,9 +1083,7 @@ class OutputFormatter:
         # Number of differences found
         total_diffs = summary.get("total_differences_found", 0)
         if total_diffs > 0:
-            summary_items.append(
-                f"• {total_diffs} significant performance differences found"
-            )
+            summary_items.append(f"• {total_diffs} metrics compared")
 
         # Key performance insight
         task_dist = sig_diff.get("task_distributions", {})
@@ -1036,7 +1191,7 @@ class OutputFormatter:
         if not timeline_comp:
             return
 
-        table = Table(title="Timeline Intervals")
+        table = Table(title="Timeline Intervals", show_lines=True)
         table.add_column("Interval", style="cyan")
         table.add_column("Time Range", style="green")
         table.add_column("App1 Executors", style="blue")
@@ -1182,7 +1337,7 @@ class OutputFormatter:
             self._format_complex_dict(data)
         else:
             # Simple key-value table for basic dictionaries
-            table = Table(title="Details")
+            table = Table(title="Details", show_lines=True)
             table.add_column("Property", style="cyan")
             table.add_column("Value", style="green")
 
@@ -1261,7 +1416,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Executor Performance Table
-        table = Table(title="Executor Performance Comparison")
+        table = Table(title="Executor Performance Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1275,10 +1430,11 @@ class OutputFormatter:
             data.get("applications", {}).get("app2", {}).get("executor_metrics", {})
         )
 
-        # Dynamically show all available executor metrics
+        # Dynamically show all available executor metrics, sorted by difference ratio
         all_metrics = set(app1_metrics.keys()) | set(app2_metrics.keys())
 
-        for metric_key in sorted(all_metrics):
+        # Metrics are already sorted by the MCP tool, use existing order
+        for metric_key in all_metrics:
             app1_val = app1_metrics.get(metric_key, 0)
             app2_val = app2_metrics.get(metric_key, 0)
 
@@ -1341,7 +1497,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Job Performance Table
-        table = Table(title="Job Performance Comparison")
+        table = Table(title="Job Performance Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1367,8 +1523,9 @@ class OutputFormatter:
                 else f"{((app2_success - app1_success) * 100):.1f}%",
             )
 
-        # Dynamic job statistics from job_stats
-        for metric_key in sorted(set(app1_jobs.keys()) | set(app2_jobs.keys())):
+        # Metrics are already sorted by the MCP tool, use existing order
+        all_job_metrics = set(app1_jobs.keys()) | set(app2_jobs.keys())
+        for metric_key in all_job_metrics:
             app1_val = app1_jobs.get(metric_key, 0)
             app2_val = app2_jobs.get(metric_key, 0)
 
@@ -1444,7 +1601,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Aggregated Stage Metrics Table
-        table = Table(title="Aggregated Stage Metrics Comparison")
+        table = Table(title="Aggregated Stage Metrics Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1453,8 +1610,8 @@ class OutputFormatter:
         # Stage comparison metrics
         stage_comp = data.get("stage_comparison", {})
 
-        # Dynamically show all available stage comparison metrics
-        for metric_key in sorted(stage_comp.keys()):
+        # Metrics are already sorted by the MCP tool, use existing order
+        for metric_key in stage_comp.keys():
             if metric_key.endswith("_change"):
                 display_name = self._get_stage_metric_display_name(metric_key)
                 change = stage_comp[metric_key]
@@ -1505,7 +1662,7 @@ class OutputFormatter:
             console.print()  # Empty line for spacing
 
         # 2. Resource Allocation Table
-        table = Table(title="Resource Allocation Comparison")
+        table = Table(title="Resource Allocation Comparison", show_lines=True)
         table.add_column("Metric", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
@@ -1523,6 +1680,7 @@ class OutputFormatter:
             ("max_executors", "Max Executors"),
         ]
 
+        # Metrics are already sorted by the MCP tool, use existing order
         has_data = False
         for metric_key, display_name in resource_metrics:
             app1_val = app1_data.get(metric_key)

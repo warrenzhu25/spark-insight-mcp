@@ -10,31 +10,34 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-try:
-    import click
-    from rich.console import Console
-    from rich.logging import RichHandler
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-    click = None
-    Console = None
-    RichHandler = None
-
+from spark_history_mcp.cli._compat import CLI_AVAILABLE, CLI_DEPENDENCY_HINT, click
 
 if CLI_AVAILABLE:
+    try:
+        from rich.console import Console
+        from rich.logging import RichHandler
+    except ImportError:
+        Console = None
+        RichHandler = None
+        CLI_RUNTIME_AVAILABLE = False
+    else:
+        CLI_RUNTIME_AVAILABLE = True
+else:
+    Console = None
+    RichHandler = None
+    CLI_RUNTIME_AVAILABLE = False
+
+if CLI_RUNTIME_AVAILABLE:
     console = Console()
 
 
 def setup_logging(debug: bool = False) -> None:
     """Set up logging with Rich handler."""
-    if not CLI_AVAILABLE:
+    if not (CLI_AVAILABLE and CLI_RUNTIME_AVAILABLE):
         return
 
     level = logging.DEBUG if debug else logging.INFO
 
-    # Remove default handlers and add Rich handler
     logging.basicConfig(
         level=level,
         format="%(message)s",
@@ -42,10 +45,8 @@ def setup_logging(debug: bool = False) -> None:
         handlers=[RichHandler(console=console, show_time=False, show_path=False)],
     )
 
-    # Set specific loggers
     logging.getLogger("spark_history_mcp").setLevel(level)
 
-    # Suppress noisy third-party loggers unless in debug mode
     if not debug:
         logging.getLogger("requests").setLevel(logging.WARNING)
         logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -53,7 +54,7 @@ def setup_logging(debug: bool = False) -> None:
         logging.getLogger("botocore").setLevel(logging.WARNING)
 
 
-if CLI_AVAILABLE:
+if CLI_RUNTIME_AVAILABLE:
 
     @click.group(invoke_without_command=True)
     @click.option(
@@ -70,9 +71,9 @@ if CLI_AVAILABLE:
         ctx: click.Context, config: Optional[Path], debug: bool, quiet: bool
     ) -> None:
         """
-        Spark History Server MCP - AI-Powered Spark Analysis with MCP Integration
+        Spark History Server MCP - AI-Powered Spark Analysis with MCP Integration.
 
-        Connect AI agents to Apache Spark History Server for intelligent performance
+        Connect AI agents to the Spark History Server for intelligent performance
         monitoring, bottleneck detection, and optimization recommendations.
 
         Examples:
@@ -82,20 +83,16 @@ if CLI_AVAILABLE:
             spark-mcp --cli server start            # Start MCP server
             spark-mcp --cli config init             # Create default configuration
         """
-        # Set up logging first
         setup_logging(debug and not quiet)
 
-        # Store shared options in context
         ctx.ensure_object(dict)
         ctx.obj["config_path"] = config or Path("config.yaml")
         ctx.obj["debug"] = debug
         ctx.obj["quiet"] = quiet
 
-        # If no subcommand, show help
         if ctx.invoked_subcommand is None:
             click.echo(ctx.get_help())
 
-    # Import command groups
     try:
         from spark_history_mcp.cli.commands.analyze import analyze
         from spark_history_mcp.cli.commands.apps import apps
@@ -113,12 +110,11 @@ if CLI_AVAILABLE:
 
 else:
 
-    def cli():
+    def cli() -> None:
         """Fallback when CLI dependencies are not available."""
-        print("CLI dependencies not installed. Install with:")
-        print("  uv add click rich tabulate")
-        print("  # or")
-        print("  pip install click rich tabulate")
+        sys.stdout.write(f"{CLI_DEPENDENCY_HINT}\n")
+        sys.stdout.write("  # or\n")
+        sys.stdout.write("  pip install click rich tabulate\n")
         sys.exit(1)
 
 

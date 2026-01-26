@@ -9,13 +9,13 @@ import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
-try:
-    import click
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-
+from spark_history_mcp.cli._compat import (
+    CLI_AVAILABLE,
+    cli_unavailable_stub,
+    click,
+    create_tool_context,
+    patch_tool_context,
+)
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import get_spark_client
@@ -116,7 +116,7 @@ def resolve_app_name_to_recent_apps(
         Tuple of (app_id1, app_id2, app_list) where app_list contains the full app objects
     """
     import spark_history_mcp.tools.tools as tools_module
-    from spark_history_mcp.tools.tools import list_applications
+    from spark_history_mcp.tools import list_applications
 
     original_get_context = getattr(tools_module.mcp, "get_context", None)
 
@@ -306,22 +306,9 @@ def resolve_app_identifiers(
 
 
 def create_mock_context(client):
-    """Create mock context for MCP tool functions."""
+    """Backward-compatible wrapper for tests relying on the old helper."""
 
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    return MockContext(client)
+    return create_tool_context(client)
 
 
 def _is_interactive() -> bool:
@@ -361,6 +348,33 @@ def _top_metric_differences(metrics: dict, limit: int = 5) -> list[dict[str, obj
     return ordered[:limit]
 
 
+def _create_comparison_metrics(
+    left_metrics: dict, right_metrics: dict
+) -> dict[str, tuple[object, object, float]]:
+    comparison: dict[str, tuple[object, object, float]] = {}
+    all_keys = set(left_metrics.keys()) | set(right_metrics.keys())
+    for key in all_keys:
+        left_value = left_metrics.get(key)
+        right_value = right_metrics.get(key)
+        percentage_change = 0.0
+        try:
+            if left_value is None or right_value is None:
+                percentage_change = 0.0
+            elif isinstance(left_value, str) or isinstance(right_value, str):
+                percentage_change = 0.0
+            else:
+                left_num = float(left_value)
+                right_num = float(right_value)
+                if left_num == 0:
+                    percentage_change = 100.0 if right_num != 0 else 0.0
+                else:
+                    percentage_change = ((right_num - left_num) / left_num) * 100.0
+        except (ValueError, TypeError):
+            percentage_change = 0.0
+        comparison[key] = (left_value, right_value, percentage_change)
+    return comparison
+
+
 def execute_app_comparison(
     app_id1: str,
     app_id2: str,
@@ -368,17 +382,16 @@ def execute_app_comparison(
     formatter,
     ctx,
     top_n: int = 3,
+    significance_threshold: float = 0.1,
 ) -> None:
     """Execute application comparison and render formatted output."""
     config_path = ctx.obj["config_path"]
     client = get_spark_client(config_path, server)
 
     import spark_history_mcp.tools.tools as tools_module
-    from spark_history_mcp.tools.tools import (
+    from spark_history_mcp.tools import (
         compare_app_executor_timeline,
         compare_app_performance,
-        compare_application_metrics,
-        create_comparison_metrics,
     )
 
     original_get_context = getattr(tools_module.mcp, "get_context", None)
@@ -390,6 +403,7 @@ def execute_app_comparison(
             app_id2=app_id2,
             server=server,
             top_n=top_n,
+            significance_threshold=significance_threshold,
         )
 
         stage_overview = comparison_data.get("aggregated_overview", {}).get(
@@ -400,19 +414,14 @@ def execute_app_comparison(
         stage_metrics2 = stage_apps.get("app2", {}).get("stage_metrics", {})
 
         if stage_metrics1 and stage_metrics2:
-            stage_metrics_comparison = create_comparison_metrics(
+            stage_metrics_comparison = _create_comparison_metrics(
                 stage_metrics1, stage_metrics2
             )
             comparison_data["top_metrics_differences"] = _top_metric_differences(
                 stage_metrics_comparison, limit=5
             )
         else:
-            metrics_comparison = compare_application_metrics(
-                app_id1=app_id1, app_id2=app_id2, server=server
-            )
-            comparison_data["top_metrics_differences"] = _top_metric_differences(
-                metrics_comparison, limit=5
-            )
+            comparison_data["top_metrics_differences"] = []
 
         comparison_data["executor_timeline_comparison"] = compare_app_executor_timeline(
             app_id1=app_id1, app_id2=app_id2, server=server
@@ -427,8 +436,12 @@ def execute_app_comparison(
 
 def extract_stage_menu_options(comparison_data):
     """Extract stage differences for interactive menu."""
-    stage_dive = comparison_data.get("stage_deep_dive", {})
-    differences = stage_dive.get("top_stage_differences", [])
+    # Handle both old and new structure
+    stage_dive = comparison_data.get("stage_deep_dive")
+    if not stage_dive and "performance_comparison" in comparison_data:
+        stage_dive = comparison_data["performance_comparison"].get("stages", {})
+
+    differences = stage_dive.get("top_stage_differences", []) if stage_dive else []
 
     options = []
     for i, diff in enumerate(differences[:3], 1):
@@ -542,13 +555,10 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
 
         # Import and execute stage comparison
         import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools.tools import compare_stages
+        from spark_history_mcp.tools import compare_stages
 
         client = get_spark_client(ctx.obj["config_path"], server)
-        original_get_context = getattr(tools_module.mcp, "get_context", None)
-        tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-        try:
+        with patch_tool_context(client, tools_module):
             comparison_data = compare_stages(
                 app_id1=app_id1,
                 app_id2=app_id2,
@@ -569,9 +579,6 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
                 show_post_stage_menu(
                     app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
                 )
-        finally:
-            if original_get_context:
-                tools_module.mcp.get_context = original_get_context
 
     except Exception as e:
         click.echo(f"Error executing stage comparison: {e}")
@@ -584,13 +591,10 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
 
         # Import and execute timeline comparison
         import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools.tools import compare_app_executor_timeline
+        from spark_history_mcp.tools import compare_app_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
-        original_get_context = getattr(tools_module.mcp, "get_context", None)
-        tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-        try:
+        with patch_tool_context(client, tools_module):
             comparison_data = compare_app_executor_timeline(
                 app_id1=app_id1, app_id2=app_id2, server=server, interval_minutes=1
             )
@@ -599,9 +603,6 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
             )
             if formatter.format_type == "human" and _is_interactive():
                 show_post_timeline_menu(app_id1, app_id2, server, formatter, ctx)
-        finally:
-            if original_get_context:
-                tools_module.mcp.get_context = original_get_context
 
     except Exception as e:
         click.echo(f"Error executing timeline comparison: {e}")
@@ -622,13 +623,10 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
 
         # Import and execute stage timeline comparison
         import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools.tools import compare_stage_executor_timeline
+        from spark_history_mcp.tools import compare_stage_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
-        original_get_context = getattr(tools_module.mcp, "get_context", None)
-        tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-        try:
+        with patch_tool_context(client, tools_module):
             comparison_data = compare_stage_executor_timeline(
                 app_id1=app_id1,
                 app_id2=app_id2,
@@ -640,9 +638,6 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
             formatter.output(
                 comparison_data, f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
             )
-        finally:
-            if original_get_context:
-                tools_module.mcp.get_context = original_get_context
 
     except Exception as e:
         click.echo(f"Error executing stage timeline comparison: {e}")
@@ -784,6 +779,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -801,6 +797,13 @@ if CLI_AVAILABLE:
         is_flag=True,
         help="Show all metrics instead of top 3",
     )
+    @click.option(
+        "--threshold",
+        "-t",
+        type=float,
+        default=0.1,
+        help="Significance threshold (0.1 = 10%) - hide metrics below this difference",
+    )
     @click.pass_context
     def apps(
         ctx,
@@ -808,9 +811,10 @@ if CLI_AVAILABLE:
         app_identifier2: Optional[str],
         server: Optional[str],
         top_n: int,
-        format: str,  # noqa: A002
+        output_format: str,
         interactive: bool,
         show_all: bool,
+        threshold: float,
     ):
         """
         Compare performance between two applications and set comparison context.
@@ -834,7 +838,7 @@ if CLI_AVAILABLE:
         """
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(
-            format, ctx.obj.get("quiet", False), show_all_metrics=show_all
+            output_format, ctx.obj.get("quiet", False), show_all_metrics=show_all
         )
 
         try:
@@ -854,18 +858,24 @@ if CLI_AVAILABLE:
             save_comparison_context(app_id1, app_id2, server)
 
             comparison_data = execute_app_comparison(
-                app_id1, app_id2, server, formatter, ctx, top_n=top_n
+                app_id1,
+                app_id2,
+                server,
+                formatter,
+                ctx,
+                top_n=top_n,
+                significance_threshold=threshold,
             )
 
             if not ctx.obj.get("quiet", False):
                 click.echo(f"\n✓ Comparison context saved: {app_id1} vs {app_id2}")
-                if interactive and format == "human":
+                if interactive and output_format == "human":
                     # Show interactive menu for further navigation
                     show_interactive_menu(
                         comparison_data, app_id1, app_id2, server, formatter, ctx
                     )
                 else:
-                    if format == "human":
+                    if output_format == "human":
                         if not _is_interactive():
                             click.echo(
                                 "Interactive menu requires a TTY. Skipping prompt."
@@ -955,12 +965,13 @@ if CLI_AVAILABLE:
     @click.option(
         "--significance-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Minimum difference threshold to include metric",
     )
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -973,11 +984,11 @@ if CLI_AVAILABLE:
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
         significance_threshold: float,
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare specific stages between applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -990,12 +1001,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_stages
+            from spark_history_mcp.tools import compare_stages
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_stages(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1008,11 +1016,20 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stage Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
-
-                # No interactive follow-up unless explicitly requested by apps compare.
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
+                if (
+                    output_format == "human"
+                    and _is_interactive()
+                    and load_comparison_context()
+                ):
+                    show_post_stage_menu(
+                        app_id1,
+                        app_id2,
+                        stage_id1,
+                        stage_id2,
+                        final_server,
+                        formatter,
+                        ctx,
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing stages: {e}") from e
@@ -1034,6 +1051,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -1044,11 +1062,11 @@ if CLI_AVAILABLE:
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
         interval_minutes: int,
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare executor timeline patterns between applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -1061,12 +1079,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_executor_timeline
+            from spark_history_mcp.tools import compare_app_executor_timeline
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_executor_timeline(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1077,13 +1092,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Timeline Comparison: {app_id1} vs {app_id2}",
                 )
-                if format == "human" and _is_interactive():
+                if output_format == "human" and _is_interactive():
                     show_post_timeline_menu(
                         app_id1, app_id2, final_server, formatter, ctx
                     )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing timelines: {e}") from e
@@ -1107,6 +1119,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -1119,11 +1132,11 @@ if CLI_AVAILABLE:
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
         interval_minutes: int,
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare executor timeline for specific stages."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -1136,12 +1149,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_stage_executor_timeline
+            from spark_history_mcp.tools import compare_stage_executor_timeline
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_stage_executor_timeline(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1154,9 +1164,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stage Timeline Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing stage timelines: {e}") from e
@@ -1172,6 +1179,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -1181,11 +1189,11 @@ if CLI_AVAILABLE:
         ctx,
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare resource allocation between applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -1198,12 +1206,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_resources
+            from spark_history_mcp.tools import compare_app_resources
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_resources(
                     app_id1=app_id1, app_id2=app_id2, server=final_server
                 )
@@ -1211,9 +1216,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Resource Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing resources: {e}") from e
@@ -1229,7 +1231,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--significance-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Minimum difference threshold to show metric",
     )
     @click.option(
@@ -1240,6 +1242,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -1251,11 +1254,11 @@ if CLI_AVAILABLE:
         server: Optional[str],
         significance_threshold: float,
         show_only_significant: bool,
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare executor performance between applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -1268,12 +1271,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_executors
+            from spark_history_mcp.tools import compare_app_executors
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_executors(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1285,9 +1285,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Executor Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing executors: {e}") from e
@@ -1303,6 +1300,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -1312,11 +1310,11 @@ if CLI_AVAILABLE:
         ctx,
         apps: Optional[Tuple[str, str]],
         server: Optional[str],
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare job performance between applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -1329,12 +1327,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_jobs
+            from spark_history_mcp.tools import compare_app_jobs
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_jobs(
                     app_id1=app_id1, app_id2=app_id2, server=final_server
                 )
@@ -1342,9 +1337,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Job Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing jobs: {e}") from e
@@ -1360,7 +1352,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--significance-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Minimum difference threshold to show metric",
     )
     @click.option(
@@ -1371,6 +1363,7 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
@@ -1382,11 +1375,11 @@ if CLI_AVAILABLE:
         server: Optional[str],
         significance_threshold: float,
         show_only_significant: bool,
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Compare aggregated stage metrics between applications."""
         config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             # Get app context
@@ -1399,12 +1392,9 @@ if CLI_AVAILABLE:
             client = get_spark_client(config_path, final_server)
 
             import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools.tools import compare_app_stages_aggregated
+            from spark_history_mcp.tools import compare_app_stages_aggregated
 
-            original_get_context = getattr(tools_module.mcp, "get_context", None)
-            tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-            try:
+            with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_stages_aggregated(
                     app_id1=app_id1,
                     app_id2=app_id2,
@@ -1416,9 +1406,6 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stages Aggregated Comparison: {app_id1} vs {app_id2}",
                 )
-            finally:
-                if original_get_context:
-                    tools_module.mcp.get_context = original_get_context
 
         except Exception as e:
             raise click.ClickException(f"Error comparing aggregated stages: {e}") from e
@@ -1427,18 +1414,19 @@ if CLI_AVAILABLE:
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "table"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def status(ctx, format: str):  # noqa: A002
+    def status(ctx, output_format: str):
         """Show current comparison context."""
-        formatter = OutputFormatter(format, ctx.obj.get("quiet", False))
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         context = load_comparison_context()
         if context is None:
-            if format == "json":
+            if output_format == "json":
                 formatter.output({"status": "no_context"})
             else:
                 click.echo("No comparison context set.")
@@ -1451,7 +1439,7 @@ if CLI_AVAILABLE:
                 "server": server,
                 "status": "active",
             }
-            if format == "json":
+            if output_format == "json":
                 formatter.output(context_data)
             else:
                 formatter.output(
@@ -1478,7 +1466,11 @@ if CLI_AVAILABLE:
     @click.option("--server", "-s", help="Server name to use")
     @click.option("--top-n", "-n", type=int, default=3)
     @click.option(
-        "--format", "-f", type=click.Choice(["human", "json", "table"]), default="human"
+        "--format",
+        "-f",
+        "output_format",
+        type=click.Choice(["human", "json", "table"]),
+        default="human",
     )
     @click.pass_context
     def performance(
@@ -1487,7 +1479,7 @@ if CLI_AVAILABLE:
         app_id2: str,
         server: Optional[str],
         top_n: int,
-        format: str,  # noqa: A002
+        output_format: str,
     ):
         """Alias for 'apps compare' command."""
         ctx.invoke(
@@ -1496,13 +1488,8 @@ if CLI_AVAILABLE:
             app_id2=app_id2,
             server=server,
             top_n=top_n,
-            format=format,
+            output_format=output_format,
         )
 
 else:
-    # Fallback when CLI dependencies not available
-    def compare():
-        print(  # noqa: T201
-            "CLI dependencies not installed. Install with: uv add click rich tabulate"
-        )
-        return None
+    compare = cli_unavailable_stub("compare")

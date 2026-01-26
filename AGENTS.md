@@ -16,8 +16,8 @@ Quick guide for automated agents working in this repo.
 - Unit tests: `.venv/bin/python -m pytest -q tests/unit`
 
 ## CLI Compare Flow
-- `compare apps` saves context for later comparisons.
-- Example: `uv run spark-mcp --cli compare apps <app1> <app2>`
+- `apps compare` saves context for later comparisons.
+- Example: `uv run spark-mcp --cli apps compare <app1> <app2>`
 
 ## Notes
 - Some pre-commit hooks run on commit (ruff, bandit, markdownlint).

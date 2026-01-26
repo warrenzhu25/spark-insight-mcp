@@ -6,18 +6,8 @@ Commands for managing the MCP server lifecycle.
 
 from typing import Optional
 
-try:
-    import click
-
-    CLI_AVAILABLE = True
-except ImportError:
-    CLI_AVAILABLE = False
-
+from spark_history_mcp.cli._compat import CLI_AVAILABLE, cli_unavailable_stub, click
 from spark_history_mcp.config.config import Config
-
-if CLI_AVAILABLE:
-    pass
-
 
 if CLI_AVAILABLE:
 
@@ -62,8 +52,8 @@ if CLI_AVAILABLE:
 
         except KeyboardInterrupt:
             click.echo("\nServer stopped by user")
-        except Exception as e:
-            raise click.ClickException(f"Error starting server: {e}")
+        except Exception as err:
+            raise click.ClickException(f"Error starting server: {err}") from err
 
     @server.command("test")
     @click.option("--timeout", type=int, default=10, help="Test timeout in seconds")
@@ -89,7 +79,7 @@ if CLI_AVAILABLE:
                 try:
                     from spark_history_mcp.api.spark_client import SparkRestClient
 
-                    client = SparkRestClient(server_config)
+                    _ = SparkRestClient(server_config)
 
                     # Test basic connectivity with timeout
                     import requests
@@ -114,8 +104,8 @@ if CLI_AVAILABLE:
 
             click.echo("\nServer test completed")
 
-        except Exception as e:
-            raise click.ClickException(f"Error testing server: {e}")
+        except Exception as err:
+            raise click.ClickException(f"Error testing server: {err}") from err
 
     @server.command("status")
     @click.pass_context
@@ -142,13 +132,8 @@ if CLI_AVAILABLE:
                 if not server_config.verify_ssl:
                     click.echo("    SSL verification: disabled")
 
-        except Exception as e:
-            raise click.ClickException(f"Error getting server status: {e}")
+        except Exception as err:
+            raise click.ClickException(f"Error getting server status: {err}") from err
 
 else:
-    # Fallback when CLI dependencies not available
-    def server():
-        print(
-            "CLI dependencies not installed. Install with: uv add click rich tabulate"
-        )
-        return None
+    server = cli_unavailable_stub("server")
