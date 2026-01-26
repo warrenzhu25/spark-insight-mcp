@@ -440,6 +440,16 @@ class OutputFormatter:
         if "app_summary_diff" in data:
             self._format_app_summary_diff(data["app_summary_diff"])
 
+        # 5. Environment comparison summary
+        if "environment_comparison" in data:
+            self._format_environment_comparison(data["environment_comparison"])
+
+        # 6. Executor timeline comparison summary
+        if "executor_timeline_comparison" in data:
+            self._format_timeline_comparison_result(
+                data["executor_timeline_comparison"]
+            )
+
     def _format_app_summary_diff(self, app_summary_diff: Dict[str, Any]) -> None:
         """Format application summary differences in a table format."""
         if "diff" not in app_summary_diff:
@@ -535,16 +545,6 @@ class OutputFormatter:
 
         console.print()  # Empty line for spacing
         console.print(table)
-
-        # 4. Environment comparison summary
-        if "environment_comparison" in data:
-            self._format_environment_comparison(data["environment_comparison"])
-
-        # 5. Executor timeline comparison summary
-        if "executor_timeline_comparison" in data:
-            self._format_timeline_comparison_result(
-                data["executor_timeline_comparison"]
-            )
 
     def _format_top_metrics_differences(self, metrics: List[Dict[str, Any]]) -> None:
         """Format top application-level metric differences."""
