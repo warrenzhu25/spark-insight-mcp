@@ -4,6 +4,7 @@ Application-related CLI commands.
 Commands for listing and inspecting Spark applications.
 """
 
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -113,6 +114,92 @@ def create_mock_context(client):
     return create_tool_context(client)
 
 
+def _is_interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def show_post_list_menu(server, formatter, ctx) -> None:
+    """Show follow-up options after application listing."""
+    if not _is_interactive():
+        click.echo("Interactive menu requires a TTY. Skipping prompt.")
+        return
+
+    if not formatter.last_app_mapping:
+        click.echo("No applications available for interactive actions.")
+        return
+
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
+    menu_lines = ["Choose your next action:", ""]
+    menu_lines.extend(
+        [
+            "\\[c] Compare two apps",
+            "\\[q] Continue",
+        ]
+    )
+
+    if console:
+        content = "\n".join(menu_lines)
+        console.print(Panel(content, title="What's Next?", border_style="green"))
+    else:
+        click.echo("\n" + "=" * 50)
+        click.echo("What's Next?")
+        click.echo("=" * 50)
+        for line in menu_lines:
+            click.echo(line)
+        click.echo("=" * 50)
+
+    try:
+        try:
+            choice = click.getchar().lower()
+            click.echo()
+        except OSError:
+            choice = click.prompt("Enter choice", type=str, default="c").lower()
+
+        if choice in ("\r", "\n", ""):
+            choice = "c"
+
+        if choice == "q":
+            return
+        if choice != "c":
+            click.echo(f"Invalid choice: {choice}")
+            return
+
+        raw = click.prompt(
+            "Enter two app references (e.g., 1 2)", type=str, default="1 2"
+        )
+        parts = raw.split()
+        if len(parts) != 2:
+            click.echo("Please enter exactly two app references.")
+            return
+
+        app_id1 = resolve_app_id_arg(parts[0])
+        app_id2 = resolve_app_id_arg(parts[1])
+
+        from spark_history_mcp.cli.commands.compare import apps as compare_apps_cmd
+
+        ctx.invoke(
+            compare_apps_cmd,
+            app_identifier1=app_id1,
+            app_identifier2=app_id2,
+            server=server,
+            top_n=3,
+            output_format="human",
+            interactive=True,
+            show_all=False,
+            threshold=0.1,
+        )
+
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nExiting interactive mode.")
+
+
 def resolve_app_identifier(
     client, identifier: str, server: Optional[str] = None
 ) -> str:
@@ -172,6 +259,12 @@ if CLI_AVAILABLE:
         default="human",
         help="Output format",
     )
+    @click.option(
+        "--interactive/--no-interactive",
+        "-i",
+        default=True,
+        help="Show interactive menu after listing",
+    )
     @click.pass_context
     def list_apps(
         ctx,
@@ -181,6 +274,7 @@ if CLI_AVAILABLE:
         name: Optional[str],
         name_exact: Optional[str],
         output_format: str,
+        interactive: bool,
     ):
         """List Spark applications."""
         config_path = ctx.obj["config_path"]
@@ -212,6 +306,8 @@ if CLI_AVAILABLE:
                 if formatter.last_app_mapping and output_format == "human":
                     save_app_refs(formatter.last_app_mapping, server)
                     click.echo(format_session_hint(len(formatter.last_app_mapping)))
+                    if interactive:
+                        show_post_list_menu(server, formatter, ctx)
 
         except Exception as err:
             raise click.ClickException(f"Error listing applications: {err}") from err
