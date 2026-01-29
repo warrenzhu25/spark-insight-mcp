@@ -28,7 +28,9 @@ def extract_percentage_value(change_str: str) -> float:
         return 0.0
 
 
-def sort_metrics_by_change(metrics_dict: Dict[str, Any], reverse: bool = True) -> Dict[str, Any]:
+def sort_metrics_by_change(
+    metrics_dict: Dict[str, Any], reverse: bool = True
+) -> Dict[str, Any]:
     """
     Sort a metrics dictionary by percentage change values in descending order.
 
@@ -49,7 +51,7 @@ def sort_metrics_by_change(metrics_dict: Dict[str, Any], reverse: bool = True) -
     other_metrics = {}
 
     for key, value in metrics_dict.items():
-        if key.endswith('_change') and isinstance(value, str):
+        if key.endswith("_change") and isinstance(value, str):
             change_metrics[key] = value
         else:
             other_metrics[key] = value
@@ -59,7 +61,9 @@ def sort_metrics_by_change(metrics_dict: Dict[str, Any], reverse: bool = True) -
         _, change_str = item
         return extract_percentage_value(change_str)
 
-    sorted_change_items = sorted(change_metrics.items(), key=get_change_sort_key, reverse=reverse)
+    sorted_change_items = sorted(
+        change_metrics.items(), key=get_change_sort_key, reverse=reverse
+    )
 
     # Build result dictionary with sorted change metrics first, then other metrics
     result = {}
@@ -70,7 +74,9 @@ def sort_metrics_by_change(metrics_dict: Dict[str, Any], reverse: bool = True) -
     return result
 
 
-def sort_metrics_by_ratio(metrics_dict: Dict[str, Any], reverse: bool = True) -> Dict[str, Any]:
+def sort_metrics_by_ratio(
+    metrics_dict: Dict[str, Any], reverse: bool = True
+) -> Dict[str, Any]:
     """
     Sort a metrics dictionary by ratio values in descending order.
 
@@ -91,7 +97,7 @@ def sort_metrics_by_ratio(metrics_dict: Dict[str, Any], reverse: bool = True) ->
     other_metrics = {}
 
     for key, value in metrics_dict.items():
-        if key.endswith('_ratio') and isinstance(value, (int, float)):
+        if key.endswith("_ratio") and isinstance(value, (int, float)):
             ratio_metrics[key] = value
         else:
             other_metrics[key] = value
@@ -102,7 +108,9 @@ def sort_metrics_by_ratio(metrics_dict: Dict[str, Any], reverse: bool = True) ->
         # Convert to difference from 1.0 for sorting (larger differences = more significant)
         return abs(ratio_value - 1.0) if isinstance(ratio_value, (int, float)) else 0.0
 
-    sorted_ratio_items = sorted(ratio_metrics.items(), key=get_ratio_sort_key, reverse=reverse)
+    sorted_ratio_items = sorted(
+        ratio_metrics.items(), key=get_ratio_sort_key, reverse=reverse
+    )
 
     # Build result dictionary with sorted ratio metrics first, then other metrics
     result = {}
@@ -113,7 +121,9 @@ def sort_metrics_by_ratio(metrics_dict: Dict[str, Any], reverse: bool = True) ->
     return result
 
 
-def sort_mixed_metrics(metrics_dict: Dict[str, Any], reverse: bool = True) -> Dict[str, Any]:
+def sort_mixed_metrics(
+    metrics_dict: Dict[str, Any], reverse: bool = True
+) -> Dict[str, Any]:
     """
     Sort a mixed metrics dictionary containing both change percentages and ratios.
 
@@ -134,9 +144,9 @@ def sort_mixed_metrics(metrics_dict: Dict[str, Any], reverse: bool = True) -> Di
     other_metrics = {}
 
     for key, value in metrics_dict.items():
-        if key.endswith('_change') and isinstance(value, str):
+        if key.endswith("_change") and isinstance(value, str):
             change_metrics[key] = value
-        elif key.endswith('_ratio') and isinstance(value, (int, float)):
+        elif key.endswith("_ratio") and isinstance(value, (int, float)):
             ratio_metrics[key] = value
         else:
             other_metrics[key] = value
@@ -154,7 +164,9 @@ def sort_mixed_metrics(metrics_dict: Dict[str, Any], reverse: bool = True) -> Di
     return result
 
 
-def sort_comparison_data(data: Dict[str, Any], sort_key: str = "mixed") -> Dict[str, Any]:
+def sort_comparison_data(
+    data: Dict[str, Any], sort_key: str = "mixed"
+) -> Dict[str, Any]:
     """
     Sort comparison data structure containing multiple metric dictionaries.
 
@@ -173,21 +185,26 @@ def sort_comparison_data(data: Dict[str, Any], sort_key: str = "mixed") -> Dict[
 
     # Common keys that contain sortable metrics (including nested paths)
     metric_keys = [
-        'diff', 'executor_comparison', 'efficiency_ratios', 'stage_comparison',
-        'job_comparison', 'resource_comparison', 'comparison_metrics'
+        "diff",
+        "executor_comparison",
+        "efficiency_ratios",
+        "stage_comparison",
+        "job_comparison",
+        "resource_comparison",
+        "comparison_metrics",
     ]
 
     # Also check nested paths like 'app_summary_diff' -> 'diff'
     nested_paths = [
-        ['app_summary_diff', 'diff'],
-        ['performance_comparison', 'executors'],
-        ['performance_comparison', 'stages'],
+        ["app_summary_diff", "diff"],
+        ["performance_comparison", "executors"],
+        ["performance_comparison", "stages"],
     ]
 
     sort_func = {
         "change": sort_metrics_by_change,
         "ratio": sort_metrics_by_ratio,
-        "mixed": sort_mixed_metrics
+        "mixed": sort_mixed_metrics,
     }.get(sort_key, sort_mixed_metrics)
 
     # Sort any metric dictionaries found at root level
@@ -199,7 +216,7 @@ def sort_comparison_data(data: Dict[str, Any], sort_key: str = "mixed") -> Dict[
     for path in nested_paths:
         current = result
         # Navigate to the nested location
-        for i, key in enumerate(path[:-1]):
+        for _i, key in enumerate(path[:-1]):
             if key in current and isinstance(current[key], dict):
                 current = current[key]
             else:

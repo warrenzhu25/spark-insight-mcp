@@ -217,6 +217,7 @@ def resolve_app_identifier(
             app_name=identifier,
             search_type="contains",  # Fuzzy match
             limit=1,  # Get only the latest
+            compact=False,
         )
 
         if not apps:
@@ -300,7 +301,7 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import list_applications
 
             with patch_tool_context(client, tools_module):
-                apps = list_applications(server=server, **params)
+                apps = list_applications(server=server, **params, compact=False)
                 formatter.output(apps, "Spark Applications")
                 # Save app references for number shorthand
                 if formatter.last_app_mapping and output_format == "human":
@@ -396,7 +397,7 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import get_application
 
             with patch_tool_context(client, tools_module):
-                app = get_application(app_id, server=server)
+                app = get_application(app_id, server=server, compact=False)
                 formatter.output(app, f"Application {app_id}")
         except Exception as err:
             raise click.ClickException(
@@ -437,7 +438,7 @@ if CLI_AVAILABLE:
                 params["status"] = list(status)
 
             with patch_tool_context(client, tools_module):
-                jobs = mcp_list_jobs(**params)
+                jobs = mcp_list_jobs(**params, compact=False)
                 formatter.output(jobs, f"Jobs for Application {app_id}")
         except Exception as err:
             raise click.ClickException(
@@ -478,7 +479,7 @@ if CLI_AVAILABLE:
                 params["status"] = list(status)
 
             with patch_tool_context(client, tools_module):
-                stages = mcp_list_stages(**params)
+                stages = mcp_list_stages(**params, compact=False)
                 formatter.output(stages, f"Stages for Application {app_id}")
         except Exception as err:
             raise click.ClickException(
@@ -557,6 +558,7 @@ if CLI_AVAILABLE:
                         app_name=app_identifier,
                         search_type="contains",  # Fuzzy match
                         limit=1,  # Get only the latest
+                        compact=False,
                     )
 
                     if not apps:

@@ -10,15 +10,23 @@ from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from ..core.app import mcp
-from .common import DEFAULT_INTERVAL_MINUTES, MAX_INTERVALS, get_client_or_default
+from .common import (
+    DEFAULT_INTERVAL_MINUTES,
+    MAX_INTERVALS,
+    compact_output,
+    get_client_or_default,
+)
 from .fetchers import fetch_executors
 from .timelines import build_app_executor_timeline
 
 
 @mcp.tool()
 def list_executors(
-    app_id: str, server: Optional[str] = None, include_inactive: bool = False
-):
+    app_id: str,
+    server: Optional[str] = None,
+    include_inactive: bool = False,
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get executor information for a Spark application.
 
@@ -29,28 +37,37 @@ def list_executors(
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         include_inactive: Whether to include inactive executors (default: False)
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        List of ExecutorSummary objects containing executor information
+        List of ExecutorSummary objects containing executor information (or compact summary list)
     """
     if include_inactive:
-        return fetch_executors(app_id=app_id, server=server, include_inactive=True)
+        executors = fetch_executors(app_id=app_id, server=server, include_inactive=True)
+        return compact_output(executors, compact)
     # Fallback to client active-only API if needed; otherwise reuse full list and filter
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
     try:
-        return client.list_executors(app_id=app_id)
+        executors = client.list_executors(app_id=app_id)
+        return compact_output(executors, compact)
     except Exception:
         # If active-only is not available, filter from all
-        return [
+        executors = [
             e
             for e in fetch_executors(app_id=app_id, server=server)
             if getattr(e, "is_active", False)
         ]
+        return compact_output(executors, compact)
 
 
 @mcp.tool()
-def get_executor(app_id: str, executor_id: str, server: Optional[str] = None):
+def get_executor(
+    app_id: str,
+    executor_id: str,
+    server: Optional[str] = None,
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get information about a specific executor.
 
@@ -61,16 +78,17 @@ def get_executor(app_id: str, executor_id: str, server: Optional[str] = None):
         app_id: The Spark application ID
         executor_id: The executor ID
         server: Optional server name to use (uses default if not specified)
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        ExecutorSummary object containing executor details or None if not found
+        ExecutorSummary object containing executor details (or compact summary) or None if not found
     """
     # Get all executors and find the one with matching ID
     executors = fetch_executors(app_id=app_id, server=server)
 
     for executor in executors:
         if executor.id == executor_id:
-            return executor
+            return compact_output(executor, compact)
 
     return None
 

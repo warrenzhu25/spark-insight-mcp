@@ -1,9 +1,8 @@
-import os
 from types import SimpleNamespace
 
 from spark_history_mcp.tools.common import get_config
 from spark_history_mcp.tools.matching import match_stages
-from spark_history_mcp.tools.metrics import compare_numeric_maps, compare_distributions
+from spark_history_mcp.tools.metrics import compare_distributions, compare_numeric_maps
 from spark_history_mcp.tools.timelines import merge_intervals
 
 
@@ -13,7 +12,7 @@ def make_stage(name, submit=None, complete=None):
 
 def test_matching_by_name_only():
     s1 = [make_stage("Filter at MapPartitions"), make_stage("Shuffle Sort")]
-    s2 = [make_stage("filter at mappartitions"), make_stage("Other")] 
+    s2 = [make_stage("filter at mappartitions"), make_stage("Other")]
     matches = match_stages(s1, s2, similarity_threshold=0.7)
     assert matches, "Expected at least one match"
     assert matches[0].stage1.name.lower().startswith("filter")
@@ -40,7 +39,10 @@ def test_compare_distributions_uses_median():
     out = compare_distributions(
         d1,
         d2,
-        fields=[("shuffle_read_metrics.fetch_wait_time", "fetch_wait"), ("shuffle_write_metrics.write_time", "write")],
+        fields=[
+            ("shuffle_read_metrics.fetch_wait_time", "fetch_wait"),
+            ("shuffle_write_metrics.write_time", "write"),
+        ],
         significance=0.5,  # 50%
     )
     assert out["metrics"]["fetch_wait"]["significant"] is True  # 100% increase

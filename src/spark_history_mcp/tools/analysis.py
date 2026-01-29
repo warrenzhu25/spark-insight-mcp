@@ -39,10 +39,10 @@ def get_job_bottlenecks(
     client = get_client_or_default(ctx, server)
 
     # Get slowest stages
-    slowest_stages = list_slowest_stages(app_id, server, False, top_n)
+    slowest_stages = list_slowest_stages(app_id, server, False, top_n, compact=False)
 
     # Get slowest jobs
-    slowest_jobs = list_slowest_jobs(app_id, server, False, top_n)
+    slowest_jobs = list_slowest_jobs(app_id, server, False, top_n, compact=False)
 
     # Get executor summary
     exec_summary = get_executor_summary(app_id, server)
@@ -493,7 +493,10 @@ def analyze_failed_tasks(
     for executor in executors:
         if executor.failed_tasks and executor.failed_tasks >= failure_threshold:
             # Extract host from host_port (format: "host:port")
-            host = executor.host_port.split(":")[0] if executor.host_port else "unknown"
+            host_value = getattr(executor, "host_port", None) or getattr(
+                executor, "host", None
+            )
+            host = host_value.split(":")[0] if host_value else "unknown"
             problematic_executors.append(
                 {
                     "executor_id": executor.id,

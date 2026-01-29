@@ -4,11 +4,13 @@ Recommendation utilities: normalization, deduplication, prioritization, and rule
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .common import get_config
 
 PRIORITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+logger = logging.getLogger(__name__)
 
 
 def normalize(rec: Dict[str, Any]) -> Dict[str, Any]:
@@ -18,7 +20,11 @@ def normalize(rec: Dict[str, Any]) -> Dict[str, Any]:
         "priority": rec.get("priority", "low"),
         "issue": rec.get("issue", ""),
         "suggestion": rec.get("suggestion", ""),
-        **{k: v for k, v in rec.items() if k not in {"type", "priority", "issue", "suggestion"}},
+        **{
+            k: v
+            for k, v in rec.items()
+            if k not in {"type", "priority", "issue", "suggestion"}
+        },
     }
 
 
@@ -47,7 +53,9 @@ def prioritize(recs: List[Dict[str, Any]], top_n: int = 5) -> List[Dict[str, Any
 Rule = Callable[[Dict[str, Any]], Optional[Dict[str, Any]]]
 
 
-def apply_rules(context: Dict[str, Any], rules: Optional[List[Rule]] = None) -> List[Dict[str, Any]]:
+def apply_rules(
+    context: Dict[str, Any], rules: Optional[List[Rule]] = None
+) -> List[Dict[str, Any]]:
     """Apply registered rules to context and return list of recommendations."""
     if not rules:
         return []
@@ -57,7 +65,8 @@ def apply_rules(context: Dict[str, Any], rules: Optional[List[Rule]] = None) -> 
             rec = rule(context)
             if rec:
                 out.append(normalize(rec))
-        except Exception:
+        except Exception as exc:
+            logger.debug("Recommendation rule failed", exc_info=exc)
             # Rules are best-effort; skip on error
             continue
     return out
@@ -70,7 +79,9 @@ def rule_resource_allocation(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not app1 or not app2:
         return None
     try:
-        if getattr(app1, "cores_granted", None) and getattr(app2, "cores_granted", None):
+        if getattr(app1, "cores_granted", None) and getattr(
+            app2, "cores_granted", None
+        ):
             core_ratio = app2.cores_granted / app1.cores_granted
             if core_ratio > 1.5 or core_ratio < 0.67:
                 slower_app = "app1" if core_ratio > 1.5 else "app2"
@@ -81,7 +92,9 @@ def rule_resource_allocation(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                     "issue": f"Significant core allocation difference (ratio: {core_ratio:.2f})",
                     "suggestion": f"Consider equalizing core allocation - {slower_app} has fewer cores than {faster_app}",
                 }
-        if getattr(app1, "memory_per_executor_mb", None) and getattr(app2, "memory_per_executor_mb", None):
+        if getattr(app1, "memory_per_executor_mb", None) and getattr(
+            app2, "memory_per_executor_mb", None
+        ):
             memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
             if memory_ratio > 1.5 or memory_ratio < 0.67:
                 return {
@@ -102,11 +115,15 @@ def rule_large_stage_diff(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
     try:
         large = [
-            c for c in comps
-            if c.get("time_difference", {}).get("absolute_seconds", 0) > int(cfg.large_stage_diff_seconds)
+            c
+            for c in comps
+            if c.get("time_difference", {}).get("absolute_seconds", 0)
+            > int(cfg.large_stage_diff_seconds)
         ]
         if large:
-            slower = large[0].get("time_difference", {}).get("slower_application", "an app")
+            slower = (
+                large[0].get("time_difference", {}).get("slower_application", "an app")
+            )
             return {
                 "type": "stage_performance",
                 "priority": "high",
@@ -120,4 +137,3 @@ def rule_large_stage_diff(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def default_rules() -> List[Rule]:
     return [rule_resource_allocation, rule_large_stage_diff]
-

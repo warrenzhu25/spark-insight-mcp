@@ -5,6 +5,7 @@ Commands for comparing multiple Spark applications with stateful context managem
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -142,6 +143,7 @@ def resolve_app_name_to_recent_apps(
             app_name=app_name,
             search_type="contains",
             limit=limit,
+            compact=False,
         )
 
         if len(apps) < 2:
@@ -312,6 +314,8 @@ def create_mock_context(client):
 
 
 def _is_interactive() -> bool:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 

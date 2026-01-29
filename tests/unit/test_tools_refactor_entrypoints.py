@@ -3,8 +3,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 
-def make_app(id: str, name: str, cores: int = 0, mem_mb: int = 0):
-    return SimpleNamespace(id=id, name=name, cores_granted=cores, memory_per_executor_mb=mem_mb)
+def make_app(app_id: str, name: str, cores: int = 0, mem_mb: int = 0):
+    return SimpleNamespace(
+        id=app_id, name=name, cores_granted=cores, memory_per_executor_mb=mem_mb
+    )
 
 
 def make_stage(stage_id: int, name: str, seconds: int):
@@ -19,13 +21,13 @@ def make_stage(stage_id: int, name: str, seconds: int):
     )
 
 
-
-
 @patch("spark_history_mcp.tools.fetchers.fetch_stages")
 @patch("spark_history_mcp.tools.fetchers.fetch_app")
 @patch("spark_history_mcp.tools.common.get_client_or_default")
 @patch("spark_history_mcp.tools.common.get_active_mcp_context")
-def test_find_top_stage_differences_matches(mock_ctx, mock_get_client, mock_fetch_app, mock_fetch_stages):
+def test_find_top_stage_differences_matches(
+    mock_ctx, mock_get_client, mock_fetch_app, mock_fetch_stages
+):
     from spark_history_mcp.tools.tools import find_top_stage_differences
 
     mock_ctx.return_value = SimpleNamespace()

@@ -33,23 +33,23 @@ class TestSummarizeApp:
             id="app-123",
             name="test-app",
             attempts=[SimpleNamespace(duration=60000)],  # 1 minute
-            cores_per_executor=2
+            cores_per_executor=2,
         )
         stages = [
             SimpleNamespace(
                 executor_run_time=30000,  # 30 seconds
                 executor_cpu_time=25000000000,  # 25 seconds in ns
                 jvm_gc_time=5000,  # 5 seconds
-                input_bytes=1024*1024*1024,  # 1 GB
-                output_bytes=512*1024*1024,  # 512 MB
-                shuffle_read_bytes=256*1024*1024,  # 256 MB
-                shuffle_write_bytes=128*1024*1024,  # 128 MB
-                memory_bytes_spilled=64*1024*1024,  # 64 MB
-                disk_bytes_spilled=32*1024*1024,  # 32 MB
+                input_bytes=1024 * 1024 * 1024,  # 1 GB
+                output_bytes=512 * 1024 * 1024,  # 512 MB
+                shuffle_read_bytes=256 * 1024 * 1024,  # 256 MB
+                shuffle_write_bytes=128 * 1024 * 1024,  # 128 MB
+                memory_bytes_spilled=64 * 1024 * 1024,  # 64 MB
+                disk_bytes_spilled=32 * 1024 * 1024,  # 32 MB
                 num_failed_tasks=2,
                 num_tasks=10,
                 status=StageStatus.COMPLETE,
-                task_metrics_distributions=None
+                task_metrics_distributions=None,
             )
         ]
         executors = []
@@ -79,23 +79,23 @@ class TestSummarizeApp:
             id="app-456",
             name="multi-stage-app",
             attempts=[SimpleNamespace(duration=120000)],  # 2 minutes
-            cores_per_executor=4
+            cores_per_executor=4,
         )
         stages = [
             SimpleNamespace(
                 executor_run_time=45000,
                 executor_cpu_time=40000000000,
                 jvm_gc_time=2000,
-                input_bytes=2*1024*1024*1024,
-                output_bytes=1024*1024*1024,
-                shuffle_read_bytes=512*1024*1024,
-                shuffle_write_bytes=256*1024*1024,
+                input_bytes=2 * 1024 * 1024 * 1024,
+                output_bytes=1024 * 1024 * 1024,
+                shuffle_read_bytes=512 * 1024 * 1024,
+                shuffle_write_bytes=256 * 1024 * 1024,
                 memory_bytes_spilled=0,
                 disk_bytes_spilled=0,
                 num_failed_tasks=0,
                 num_tasks=20,
                 status=StageStatus.COMPLETE,
-                task_metrics_distributions=None
+                task_metrics_distributions=None,
             ),
             SimpleNamespace(
                 executor_run_time=15000,
@@ -105,20 +105,22 @@ class TestSummarizeApp:
                 output_bytes=0,
                 shuffle_read_bytes=0,
                 shuffle_write_bytes=0,
-                memory_bytes_spilled=128*1024*1024,
-                disk_bytes_spilled=64*1024*1024,
+                memory_bytes_spilled=128 * 1024 * 1024,
+                disk_bytes_spilled=64 * 1024 * 1024,
                 num_failed_tasks=5,
                 num_tasks=15,
                 status=StageStatus.FAILED,
-                task_metrics_distributions=None
-            )
+                task_metrics_distributions=None,
+            ),
         ]
         executors = []
 
         result = summarize_app(app, stages, executors)
 
         assert result["application_duration_minutes"] == 2.0
-        assert result["total_executor_runtime_minutes"] == 1.0  # 45000 + 15000 = 60000ms = 1min
+        assert (
+            result["total_executor_runtime_minutes"] == 1.0
+        )  # 45000 + 15000 = 60000ms = 1min
         assert result["failed_tasks"] == 5
         assert result["total_stages"] == 2
         assert result["completed_stages"] == 1
@@ -132,12 +134,14 @@ class TestSummarizeApp:
         app = SimpleNamespace(
             id="app-789",
             name="utilization-test",
-            attempts=[SimpleNamespace(
-                duration=600000,  # 10 minutes
-                start_time=start_time,
-                end_time=end_time
-            )],
-            cores_per_executor=2
+            attempts=[
+                SimpleNamespace(
+                    duration=600000,  # 10 minutes
+                    start_time=start_time,
+                    end_time=end_time,
+                )
+            ],
+            cores_per_executor=2,
         )
 
         stages = [
@@ -145,10 +149,16 @@ class TestSummarizeApp:
                 executor_run_time=240000,  # 4 minutes total runtime
                 executor_cpu_time=200000000000,
                 jvm_gc_time=10000,
-                input_bytes=0, output_bytes=0, shuffle_read_bytes=0, shuffle_write_bytes=0,
-                memory_bytes_spilled=0, disk_bytes_spilled=0,
-                num_failed_tasks=0, num_tasks=5, status=StageStatus.COMPLETE,
-                task_metrics_distributions=None
+                input_bytes=0,
+                output_bytes=0,
+                shuffle_read_bytes=0,
+                shuffle_write_bytes=0,
+                memory_bytes_spilled=0,
+                disk_bytes_spilled=0,
+                num_failed_tasks=0,
+                num_tasks=5,
+                status=StageStatus.COMPLETE,
+                task_metrics_distributions=None,
             )
         ]
 
@@ -156,12 +166,12 @@ class TestSummarizeApp:
         executors = [
             SimpleNamespace(
                 add_time=datetime(2024, 1, 1, 10, 0, 0),
-                remove_time=datetime(2024, 1, 1, 10, 5, 0)
+                remove_time=datetime(2024, 1, 1, 10, 5, 0),
             ),
             SimpleNamespace(
                 add_time=datetime(2024, 1, 1, 10, 2, 0),
-                remove_time=datetime(2024, 1, 1, 10, 7, 0)
-            )
+                remove_time=datetime(2024, 1, 1, 10, 7, 0),
+            ),
         ]
 
         result = summarize_app(app, stages, executors)
@@ -177,19 +187,31 @@ class TestSummarizeApp:
             id="app-shuffle",
             name="shuffle-test",
             attempts=[SimpleNamespace(duration=300000)],
-            cores_per_executor=1
+            cores_per_executor=1,
         )
 
         # Mock distributions with shuffle metrics
         shuffle_read_metrics = SimpleNamespace(
-            fetch_wait_time=[1000000, 2000000, 3000000, 4000000, 5000000]  # ns, median = 3ms
+            fetch_wait_time=[
+                1000000,
+                2000000,
+                3000000,
+                4000000,
+                5000000,
+            ]  # ns, median = 3ms
         )
         shuffle_write_metrics = SimpleNamespace(
-            write_time=[500000, 1000000, 1500000, 2000000, 2500000]  # ns, median = 1.5ms
+            write_time=[
+                500000,
+                1000000,
+                1500000,
+                2000000,
+                2500000,
+            ]  # ns, median = 1.5ms
         )
         distributions = SimpleNamespace(
             shuffle_read_metrics=shuffle_read_metrics,
-            shuffle_write_metrics=shuffle_write_metrics
+            shuffle_write_metrics=shuffle_write_metrics,
         )
 
         stages = [
@@ -197,12 +219,16 @@ class TestSummarizeApp:
                 executor_run_time=60000,
                 executor_cpu_time=50000000000,
                 jvm_gc_time=1000,
-                input_bytes=0, output_bytes=0, shuffle_read_bytes=0, shuffle_write_bytes=0,
-                memory_bytes_spilled=0, disk_bytes_spilled=0,
+                input_bytes=0,
+                output_bytes=0,
+                shuffle_read_bytes=0,
+                shuffle_write_bytes=0,
+                memory_bytes_spilled=0,
+                disk_bytes_spilled=0,
                 num_failed_tasks=0,
                 num_tasks=100,  # 100 tasks
                 status=StageStatus.COMPLETE,
-                task_metrics_distributions=distributions
+                task_metrics_distributions=distributions,
             )
         ]
         executors = []
@@ -211,14 +237,15 @@ class TestSummarizeApp:
 
         # Shuffle fetch wait: 3ms * 100 tasks = 300ms = 0.005 minutes
         # Shuffle write time: 1.5ms * 100 tasks = 150ms = 0.0025 minutes
-        assert result["shuffle_read_wait_time_minutes"] == 0.01  # rounded to 2 decimal places
+        assert (
+            result["shuffle_read_wait_time_minutes"] == 0.01
+        )  # rounded to 2 decimal places
         assert result["shuffle_write_time_minutes"] == 0.0
 
     def test_missing_attributes_handling(self):
         """Test handling of missing attributes with None or 0 defaults."""
         app = SimpleNamespace(
-            id="app-missing",
-            attempts=[SimpleNamespace(duration=None)]
+            id="app-missing", attempts=[SimpleNamespace(duration=None)]
         )
 
         stages = [
@@ -251,7 +278,7 @@ class TestComputeUtilization:
         executors = [
             SimpleNamespace(
                 add_time=datetime(2024, 1, 1, 10, 0, 0),
-                remove_time=datetime(2024, 1, 1, 10, 10, 0)  # 10 minutes
+                remove_time=datetime(2024, 1, 1, 10, 10, 0),  # 10 minutes
             )
         ]
 
@@ -270,8 +297,9 @@ class TestComputeUtilization:
         app_start = datetime(2024, 1, 1, 10, 0, 0).timestamp() * 1000
         app_end = datetime(2024, 1, 1, 10, 5, 0).timestamp() * 1000  # 5 minutes
 
-        result = compute_utilization(stages, executors, executor_cores=1,
-                                   app_start_end=(app_start, app_end))
+        result = compute_utilization(
+            stages, executors, executor_cores=1, app_start_end=(app_start, app_end)
+        )
 
         # Runtime: 1 minute, executor time: 5 minutes * 1 core = 5 core-minutes
         # Utilization: 1 / 5 * 100 = 20%
@@ -285,7 +313,9 @@ class TestComputeUtilization:
         assert compute_utilization(stages, [], executor_cores=1) == 0.0
 
         # Zero cores
-        executors = [SimpleNamespace(add_time=datetime.now(), remove_time=datetime.now())]
+        executors = [
+            SimpleNamespace(add_time=datetime.now(), remove_time=datetime.now())
+        ]
         assert compute_utilization(stages, executors, executor_cores=0) == 0.0
 
         # Executor without timing info
@@ -360,7 +390,7 @@ class TestCompareNumericMaps:
         assert result["differences"]["only_in_2"]["before"] == 0
         assert result["differences"]["only_in_2"]["after"] == 200
 
-    @patch('spark_history_mcp.tools.metrics.get_config')
+    @patch("spark_history_mcp.tools.metrics.get_config")
     def test_default_significance_from_config(self, mock_config):
         """Test using default significance threshold from config."""
         mock_config.return_value = SimpleNamespace(significance_threshold=0.2)
@@ -385,19 +415,19 @@ class TestCompareDistributions:
             shuffle_read_metrics=SimpleNamespace(
                 fetch_wait_time=[100, 200, 300, 400, 500]  # median = 300
             ),
-            duration=[10, 20, 30, 40, 50]  # median = 30
+            duration=[10, 20, 30, 40, 50],  # median = 30
         )
 
         dist2 = SimpleNamespace(
             shuffle_read_metrics=SimpleNamespace(
                 fetch_wait_time=[200, 400, 600, 800, 1000]  # median = 600
             ),
-            duration=[20, 40, 60, 80, 100]  # median = 60
+            duration=[20, 40, 60, 80, 100],  # median = 60
         )
 
         fields = [
             ("shuffle_read_metrics.fetch_wait_time", "Shuffle Read Wait"),
-            ("duration", "Task Duration")
+            ("duration", "Task Duration"),
         ]
 
         result = compare_distributions(dist1, dist2, fields, significance=0.1)
@@ -422,7 +452,7 @@ class TestCompareDistributions:
         dist1 = SimpleNamespace(
             valid_metric=[10, 20, 30, 40, 50],
             short_list=[10, 20],  # Too short for median
-            missing_attr=None
+            missing_attr=None,
         )
 
         dist2 = SimpleNamespace(
@@ -434,7 +464,7 @@ class TestCompareDistributions:
             ("valid_metric", "Valid Metric"),
             ("short_list", "Short List"),
             ("missing_attr", "Missing Attr"),
-            ("nonexistent.path", "Non-existent")
+            ("nonexistent.path", "Non-existent"),
         ]
 
         result = compare_distributions(dist1, dist2, fields)
@@ -465,7 +495,7 @@ class TestCompareDistributions:
         metric = result["metrics"]["Test Metric"]
         assert metric["significant"] is True
 
-    @patch('spark_history_mcp.tools.metrics.get_config')
+    @patch("spark_history_mcp.tools.metrics.get_config")
     def test_default_significance_from_config(self, mock_config):
         """Test using default significance threshold from config."""
         mock_config.return_value = SimpleNamespace(significance_threshold=0.15)
@@ -474,7 +504,9 @@ class TestCompareDistributions:
         dist2 = SimpleNamespace(metric=[110, 125, 140, 155, 170])  # median = 140
 
         fields = [("metric", "Test Metric")]
-        result = compare_distributions(dist1, dist2, fields)  # No significance specified
+        result = compare_distributions(
+            dist1, dist2, fields
+        )  # No significance specified
 
         # ~16.7% change with 15% threshold should be significant
         metric = result["metrics"]["Test Metric"]

@@ -59,11 +59,11 @@ def main():
             return
 
         except ImportError as e:
-            print("CLI dependencies not installed. Install with:")
-            print("  uv add click rich tabulate")
-            print("  # or")
-            print("  pip install click rich tabulate")
-            print(f"\nError: {e}")
+            sys.stderr.write("CLI dependencies not installed. Install with:\n")
+            sys.stderr.write("  uv add click rich tabulate\n")
+            sys.stderr.write("  # or\n")
+            sys.stderr.write("  pip install click rich tabulate\n")
+            sys.stderr.write(f"\nError: {e}\n")
             sys.exit(1)
 
     # Default: MCP server mode (PRESERVED)

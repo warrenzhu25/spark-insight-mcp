@@ -3,24 +3,29 @@ Tests for spark_history_mcp.cli.commands.config module.
 """
 
 import json
-import os
 import subprocess
 import tempfile
-import yaml
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch
 
 import pytest
+import yaml
 
 try:
     from click.testing import CliRunner
-    import click
+
     CLI_AVAILABLE = True
 except ImportError:
     CLI_AVAILABLE = False
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.config import config_cmd, init_config, show_config, validate_config, edit_config
+    from spark_history_mcp.cli.commands.config import (
+        config_cmd,
+        edit_config,
+        init_config,
+        show_config,
+        validate_config,
+    )
 
 
 @pytest.mark.skipif(not CLI_AVAILABLE, reason="CLI dependencies not available")
@@ -57,9 +62,7 @@ class TestInitConfig:
         """Test default configuration creation in non-interactive mode."""
         with runner.isolated_filesystem():
             result = runner.invoke(
-                init_config,
-                [],
-                obj={"config_path": temp_config_path}
+                init_config, [], obj={"config_path": temp_config_path}
             )
 
             assert result.exit_code == 0
@@ -84,23 +87,23 @@ class TestInitConfig:
             # Mock user inputs for interactive mode
             inputs = [
                 "19000",  # port
-                "y",      # debug mode
+                "y",  # debug mode
                 "production",  # server name
                 "https://spark.example.com:18080",  # server URL
-                "y",      # make default
-                "y",      # verify SSL
-                "y",      # auth needed
+                "y",  # make default
+                "y",  # verify SSL
+                "y",  # auth needed
                 "basic",  # auth type
                 "testuser",  # username
                 "testpass",  # password
-                "n",      # not EMR
+                "n",  # not EMR
             ]
 
             result = runner.invoke(
                 init_config,
                 ["--interactive"],
                 input="\n".join(inputs),
-                obj={"config_path": temp_config_path}
+                obj={"config_path": temp_config_path},
             )
 
             assert result.exit_code == 0
@@ -110,9 +113,16 @@ class TestInitConfig:
             with open(temp_config_path) as f:
                 config_data = yaml.safe_load(f)
 
-            assert config_data["servers"]["production"]["url"] == "https://spark.example.com:18080"
-            assert config_data["servers"]["production"]["auth"]["username"] == "testuser"
-            assert config_data["servers"]["production"]["auth"]["password"] == "testpass"
+            assert (
+                config_data["servers"]["production"]["url"]
+                == "https://spark.example.com:18080"
+            )
+            assert (
+                config_data["servers"]["production"]["auth"]["username"] == "testuser"
+            )
+            assert (
+                config_data["servers"]["production"]["auth"]["password"] == "testpass"  # noqa: S105
+            )
             assert config_data["mcp"]["port"] == 19000
             assert config_data["mcp"]["debug"] is True
 
@@ -121,22 +131,22 @@ class TestInitConfig:
         with runner.isolated_filesystem():
             inputs = [
                 "18888",  # port
-                "n",      # no debug
+                "n",  # no debug
                 "staging",  # server name
                 "http://staging.spark.com:18080",  # server URL
-                "n",      # not default
-                "n",      # no SSL verification
-                "y",      # auth needed
+                "n",  # not default
+                "n",  # no SSL verification
+                "y",  # auth needed
                 "token",  # auth type
                 "abc123token",  # token
-                "n",      # not EMR
+                "n",  # not EMR
             ]
 
             result = runner.invoke(
                 init_config,
                 ["--interactive"],
                 input="\n".join(inputs),
-                obj={"config_path": temp_config_path}
+                obj={"config_path": temp_config_path},
             )
 
             assert result.exit_code == 0
@@ -144,7 +154,7 @@ class TestInitConfig:
             with open(temp_config_path) as f:
                 config_data = yaml.safe_load(f)
 
-            assert config_data["servers"]["staging"]["auth"]["token"] == "abc123token"
+            assert config_data["servers"]["staging"]["auth"]["token"] == "abc123token"  # noqa: S105
             assert config_data["servers"]["staging"]["default"] is False
             assert config_data["servers"]["staging"]["verify_ssl"] is False
 
@@ -153,13 +163,13 @@ class TestInitConfig:
         with runner.isolated_filesystem():
             inputs = [
                 "18888",  # port
-                "n",      # no debug
-                "emr",    # server name
+                "n",  # no debug
+                "emr",  # server name
                 "http://emr.amazonaws.com:18080",  # server URL
-                "y",      # make default
-                "y",      # verify SSL
-                "n",      # no auth needed
-                "y",      # is EMR
+                "y",  # make default
+                "y",  # verify SSL
+                "n",  # no auth needed
+                "y",  # is EMR
                 "arn:aws:elasticmapreduce:us-west-2:123456789:cluster/j-EXAMPLE",  # EMR ARN
             ]
 
@@ -167,7 +177,7 @@ class TestInitConfig:
                 init_config,
                 ["--interactive"],
                 input="\n".join(inputs),
-                obj={"config_path": temp_config_path}
+                obj={"config_path": temp_config_path},
             )
 
             assert result.exit_code == 0
@@ -176,7 +186,10 @@ class TestInitConfig:
                 config_data = yaml.safe_load(f)
 
             assert "emr_cluster_arn" in config_data["servers"]["emr"]
-            assert config_data["servers"]["emr"]["emr_cluster_arn"] == "arn:aws:elasticmapreduce:us-west-2:123456789:cluster/j-EXAMPLE"
+            assert (
+                config_data["servers"]["emr"]["emr_cluster_arn"]
+                == "arn:aws:elasticmapreduce:us-west-2:123456789:cluster/j-EXAMPLE"
+            )
 
     def test_init_config_force_overwrite(self, runner, temp_config_path):
         """Test force overwrite of existing configuration."""
@@ -187,9 +200,7 @@ class TestInitConfig:
 
         with runner.isolated_filesystem():
             result = runner.invoke(
-                init_config,
-                ["--force"],
-                obj={"config_path": temp_config_path}
+                init_config, ["--force"], obj={"config_path": temp_config_path}
             )
 
             assert result.exit_code == 0
@@ -211,10 +222,7 @@ class TestInitConfig:
         with runner.isolated_filesystem():
             # User confirms overwrite
             result = runner.invoke(
-                init_config,
-                [],
-                input="y\n",
-                obj={"config_path": temp_config_path}
+                init_config, [], input="y\n", obj={"config_path": temp_config_path}
             )
 
             assert result.exit_code == 0
@@ -230,10 +238,7 @@ class TestInitConfig:
         with runner.isolated_filesystem():
             # User cancels overwrite
             result = runner.invoke(
-                init_config,
-                [],
-                input="n\n",
-                obj={"config_path": temp_config_path}
+                init_config, [], input="n\n", obj={"config_path": temp_config_path}
             )
 
             assert result.exit_code == 0
@@ -244,14 +249,12 @@ class TestInitConfig:
                 content = f.read()
             assert "existing: config" in content
 
-    @patch('builtins.open', side_effect=PermissionError("Permission denied"))
+    @patch("builtins.open", side_effect=PermissionError("Permission denied"))
     def test_init_config_permission_error(self, mock_file, runner, temp_config_path):
         """Test handling of permission errors during config creation."""
         with runner.isolated_filesystem():
             result = runner.invoke(
-                init_config,
-                [],
-                obj={"config_path": temp_config_path}
+                init_config, [], obj={"config_path": temp_config_path}
             )
 
             assert result.exit_code != 0
@@ -265,9 +268,7 @@ class TestInitConfig:
 
             with runner.isolated_filesystem():
                 result = runner.invoke(
-                    init_config,
-                    [],
-                    obj={"config_path": config_path}
+                    init_config, [], obj={"config_path": config_path}
                 )
 
                 assert result.exit_code == 0
@@ -292,20 +293,16 @@ class TestShowConfig:
                     "local": {
                         "url": "http://localhost:18080",
                         "default": True,
-                        "verify_ssl": True
+                        "verify_ssl": True,
                     },
                     "production": {
                         "url": "https://prod.spark.com:18080",
                         "default": False,
                         "verify_ssl": True,
-                        "emr_cluster_arn": "arn:aws:elasticmapreduce:us-west-2:123:cluster/j-ABC"
-                    }
+                        "emr_cluster_arn": "arn:aws:elasticmapreduce:us-west-2:123:cluster/j-ABC",
+                    },
                 },
-                "mcp": {
-                    "transports": ["stdio"],
-                    "port": 18888,
-                    "debug": False
-                }
+                "mcp": {"transports": ["stdio"], "port": 18888, "debug": False},
             }
 
             with open(config_path, "w") as f:
@@ -315,11 +312,7 @@ class TestShowConfig:
 
     def test_show_config_human_format(self, runner, sample_config_path):
         """Test showing configuration in human-readable format."""
-        result = runner.invoke(
-            show_config,
-            [],
-            obj={"config_path": sample_config_path}
-        )
+        result = runner.invoke(show_config, [], obj={"config_path": sample_config_path})
 
         assert result.exit_code == 0
         assert f"Configuration from: {sample_config_path}" in result.output
@@ -334,9 +327,7 @@ class TestShowConfig:
     def test_show_config_json_format(self, runner, sample_config_path):
         """Test showing configuration in JSON format."""
         result = runner.invoke(
-            show_config,
-            ["--format", "json"],
-            obj={"config_path": sample_config_path}
+            show_config, ["--format", "json"], obj={"config_path": sample_config_path}
         )
 
         assert result.exit_code == 0
@@ -350,9 +341,7 @@ class TestShowConfig:
     def test_show_config_yaml_format(self, runner, sample_config_path):
         """Test showing configuration in YAML format."""
         result = runner.invoke(
-            show_config,
-            ["--format", "yaml"],
-            obj={"config_path": sample_config_path}
+            show_config, ["--format", "yaml"], obj={"config_path": sample_config_path}
         )
 
         assert result.exit_code == 0
@@ -367,7 +356,7 @@ class TestShowConfig:
         result = runner.invoke(
             show_config,
             ["--server", "production"],
-            obj={"config_path": sample_config_path}
+            obj={"config_path": sample_config_path},
         )
 
         assert result.exit_code == 0
@@ -375,14 +364,17 @@ class TestShowConfig:
         assert "URL: https://prod.spark.com:18080" in result.output
         assert "Default: False" in result.output
         assert "Verify SSL: True" in result.output
-        assert "EMR Cluster: arn:aws:elasticmapreduce:us-west-2:123:cluster/j-ABC" in result.output
+        assert (
+            "EMR Cluster: arn:aws:elasticmapreduce:us-west-2:123:cluster/j-ABC"
+            in result.output
+        )
 
     def test_show_nonexistent_server(self, runner, sample_config_path):
         """Test showing configuration for non-existent server."""
         result = runner.invoke(
             show_config,
             ["--server", "nonexistent"],
-            obj={"config_path": sample_config_path}
+            obj={"config_path": sample_config_path},
         )
 
         assert result.exit_code != 0
@@ -393,11 +385,7 @@ class TestShowConfig:
         with tempfile.TemporaryDirectory() as temp_dir:
             missing_path = Path(temp_dir) / "missing.yaml"
 
-            result = runner.invoke(
-                show_config,
-                [],
-                obj={"config_path": missing_path}
-            )
+            result = runner.invoke(show_config, [], obj={"config_path": missing_path})
 
             assert result.exit_code == 0
             assert "Configuration from:" in result.output
@@ -410,11 +398,7 @@ class TestShowConfig:
             with open(config_path, "w") as f:
                 f.write("invalid: yaml: content: [\n")
 
-            result = runner.invoke(
-                show_config,
-                [],
-                obj={"config_path": config_path}
-            )
+            result = runner.invoke(show_config, [], obj={"config_path": config_path})
 
             assert result.exit_code != 0
             assert "Error reading configuration" in result.output
@@ -434,24 +418,16 @@ class TestValidateConfig:
             config_path = Path(temp_dir) / "valid.yaml"
             config_data = {
                 "servers": {
-                    "local": {
-                        "url": "http://localhost:18080",
-                        "default": True
-                    }
+                    "local": {"url": "http://localhost:18080", "default": True}
                 },
-                "mcp": {
-                    "transports": ["stdio"],
-                    "port": 18888
-                }
+                "mcp": {"transports": ["stdio"], "port": 18888},
             }
 
             with open(config_path, "w") as f:
                 yaml.dump(config_data, f)
 
             result = runner.invoke(
-                validate_config,
-                [],
-                obj={"config_path": config_path}
+                validate_config, [], obj={"config_path": config_path}
             )
 
             assert result.exit_code == 0
@@ -464,25 +440,17 @@ class TestValidateConfig:
             config_path = Path(temp_dir) / "no_default.yaml"
             config_data = {
                 "servers": {
-                    "server1": {
-                        "url": "http://server1:18080",
-                        "default": False
-                    },
-                    "server2": {
-                        "url": "http://server2:18080",
-                        "default": False
-                    }
+                    "server1": {"url": "http://server1:18080", "default": False},
+                    "server2": {"url": "http://server2:18080", "default": False},
                 },
-                "mcp": {"transports": ["stdio"], "port": 18888}
+                "mcp": {"transports": ["stdio"], "port": 18888},
             }
 
             with open(config_path, "w") as f:
                 yaml.dump(config_data, f)
 
             result = runner.invoke(
-                validate_config,
-                [],
-                obj={"config_path": config_path}
+                validate_config, [], obj={"config_path": config_path}
             )
 
             assert result.exit_code == 0
@@ -495,30 +463,24 @@ class TestValidateConfig:
             config_path = Path(temp_dir) / "multi_default.yaml"
             config_data = {
                 "servers": {
-                    "server1": {
-                        "url": "http://server1:18080",
-                        "default": True
-                    },
-                    "server2": {
-                        "url": "http://server2:18080",
-                        "default": True
-                    }
+                    "server1": {"url": "http://server1:18080", "default": True},
+                    "server2": {"url": "http://server2:18080", "default": True},
                 },
-                "mcp": {"transports": ["stdio"], "port": 18888}
+                "mcp": {"transports": ["stdio"], "port": 18888},
             }
 
             with open(config_path, "w") as f:
                 yaml.dump(config_data, f)
 
             result = runner.invoke(
-                validate_config,
-                [],
-                obj={"config_path": config_path}
+                validate_config, [], obj={"config_path": config_path}
             )
 
             assert result.exit_code == 0
             assert "Configuration file is valid" in result.output
-            assert "Warning: Multiple default servers: server1, server2" in result.output
+            assert (
+                "Warning: Multiple default servers: server1, server2" in result.output
+            )
 
     def test_validate_server_no_url_or_emr(self, runner):
         """Test validation warning for server with no URL or EMR cluster."""
@@ -531,21 +493,22 @@ class TestValidateConfig:
                         # Missing URL and EMR cluster
                     }
                 },
-                "mcp": {"transports": ["stdio"], "port": 18888}
+                "mcp": {"transports": ["stdio"], "port": 18888},
             }
 
             with open(config_path, "w") as f:
                 yaml.dump(config_data, f)
 
             result = runner.invoke(
-                validate_config,
-                [],
-                obj={"config_path": config_path}
+                validate_config, [], obj={"config_path": config_path}
             )
 
             assert result.exit_code == 0
             assert "Configuration file is valid" in result.output
-            assert "Warning: Server 'incomplete' has no URL or EMR cluster configured" in result.output
+            assert (
+                "Warning: Server 'incomplete' has no URL or EMR cluster configured"
+                in result.output
+            )
 
     def test_validate_invalid_config(self, runner):
         """Test validation of invalid configuration."""
@@ -555,9 +518,7 @@ class TestValidateConfig:
                 f.write("invalid: yaml: structure: [\n")
 
             result = runner.invoke(
-                validate_config,
-                [],
-                obj={"config_path": config_path}
+                validate_config, [], obj={"config_path": config_path}
             )
 
             assert result.exit_code != 0
@@ -572,18 +533,22 @@ class TestEditConfig:
     def runner(self):
         return CliRunner()
 
-    @patch('spark_history_mcp.cli.commands.config.subprocess.run')
-    @patch('spark_history_mcp.cli.commands.config.os.environ.get')
-    @patch('spark_history_mcp.cli.commands.config.shutil.which')
-    def test_edit_existing_config(self, mock_which, mock_env_get, mock_subprocess, runner):
+    @patch("spark_history_mcp.cli.commands.config.subprocess.run")
+    @patch("spark_history_mcp.cli.commands.config.os.environ.get")
+    @patch("spark_history_mcp.cli.commands.config.shutil.which")
+    def test_edit_existing_config(
+        self, mock_which, mock_env_get, mock_subprocess, runner
+    ):
         """Test editing existing configuration file."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.yaml"
 
             # Create valid config
             config_data = {
-                "servers": {"local": {"url": "http://localhost:18080", "default": True}},
-                "mcp": {"transports": ["stdio"], "port": 18888}
+                "servers": {
+                    "local": {"url": "http://localhost:18080", "default": True}
+                },
+                "mcp": {"transports": ["stdio"], "port": 18888},
             }
             with open(config_path, "w") as f:
                 yaml.dump(config_data, f)
@@ -598,26 +563,31 @@ class TestEditConfig:
             mock_which.return_value = "/usr/bin/nano"
             mock_subprocess.return_value = None
 
-            result = runner.invoke(
-                edit_config,
-                [],
-                obj={"config_path": config_path}
-            )
+            result = runner.invoke(edit_config, [], obj={"config_path": config_path})
 
             assert result.exit_code == 0
             assert "Configuration file is valid after editing" in result.output
-            mock_subprocess.assert_called_once_with(["nano", str(config_path)], check=True)
+            mock_subprocess.assert_called_once_with(
+                ["nano", str(config_path)], check=True
+            )
 
-    @patch('spark_history_mcp.cli.commands.config.subprocess.run')
-    @patch('spark_history_mcp.cli.commands.config.os.environ.get')
-    @patch('spark_history_mcp.cli.commands.config.shutil.which')
-    def test_edit_config_custom_editor(self, mock_which, mock_env_get, mock_subprocess, runner):
+    @patch("spark_history_mcp.cli.commands.config.subprocess.run")
+    @patch("spark_history_mcp.cli.commands.config.os.environ.get")
+    @patch("spark_history_mcp.cli.commands.config.shutil.which")
+    def test_edit_config_custom_editor(
+        self, mock_which, mock_env_get, mock_subprocess, runner
+    ):
         """Test editing with custom editor."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.yaml"
 
             # Create valid config
-            config_data = {"servers": {"local": {"url": "http://localhost:18080", "default": True}}, "mcp": {"transports": ["stdio"], "port": 18888}}
+            config_data = {
+                "servers": {
+                    "local": {"url": "http://localhost:18080", "default": True}
+                },
+                "mcp": {"transports": ["stdio"], "port": 18888},
+            }
             with open(config_path, "w") as f:
                 yaml.dump(config_data, f)
 
@@ -631,28 +601,26 @@ class TestEditConfig:
             mock_which.return_value = "/usr/bin/vim"
             mock_subprocess.return_value = None
 
-            result = runner.invoke(
-                edit_config,
-                [],
-                obj={"config_path": config_path}
-            )
+            result = runner.invoke(edit_config, [], obj={"config_path": config_path})
 
             assert result.exit_code == 0
-            mock_subprocess.assert_called_once_with(["vim", str(config_path)], check=True)
+            mock_subprocess.assert_called_once_with(
+                ["vim", str(config_path)], check=True
+            )
 
     def test_edit_nonexistent_config_create(self, runner):
         """Test editing non-existent config with user confirming creation."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "missing.yaml"
 
-            with patch('subprocess.run') as mock_subprocess:
+            with patch("subprocess.run") as mock_subprocess:
                 mock_subprocess.return_value = None
 
                 result = runner.invoke(
                     edit_config,
                     [],
                     input="y\n",  # Confirm creation
-                    obj={"config_path": config_path}
+                    obj={"config_path": config_path},
                 )
 
                 # Should create config and then attempt to edit
@@ -668,23 +636,35 @@ class TestEditConfig:
                 edit_config,
                 [],
                 input="n\n",  # Cancel creation
-                obj={"config_path": config_path}
+                obj={"config_path": config_path},
             )
 
             assert result.exit_code == 0
             assert not config_path.exists()
 
-    @patch('spark_history_mcp.cli.commands.config.subprocess.run', side_effect=subprocess.CalledProcessError(1, "nano"))
-    @patch('spark_history_mcp.cli.commands.config.os.environ.get')
-    @patch('spark_history_mcp.cli.commands.config.shutil.which')
-    def test_edit_config_editor_error(self, mock_which, mock_env_get, mock_subprocess, runner):
+    @patch(
+        "spark_history_mcp.cli.commands.config.subprocess.run",
+        side_effect=subprocess.CalledProcessError(1, "nano"),
+    )
+    @patch("spark_history_mcp.cli.commands.config.os.environ.get")
+    @patch("spark_history_mcp.cli.commands.config.shutil.which")
+    def test_edit_config_editor_error(
+        self, mock_which, mock_env_get, mock_subprocess, runner
+    ):
         """Test handling of editor errors."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.yaml"
 
             # Create valid config
             with open(config_path, "w") as f:
-                yaml.dump({"servers": {"local": {"url": "http://localhost:18080", "default": True}}}, f)
+                yaml.dump(
+                    {
+                        "servers": {
+                            "local": {"url": "http://localhost:18080", "default": True}
+                        }
+                    },
+                    f,
+                )
 
             def env_get_side_effect(key, default=None):
                 if key == "EDITOR":
@@ -694,26 +674,31 @@ class TestEditConfig:
             mock_env_get.side_effect = env_get_side_effect
             mock_which.return_value = "/usr/bin/nano"
 
-            result = runner.invoke(
-                edit_config,
-                [],
-                obj={"config_path": config_path}
-            )
+            result = runner.invoke(edit_config, [], obj={"config_path": config_path})
 
             assert result.exit_code != 0
             assert "Error opening editor" in result.output
 
-    @patch('spark_history_mcp.cli.commands.config.subprocess.run')
-    @patch('spark_history_mcp.cli.commands.config.os.environ.get')
-    @patch('spark_history_mcp.cli.commands.config.shutil.which', return_value=None)
-    def test_edit_config_editor_not_found(self, mock_which, mock_env_get, mock_subprocess, runner):
+    @patch("spark_history_mcp.cli.commands.config.subprocess.run")
+    @patch("spark_history_mcp.cli.commands.config.os.environ.get")
+    @patch("spark_history_mcp.cli.commands.config.shutil.which", return_value=None)
+    def test_edit_config_editor_not_found(
+        self, mock_which, mock_env_get, mock_subprocess, runner
+    ):
         """Test handling when editor is not found."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.yaml"
 
             # Create valid config
             with open(config_path, "w") as f:
-                yaml.dump({"servers": {"local": {"url": "http://localhost:18080", "default": True}}}, f)
+                yaml.dump(
+                    {
+                        "servers": {
+                            "local": {"url": "http://localhost:18080", "default": True}
+                        }
+                    },
+                    f,
+                )
 
             def env_get_side_effect(key, default=None):
                 if key == "EDITOR":
@@ -723,11 +708,7 @@ class TestEditConfig:
             mock_env_get.side_effect = env_get_side_effect
             mock_subprocess.side_effect = FileNotFoundError()
 
-            result = runner.invoke(
-                edit_config,
-                [],
-                obj={"config_path": config_path}
-            )
+            result = runner.invoke(edit_config, [], obj={"config_path": config_path})
 
             assert result.exit_code != 0
             assert "Editor 'nonexistent_editor' not found" in result.output

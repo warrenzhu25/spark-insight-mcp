@@ -6,19 +6,18 @@ including performance metrics, SQL queries, and stage dependencies.
 """
 
 import heapq
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from ..core.app import mcp
 from ..models.mcp_types import JobSummary, SqlQuerySummary
 from ..models.spark_types import (
     ExecutionData,
-    JobData,
     JobExecutionStatus,
     SQLExecutionStatus,
     StageData,
     TaskMetricDistributions,
 )
-from .common import get_client_or_default, get_config
+from .common import compact_output, get_client_or_default, get_config
 from .fetchers import (
     fetch_jobs,
     fetch_stage_attempt,
@@ -54,8 +53,11 @@ def truncate_plan_description(plan_desc: str, max_length: int) -> str:
 
 @mcp.tool()
 def list_jobs(
-    app_id: str, server: Optional[str] = None, status: Optional[list[str]] = None
-) -> list:
+    app_id: str,
+    server: Optional[str] = None,
+    status: Optional[list[str]] = None,
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get a list of all jobs for a Spark application.
 
@@ -63,12 +65,14 @@ def list_jobs(
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
         status: Optional list of job status values to filter by
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        List of JobData objects for the application
+        List of JobData objects for the application (or compact summary list)
     """
     # Delegate to fetchers (centralized enum conversion and optional caching)
-    return fetch_jobs(app_id=app_id, server=server, status=status)
+    jobs = fetch_jobs(app_id=app_id, server=server, status=status)
+    return compact_output(jobs, compact)
 
 
 @mcp.tool()
@@ -77,7 +81,8 @@ def list_slowest_jobs(
     server: Optional[str] = None,
     include_running: bool = False,
     n: int = 5,
-) -> List[JobData]:
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get the N slowest jobs for a Spark application.
 
@@ -88,9 +93,10 @@ def list_slowest_jobs(
         server: Optional server name to use (uses default if not specified)
         include_running: Whether to include running jobs in the search
         n: Number of slowest jobs to return (default: 5)
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        List of JobData objects for the slowest jobs, or empty list if no jobs found
+        List of JobData objects for the slowest jobs (or compact summary list)
     """
     cfg = get_config()
     # Get all jobs
@@ -111,7 +117,8 @@ def list_slowest_jobs(
             return (job.completion_time - job.submission_time).total_seconds()
         return 0
 
-    return heapq.nlargest(n, jobs, key=get_job_duration)
+    slowest = heapq.nlargest(n, jobs, key=get_job_duration)
+    return compact_output(slowest, compact)
 
 
 @mcp.tool()
@@ -120,7 +127,8 @@ def list_stages(
     server: Optional[str] = None,
     status: Optional[list[str]] = None,
     with_summaries: bool = False,
-) -> list:
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get a list of all stages for a Spark application.
 
@@ -132,14 +140,16 @@ def list_stages(
         server: Optional server name to use (uses default if not specified)
         status: Optional list of stage status values to filter by
         with_summaries: Whether to include summary metrics in the response
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        List of StageData objects for the application
+        List of StageData objects for the application (or compact summary list)
     """
     # Delegate to fetchers (centralized enum conversion and optional caching)
-    return fetch_stages(
+    stages = fetch_stages(
         app_id=app_id, server=server, status=status, with_summaries=with_summaries
     )
+    return compact_output(stages, compact)
 
 
 @mcp.tool()
@@ -148,7 +158,8 @@ def list_slowest_stages(
     server: Optional[str] = None,
     include_running: bool = False,
     n: int = 5,
-) -> List[StageData]:
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get the N slowest stages for a Spark application.
 
@@ -159,9 +170,10 @@ def list_slowest_stages(
         server: Optional server name to use (uses default if not specified)
         include_running: Whether to include running stages in the search
         n: Number of slowest stages to return (default: 5)
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        List of StageData objects for the slowest stages, or empty list if no stages found
+        List of StageData objects for the slowest stages (or compact summary list)
     """
     cfg = get_config()
     stages = fetch_stages(app_id=app_id, server=server)
@@ -180,7 +192,8 @@ def list_slowest_stages(
             ).total_seconds()
         return 0
 
-    return heapq.nlargest(n, stages, key=get_stage_duration)
+    slowest = heapq.nlargest(n, stages, key=get_stage_duration)
+    return compact_output(slowest, compact)
 
 
 @mcp.tool()
@@ -190,7 +203,8 @@ def get_stage(
     attempt_id: Optional[int] = None,
     server: Optional[str] = None,
     with_summaries: bool = False,
-) -> StageData:
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get information about a specific stage.
 
@@ -200,9 +214,10 @@ def get_stage(
         attempt_id: Optional stage attempt ID (if not provided, returns the latest attempt)
         server: Optional server name to use (uses default if not specified)
         with_summaries: Whether to include summary metrics
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        StageData object containing stage information
+        StageData object containing stage information (or compact summary)
     """
     if attempt_id is not None:
         stage_data = fetch_stage_attempt(
@@ -241,7 +256,7 @@ def get_stage(
         )
         stage_data.task_metrics_distributions = task_summary
 
-    return stage_data
+    return compact_output(stage_data, compact)
 
 
 @mcp.tool()

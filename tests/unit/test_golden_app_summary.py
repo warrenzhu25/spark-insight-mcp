@@ -8,12 +8,18 @@ from spark_history_mcp.models.spark_types import StageStatus
 
 class Dist:
     def __init__(self, fetch_wait_ns: int, write_time_ns: int):
-        self.shuffle_read_metrics = SimpleNamespace(fetch_wait_time=[0, 0, fetch_wait_ns])
+        self.shuffle_read_metrics = SimpleNamespace(
+            fetch_wait_time=[0, 0, fetch_wait_ns]
+        )
         self.shuffle_write_metrics = SimpleNamespace(write_time=[0, 0, write_time_ns])
 
 
 def make_attempt(duration_ms: int, start: datetime):
-    return SimpleNamespace(duration=duration_ms, start_time=start, end_time=start + timedelta(milliseconds=duration_ms))
+    return SimpleNamespace(
+        duration=duration_ms,
+        start_time=start,
+        end_time=start + timedelta(milliseconds=duration_ms),
+    )
 
 
 def make_stage():
@@ -50,9 +56,14 @@ def test_get_app_summary_golden(mock_ctx, mock_get_client):
     from spark_history_mcp.tools.tools import get_app_summary
 
     now = datetime.utcnow()
-    app = SimpleNamespace(name="TestApp", attempts=[make_attempt(60000, now)], cores_per_executor=2)
+    app = SimpleNamespace(
+        name="TestApp", attempts=[make_attempt(60000, now)], cores_per_executor=2
+    )
     stages = [make_stage()]
-    executors = [make_executor(now, now + timedelta(seconds=60)), make_executor(now, now + timedelta(seconds=60))]
+    executors = [
+        make_executor(now, now + timedelta(seconds=60)),
+        make_executor(now, now + timedelta(seconds=60)),
+    ]
 
     client = SimpleNamespace(
         get_application=lambda app_id: app,
@@ -106,4 +117,3 @@ def test_compare_app_summaries_golden(mock_ctx, mock_get_app_summary):
         expected = json.load(f)
 
     assert out == expected
-

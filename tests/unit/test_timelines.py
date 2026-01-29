@@ -2,11 +2,8 @@
 Tests for spark_history_mcp.tools.timelines module.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import patch
-
-import pytest
 
 from spark_history_mcp.tools.timelines import (
     build_app_executor_timeline,
@@ -29,7 +26,7 @@ class TestMergeConsecutiveIntervals:
         data = [
             {
                 "timestamp_range": "10:00 to 10:05",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             }
         ]
         result = merge_consecutive_intervals(data)
@@ -41,16 +38,16 @@ class TestMergeConsecutiveIntervals:
         data = [
             {
                 "timestamp_range": "10:00 to 10:05",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             },
             {
                 "timestamp_range": "10:05 to 10:10",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             },
             {
                 "timestamp_range": "10:10 to 10:15",
-                "differences": {"executor_count_diff": 2}
-            }
+                "differences": {"executor_count_diff": 2},
+            },
         ]
         result = merge_consecutive_intervals(data)
 
@@ -63,12 +60,12 @@ class TestMergeConsecutiveIntervals:
         data = [
             {
                 "timestamp_range": "10:00 to 10:05",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             },
             {
                 "timestamp_range": "10:05 to 10:10",
-                "differences": {"executor_count_diff": 3}
-            }
+                "differences": {"executor_count_diff": 3},
+            },
         ]
         result = merge_consecutive_intervals(data)
 
@@ -81,20 +78,20 @@ class TestMergeConsecutiveIntervals:
         data = [
             {
                 "timestamp_range": "10:00 to 10:05",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             },
             {
                 "timestamp_range": "10:05 to 10:10",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             },
             {
                 "timestamp_range": "10:10 to 10:15",
-                "differences": {"executor_count_diff": 3}
+                "differences": {"executor_count_diff": 3},
             },
             {
                 "timestamp_range": "10:15 to 10:20",
-                "differences": {"executor_count_diff": 3}
-            }
+                "differences": {"executor_count_diff": 3},
+            },
         ]
         result = merge_consecutive_intervals(data)
 
@@ -109,12 +106,12 @@ class TestMergeConsecutiveIntervals:
         data = [
             {
                 "timestamp_range": "10:00 to 10:05",
-                "differences": {"executor_count_diff": 2}
+                "differences": {"executor_count_diff": 2},
             },
             {
                 "timestamp_range": "10:05 to 10:10"
                 # Missing differences key
-            }
+            },
         ]
         result = merge_consecutive_intervals(data)
 
@@ -130,12 +127,12 @@ class TestMergeIntervals:
         data = [
             {
                 "timestamp_range": "10:00 to 10:05",
-                "differences": {"executor_count_diff": 1}
+                "differences": {"executor_count_diff": 1},
             },
             {
                 "timestamp_range": "10:05 to 10:10",
-                "differences": {"executor_count_diff": 1}
-            }
+                "differences": {"executor_count_diff": 1},
+            },
         ]
         result = merge_intervals(data)
 
@@ -145,14 +142,8 @@ class TestMergeIntervals:
     def test_custom_key(self):
         """Test using custom merge key."""
         data = [
-            {
-                "timestamp_range": "10:00 to 10:05",
-                "differences": {"memory_diff": 512}
-            },
-            {
-                "timestamp_range": "10:05 to 10:10",
-                "differences": {"memory_diff": 512}
-            }
+            {"timestamp_range": "10:00 to 10:05", "differences": {"memory_diff": 512}},
+            {"timestamp_range": "10:05 to 10:10", "differences": {"memory_diff": 512}},
         ]
         result = merge_intervals(data, same_key="memory_diff")
 
@@ -178,7 +169,7 @@ class TestBuildStageExecutorTimeline:
             attempt_id=0,
             name="Test Stage",
             submission_time=stage_start,
-            completion_time=stage_end
+            completion_time=stage_end,
         )
 
         executors = [
@@ -186,18 +177,18 @@ class TestBuildStageExecutorTimeline:
                 id="exec-1",
                 host_port="host1:7337",
                 total_cores=4,
-                max_memory=2*1024*1024*1024,  # 2GB in bytes
+                max_memory=2 * 1024 * 1024 * 1024,  # 2GB in bytes
                 add_time=datetime(2024, 1, 1, 10, 0, 0),
-                remove_time=datetime(2024, 1, 1, 10, 3, 0)
+                remove_time=datetime(2024, 1, 1, 10, 3, 0),
             ),
             SimpleNamespace(
                 id="exec-2",
                 host_port="host2:7337",
                 total_cores=4,
-                max_memory=2*1024*1024*1024,
+                max_memory=2 * 1024 * 1024 * 1024,
                 add_time=datetime(2024, 1, 1, 10, 2, 0),
-                remove_time=datetime(2024, 1, 1, 10, 5, 0)
-            )
+                remove_time=datetime(2024, 1, 1, 10, 5, 0),
+            ),
         ]
 
         result = build_stage_executor_timeline(stage, executors, interval_minutes=1)
@@ -227,10 +218,7 @@ class TestBuildStageExecutorTimeline:
     def test_stage_without_submission_time(self):
         """Test handling of stage without submission time."""
         stage = SimpleNamespace(
-            stage_id=2,
-            attempt_id=0,
-            name="Bad Stage",
-            submission_time=None
+            stage_id=2, attempt_id=0, name="Bad Stage", submission_time=None
         )
 
         result = build_stage_executor_timeline(stage, [])
@@ -249,13 +237,15 @@ class TestBuildStageExecutorTimeline:
             attempt_id=0,
             name="Long Stage",
             submission_time=stage_start,
-            completion_time=None
+            completion_time=None,
         )
 
         executors = []
 
         # Use a smaller max_intervals to trigger truncation
-        result = build_stage_executor_timeline(stage, executors, interval_minutes=60, max_intervals=2)
+        result = build_stage_executor_timeline(
+            stage, executors, interval_minutes=60, max_intervals=2
+        )
 
         # Should create timeline with truncation warning
         timeline = result["timeline"]
@@ -274,7 +264,7 @@ class TestBuildStageExecutorTimeline:
             attempt_id=0,
             name="Test Stage",
             submission_time=stage_start,
-            completion_time=stage_end
+            completion_time=stage_end,
         )
 
         executors = [
@@ -284,7 +274,7 @@ class TestBuildStageExecutorTimeline:
                 total_cores=None,
                 max_memory=None,
                 add_time=None,
-                remove_time=None
+                remove_time=None,
             )
         ]
 
@@ -305,14 +295,16 @@ class TestBuildStageExecutorTimeline:
             attempt_id=0,
             name="Instant Stage",
             submission_time=stage_time,
-            completion_time=stage_time  # Same time = zero duration
+            completion_time=stage_time,  # Same time = zero duration
         )
 
         result = build_stage_executor_timeline(stage, [], interval_minutes=1)
 
         timeline = result["timeline"]
         assert len(timeline) == 1  # Should create at least one interval
-        assert result["stage_info"]["duration_seconds"] == 60  # Minimum interval duration
+        assert (
+            result["stage_info"]["duration_seconds"] == 60
+        )  # Minimum interval duration
 
 
 class TestBuildAppExecutorTimeline:
@@ -326,21 +318,16 @@ class TestBuildAppExecutorTimeline:
         app = SimpleNamespace(
             id="app-123",
             name="Test App",
-            attempts=[
-                SimpleNamespace(
-                    start_time=app_start,
-                    end_time=app_end
-                )
-            ]
+            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)],
         )
 
         executors = [
             SimpleNamespace(
                 id="exec-1",
                 total_cores=4,
-                max_memory=2*1024*1024*1024,
+                max_memory=2 * 1024 * 1024 * 1024,
                 add_time=datetime(2024, 1, 1, 10, 1, 0),
-                remove_time=datetime(2024, 1, 1, 10, 8, 0)
+                remove_time=datetime(2024, 1, 1, 10, 8, 0),
             )
         ]
 
@@ -349,7 +336,7 @@ class TestBuildAppExecutorTimeline:
                 stage_id=1,
                 name="Stage 1",
                 submission_time=datetime(2024, 1, 1, 10, 2, 0),
-                completion_time=datetime(2024, 1, 1, 10, 6, 0)
+                completion_time=datetime(2024, 1, 1, 10, 6, 0),
             )
         ]
 
@@ -406,12 +393,7 @@ class TestBuildAppExecutorTimeline:
         app = SimpleNamespace(
             id="app-no-end",
             name="Long App",
-            attempts=[
-                SimpleNamespace(
-                    start_time=app_start,
-                    end_time=None
-                )
-            ]
+            attempts=[SimpleNamespace(start_time=app_start, end_time=None)],
         )
 
         result = build_app_executor_timeline(app, [], [], interval_minutes=60)
@@ -430,7 +412,7 @@ class TestBuildAppExecutorTimeline:
         app = SimpleNamespace(
             id="app-events",
             name="Event App",
-            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)]
+            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)],
         )
 
         # Executors with different add/remove times
@@ -438,17 +420,17 @@ class TestBuildAppExecutorTimeline:
             SimpleNamespace(
                 id="exec-1",
                 total_cores=2,
-                max_memory=1024*1024*1024,
+                max_memory=1024 * 1024 * 1024,
                 add_time=datetime(2024, 1, 1, 10, 1, 0),
-                remove_time=datetime(2024, 1, 1, 10, 5, 0)
+                remove_time=datetime(2024, 1, 1, 10, 5, 0),
             ),
             SimpleNamespace(
                 id="exec-2",
                 total_cores=2,
-                max_memory=1024*1024*1024,
+                max_memory=1024 * 1024 * 1024,
                 add_time=datetime(2024, 1, 1, 10, 3, 0),
-                remove_time=datetime(2024, 1, 1, 10, 8, 0)
-            )
+                remove_time=datetime(2024, 1, 1, 10, 8, 0),
+            ),
         ]
 
         # Stages with different timing
@@ -457,14 +439,14 @@ class TestBuildAppExecutorTimeline:
                 stage_id=1,
                 name="Early Stage",
                 submission_time=datetime(2024, 1, 1, 10, 0, 30),
-                completion_time=datetime(2024, 1, 1, 10, 2, 0)
+                completion_time=datetime(2024, 1, 1, 10, 2, 0),
             ),
             SimpleNamespace(
                 stage_id=2,
                 name="Late Stage",
                 submission_time=datetime(2024, 1, 1, 10, 6, 0),
-                completion_time=datetime(2024, 1, 1, 10, 9, 0)
-            )
+                completion_time=datetime(2024, 1, 1, 10, 9, 0),
+            ),
         ]
 
         result = build_app_executor_timeline(app, executors, stages, interval_minutes=1)
@@ -493,7 +475,7 @@ class TestBuildAppExecutorTimeline:
         app = SimpleNamespace(
             id="app-empty",
             name="Empty App",
-            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)]
+            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)],
         )
 
         result = build_app_executor_timeline(app, [], [], interval_minutes=1)
@@ -521,7 +503,7 @@ class TestBuildAppExecutorTimeline:
         app = SimpleNamespace(
             id="app-summary",
             name="Summary App",
-            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)]
+            attempts=[SimpleNamespace(start_time=app_start, end_time=app_end)],
         )
 
         # Varying executor counts over time
@@ -529,10 +511,11 @@ class TestBuildAppExecutorTimeline:
             SimpleNamespace(
                 id=f"exec-{i}",
                 total_cores=2,
-                max_memory=1024*1024*1024,
+                max_memory=1024 * 1024 * 1024,
                 add_time=datetime(2024, 1, 1, 10, i, 0),
-                remove_time=datetime(2024, 1, 1, 10, 4, 0)
-            ) for i in range(3)  # 3 executors added at different times
+                remove_time=datetime(2024, 1, 1, 10, 4, 0),
+            )
+            for i in range(3)  # 3 executors added at different times
         ]
 
         result = build_app_executor_timeline(app, executors, [], interval_minutes=1)

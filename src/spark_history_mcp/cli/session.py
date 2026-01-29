@@ -145,7 +145,7 @@ def format_session_hint(count: int) -> str:
 
     return (
         f"\nTip: Use numbers 1-{count} to reference these apps. "
-        f"Example: apps compare 1 2"
+        f"Example: compare apps 1 2"
     )
 
 

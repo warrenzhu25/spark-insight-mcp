@@ -18,9 +18,10 @@ class CompareAppPerformanceOutput(BaseModel):
     key_recommendations: List[Dict[str, Any]]
 
 
-def validate_output(model_cls: type[BaseModel], data: Dict[str, Any], enabled: bool) -> Dict[str, Any]:
+def validate_output(
+    model_cls: type[BaseModel], data: Dict[str, Any], enabled: bool
+) -> Dict[str, Any]:
     if not enabled:
         return data
     # Model validation raises on errors; return dict form on success
     return model_cls.model_validate(data).model_dump()
-

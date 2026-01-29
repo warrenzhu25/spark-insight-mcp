@@ -6,7 +6,8 @@ Commands for managing Spark History Server MCP configuration.
 
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
+import sys
 from typing import Optional
 
 try:
@@ -140,30 +141,31 @@ if CLI_AVAILABLE:
                 click.echo("  SHS_SERVERS_LOCAL_AUTH_TOKEN")
 
         except Exception as e:
-            raise click.ClickException(f"Error creating configuration: {e}")
+            raise click.ClickException(f"Error creating configuration: {e}") from e
 
     @config_cmd.command("show")
     @click.option("--server", "-s", help="Show specific server configuration")
     @click.option(
         "--format",
         "-f",
+        "output_format",
         type=click.Choice(["human", "json", "yaml"]),
         default="human",
         help="Output format",
     )
     @click.pass_context
-    def show_config(ctx, server: Optional[str], format: str):
+    def show_config(ctx, server: Optional[str], output_format: str):
         """Show current configuration."""
         config_path = ctx.obj["config_path"]
 
         try:
             config = Config.from_file(str(config_path))
 
-            if format == "json":
+            if output_format == "json":
                 import json
 
                 click.echo(json.dumps(config.model_dump(), indent=2))
-            elif format == "yaml":
+            elif output_format == "yaml":
                 import yaml
 
                 click.echo(yaml.dump(config.model_dump(), default_flow_style=False))
@@ -197,7 +199,7 @@ if CLI_AVAILABLE:
                         click.echo(f"  {name}{default_marker}: {server_config.url}")
 
         except Exception as e:
-            raise click.ClickException(f"Error reading configuration: {e}")
+            raise click.ClickException(f"Error reading configuration: {e}") from e
 
     @config_cmd.command("validate")
     @click.pass_context
@@ -231,7 +233,7 @@ if CLI_AVAILABLE:
             click.echo(f"Configuration contains {len(config.servers)} server(s)")
 
         except Exception as e:
-            raise click.ClickException(f"Configuration validation failed: {e}")
+            raise click.ClickException(f"Configuration validation failed: {e}") from e
 
     @config_cmd.command("edit")
     @click.pass_context
@@ -247,7 +249,9 @@ if CLI_AVAILABLE:
 
         try:
             editor = os.environ.get("EDITOR", "nano" if shutil.which("nano") else "vi")
-            subprocess.run([editor, str(config_path)], check=True)
+            subprocess.run(  # noqa: S603 # nosec B603
+                [editor, str(config_path)], check=True
+            )
 
             # Validate after editing
             try:
@@ -258,17 +262,17 @@ if CLI_AVAILABLE:
                     f"⚠️  Warning: Configuration validation failed: {e}", err=True
                 )
 
-        except subprocess.CalledProcessError:
-            raise click.ClickException("Error opening editor")
-        except FileNotFoundError:
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException("Error opening editor") from e
+        except FileNotFoundError as e:
             raise click.ClickException(
                 f"Editor '{editor}' not found. Set EDITOR environment variable."
-            )
+            ) from e
 
 else:
     # Fallback when CLI dependencies not available
     def config_cmd():
-        print(
-            "CLI dependencies not installed. Install with: uv add click rich tabulate"
+        sys.stderr.write(
+            "CLI dependencies not installed. Install with: uv add click rich tabulate\n"
         )
         return None

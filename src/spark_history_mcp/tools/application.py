@@ -9,18 +9,20 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ..core.app import mcp
-from ..models.spark_types import ApplicationInfo, StageStatus
+from ..models.spark_types import StageStatus
 from .analysis import (
     analyze_auto_scaling,
     analyze_failed_tasks,
     analyze_shuffle_skew,
 )
-from .common import get_client_or_default
+from .common import compact_output, get_client_or_default
 from .fetchers import fetch_app
 
 
 @mcp.tool()
-def get_application(app_id: str, server: Optional[str] = None) -> ApplicationInfo:
+def get_application(
+    app_id: str, server: Optional[str] = None, compact: Optional[bool] = None
+) -> Any:
     """
     Get detailed information about a specific Spark application.
 
@@ -30,12 +32,14 @@ def get_application(app_id: str, server: Optional[str] = None) -> ApplicationInf
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        ApplicationInfo object containing application details
+        ApplicationInfo object containing application details (or compact summary)
     """
     # Use shared fetcher to avoid duplicating client resolution and enable caching
-    return fetch_app(app_id=app_id, server=server)
+    app = fetch_app(app_id=app_id, server=server)
+    return compact_output(app, compact)
 
 
 @mcp.tool()
@@ -49,7 +53,8 @@ def list_applications(
     limit: Optional[int] = None,
     app_name: Optional[str] = None,
     search_type: str = "contains",
-) -> list:
+    compact: Optional[bool] = None,
+) -> Any:
     """
     Get a list of all Spark applications with optional filtering.
 
@@ -66,9 +71,10 @@ def list_applications(
         limit: Maximum number of applications to return
         app_name: Optional application name or pattern to filter by
         search_type: Type of name search - "exact", "contains", or "regex" (default: "contains")
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        List of ApplicationInfo objects for matching applications
+        List of ApplicationInfo objects (or compact summary list)
 
     Raises:
         ValueError: If search_type is not one of "exact", "contains", or "regex"
@@ -97,7 +103,7 @@ def list_applications(
 
     # If no name filtering is requested, return as-is
     if not app_name:
-        return applications
+        return compact_output(applications, compact)
 
     # Filter applications by name based on search type
     matching_apps = []
@@ -119,11 +125,13 @@ def list_applications(
             # Re-raise regex errors with more context
             raise re.error(f"Invalid regex pattern '{app_name}': {str(e)}") from e
 
-    return matching_apps
+    return compact_output(matching_apps, compact)
 
 
 @mcp.tool()
-def get_environment(app_id: str, server: Optional[str] = None):
+def get_environment(
+    app_id: str, server: Optional[str] = None, compact: Optional[bool] = None
+) -> Any:
     """
     Get the comprehensive Spark runtime configuration for a Spark application.
 
@@ -133,14 +141,16 @@ def get_environment(app_id: str, server: Optional[str] = None):
     Args:
         app_id: The Spark application ID
         server: Optional server name to use (uses default if not specified)
+        compact: Whether to return a compact summary (default: True)
 
     Returns:
-        ApplicationEnvironmentInfo object containing environment details
+        ApplicationEnvironmentInfo object containing environment details (or compact summary)
     """
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
-    return client.get_environment(app_id=app_id)
+    environment = client.get_environment(app_id=app_id)
+    return compact_output(environment, compact)
 
 
 @mcp.tool()

@@ -3,9 +3,6 @@ Tests for spark_history_mcp.utils.sorting module.
 """
 
 import copy
-from typing import Any, Dict
-
-import pytest
 
 from spark_history_mcp.utils.sorting import (
     extract_percentage_value,
@@ -48,7 +45,9 @@ class TestExtractPercentageValue:
         assert extract_percentage_value("invalid") == 0.0
         assert extract_percentage_value("") == 0.0
         assert extract_percentage_value("abc%") == 0.0
-        assert extract_percentage_value("++50%") == 50.0  # Actually valid after stripping +
+        assert (
+            extract_percentage_value("++50%") == 50.0
+        )  # Actually valid after stripping +
 
     def test_numeric_without_percent(self):
         """Test handling of numeric values without percent sign."""
@@ -72,11 +71,7 @@ class TestSortMetricsByChange:
 
     def test_no_change_metrics(self):
         """Test dictionary with no _change suffix keys."""
-        data = {
-            "metric_a": 100,
-            "metric_b": 200,
-            "metric_ratio": 1.5
-        }
+        data = {"metric_a": 100, "metric_b": 200, "metric_ratio": 1.5}
         result = sort_metrics_by_change(data)
         assert result == data  # Should return unchanged
 
@@ -86,7 +81,7 @@ class TestSortMetricsByChange:
             "small_change": "+5%",
             "large_change": "+50%",
             "medium_change": "+25%",
-            "other_metric": 100
+            "other_metric": 100,
         }
         result = sort_metrics_by_change(data)
 
@@ -103,7 +98,7 @@ class TestSortMetricsByChange:
             "big_decrease_change": "-75%",
             "small_increase_change": "+10%",
             "small_decrease_change": "-5%",
-            "other_metric": "value"
+            "other_metric": "value",
         }
         result = sort_metrics_by_change(data)
 
@@ -119,7 +114,7 @@ class TestSortMetricsByChange:
             "infinite_change": "+∞",
             "na_change": "N/A",
             "normal_change": "+30%",
-            "zero_change": "+0%"
+            "zero_change": "+0%",
         }
         result = sort_metrics_by_change(data)
 
@@ -129,11 +124,7 @@ class TestSortMetricsByChange:
 
     def test_ascending_sort(self):
         """Test sorting in ascending order."""
-        data = {
-            "large_change": "+50%",
-            "small_change": "+5%",
-            "medium_change": "+25%"
-        }
+        data = {"large_change": "+50%", "small_change": "+5%", "medium_change": "+25%"}
         result = sort_metrics_by_change(data, reverse=False)
 
         keys = list(result.keys())
@@ -146,7 +137,7 @@ class TestSortMetricsByChange:
         data = {
             "string_change": "+25%",
             "numeric_change": 25,  # Not a string, should be in other_metrics
-            "other_metric": "value"
+            "other_metric": "value",
         }
         result = sort_metrics_by_change(data)
 
@@ -167,21 +158,17 @@ class TestSortMetricsByRatio:
 
     def test_no_ratio_metrics(self):
         """Test dictionary with no _ratio suffix keys."""
-        data = {
-            "metric_a": 100,
-            "metric_b": 200,
-            "metric_change": "+25%"
-        }
+        data = {"metric_a": 100, "metric_b": 200, "metric_change": "+25%"}
         result = sort_metrics_by_ratio(data)
         assert result == data
 
     def test_basic_ratio_sorting(self):
         """Test basic sorting of ratio metrics by deviation from 1.0."""
         data = {
-            "small_ratio": 1.1,    # deviation: 0.1
-            "large_ratio": 2.0,    # deviation: 1.0
-            "medium_ratio": 1.5,   # deviation: 0.5
-            "other_metric": "value"
+            "small_ratio": 1.1,  # deviation: 0.1
+            "large_ratio": 2.0,  # deviation: 1.0
+            "medium_ratio": 1.5,  # deviation: 0.5
+            "other_metric": "value",
         }
         result = sort_metrics_by_ratio(data)
 
@@ -195,15 +182,15 @@ class TestSortMetricsByRatio:
     def test_ratios_below_one(self):
         """Test sorting with ratios below 1.0."""
         data = {
-            "small_decrease_ratio": 0.9,   # deviation: 0.1
-            "large_decrease_ratio": 0.5,   # deviation: 0.5
-            "increase_ratio": 1.3,         # deviation: 0.3
+            "small_decrease_ratio": 0.9,  # deviation: 0.1
+            "large_decrease_ratio": 0.5,  # deviation: 0.5
+            "increase_ratio": 1.3,  # deviation: 0.3
         }
         result = sort_metrics_by_ratio(data)
 
         keys = list(result.keys())
         assert keys[0] == "large_decrease_ratio"  # 0.5 deviation
-        assert keys[1] == "increase_ratio"        # 0.3 deviation
+        assert keys[1] == "increase_ratio"  # 0.3 deviation
         assert keys[2] == "small_decrease_ratio"  # 0.1 deviation
 
     def test_ratio_of_one(self):
@@ -211,7 +198,7 @@ class TestSortMetricsByRatio:
         data = {
             "no_change_ratio": 1.0,
             "big_change_ratio": 2.0,
-            "small_change_ratio": 1.1
+            "small_change_ratio": 1.1,
         }
         result = sort_metrics_by_ratio(data)
 
@@ -222,11 +209,7 @@ class TestSortMetricsByRatio:
 
     def test_ascending_sort(self):
         """Test sorting in ascending order."""
-        data = {
-            "large_ratio": 2.0,
-            "small_ratio": 1.1,
-            "medium_ratio": 1.5
-        }
+        data = {"large_ratio": 2.0, "small_ratio": 1.1, "medium_ratio": 1.5}
         result = sort_metrics_by_ratio(data, reverse=False)
 
         keys = list(result.keys())
@@ -239,7 +222,7 @@ class TestSortMetricsByRatio:
         data = {
             "numeric_ratio": 1.5,
             "string_ratio": "1.5",  # String, should be in other_metrics
-            "other_metric": 100
+            "other_metric": 100,
         }
         result = sort_metrics_by_ratio(data)
 
@@ -266,7 +249,7 @@ class TestSortMixedMetrics:
             "large_change": "+50%",
             "small_ratio": 1.1,
             "small_change": "+10%",
-            "another_metric": "value"
+            "another_metric": "value",
         }
         result = sort_mixed_metrics(data)
 
@@ -286,11 +269,7 @@ class TestSortMixedMetrics:
 
     def test_only_change_metrics(self):
         """Test with only change metrics."""
-        data = {
-            "big_change": "+75%",
-            "small_change": "+5%",
-            "medium_change": "+25%"
-        }
+        data = {"big_change": "+75%", "small_change": "+5%", "medium_change": "+25%"}
         result = sort_mixed_metrics(data)
 
         keys = list(result.keys())
@@ -298,11 +277,7 @@ class TestSortMixedMetrics:
 
     def test_only_ratio_metrics(self):
         """Test with only ratio metrics."""
-        data = {
-            "big_ratio": 2.0,
-            "small_ratio": 1.05,
-            "medium_ratio": 1.3
-        }
+        data = {"big_ratio": 2.0, "small_ratio": 1.05, "medium_ratio": 1.3}
         result = sort_mixed_metrics(data)
 
         keys = list(result.keys())
@@ -310,11 +285,7 @@ class TestSortMixedMetrics:
 
     def test_only_other_metrics(self):
         """Test with only other metrics (no change or ratio)."""
-        data = {
-            "metric_c": 300,
-            "metric_a": 100,
-            "metric_b": 200
-        }
+        data = {"metric_c": 300, "metric_a": 100, "metric_b": 200}
         result = sort_mixed_metrics(data)
 
         # Should preserve original order for other metrics
@@ -326,7 +297,7 @@ class TestSortMixedMetrics:
             "large_change": "+50%",
             "small_change": "+10%",
             "large_ratio": 2.0,
-            "small_ratio": 1.1
+            "small_ratio": 1.1,
         }
         result = sort_mixed_metrics(data, reverse=False)
 
@@ -361,13 +332,10 @@ class TestSortComparisonData:
             "diff": {
                 "large_change": "+50%",
                 "small_change": "+10%",
-                "other_metric": 100
+                "other_metric": 100,
             },
-            "executor_comparison": {
-                "big_ratio": 2.0,
-                "small_ratio": 1.1
-            },
-            "unrelated_data": "value"
+            "executor_comparison": {"big_ratio": 2.0, "small_ratio": 1.1},
+            "unrelated_data": "value",
         }
 
         result = sort_comparison_data(data, sort_key="mixed")
@@ -393,20 +361,14 @@ class TestSortComparisonData:
                 "diff": {
                     "medium_change": "+25%",
                     "large_change": "+75%",
-                    "small_change": "+5%"
+                    "small_change": "+5%",
                 },
-                "other_data": "preserved"
+                "other_data": "preserved",
             },
             "performance_comparison": {
-                "executors": {
-                    "executor_ratio": 1.5,
-                    "memory_ratio": 2.0
-                },
-                "stages": {
-                    "stage_change": "+30%",
-                    "duration_change": "+10%"
-                }
-            }
+                "executors": {"executor_ratio": 1.5, "memory_ratio": 2.0},
+                "stages": {"stage_change": "+30%", "duration_change": "+10%"},
+            },
         }
 
         result = sort_comparison_data(data, sort_key="mixed")
@@ -432,8 +394,8 @@ class TestSortComparisonData:
         data = {
             "diff": {
                 "metric_change": "+25%",  # Proper _change suffix
-                "metric_ratio": 1.5,     # Proper _ratio suffix
-                "other_metric": 100
+                "metric_ratio": 1.5,  # Proper _ratio suffix
+                "other_metric": 100,
             }
         }
 
@@ -456,11 +418,7 @@ class TestSortComparisonData:
     def test_invalid_sort_key(self):
         """Test handling of invalid sort key (falls back to mixed)."""
         data = {
-            "diff": {
-                "change_metric": "+25%",
-                "ratio_metric": 1.5,
-                "other_metric": 100
-            }
+            "diff": {"change_metric": "+25%", "ratio_metric": 1.5, "other_metric": 100}
         }
 
         result = sort_comparison_data(data, sort_key="invalid")
@@ -468,15 +426,15 @@ class TestSortComparisonData:
         # Should fall back to mixed sorting
         keys = list(result["diff"].keys())
         assert keys[0] == "change_metric"  # Changes first in mixed sorting
-        assert keys[1] == "ratio_metric"   # Ratios second
-        assert keys[2] == "other_metric"   # Others last
+        assert keys[1] == "ratio_metric"  # Ratios second
+        assert keys[2] == "other_metric"  # Others last
 
     def test_deep_copy_behavior(self):
         """Test that original data is not modified."""
         original_data = {
             "diff": {
                 "small_change": "+10%",  # Put small first so sorting will change order
-                "large_change": "+50%"
+                "large_change": "+50%",
             }
         }
 
@@ -492,7 +450,9 @@ class TestSortComparisonData:
         # Result should be different (sorted)
         result_keys = list(result["diff"].keys())
         original_keys = list(original_data["diff"].keys())
-        assert result_keys != original_keys  # large_change should come first after sorting
+        assert (
+            result_keys != original_keys
+        )  # large_change should come first after sorting
 
     def test_missing_nested_paths(self):
         """Test handling of missing nested paths."""
@@ -504,7 +464,7 @@ class TestSortComparisonData:
             "performance_comparison": {
                 # Missing 'executors' and 'stages' keys
                 "other_data": "value"
-            }
+            },
         }
 
         # Should not crash and return data unchanged
@@ -516,9 +476,7 @@ class TestSortComparisonData:
         data = {
             "diff": "not a dict",  # Should be ignored for sorting
             "executor_comparison": ["not", "a", "dict"],
-            "valid_diff": {
-                "change_metric": "+25%"
-            }
+            "valid_diff": {"change_metric": "+25%"},
         }
 
         result = sort_comparison_data(data)

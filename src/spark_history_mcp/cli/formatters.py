@@ -552,8 +552,7 @@ class OutputFormatter:
             return
 
         def display_metric_name(metric_key: str) -> str:
-            name = metric_key.replace("total_", "")
-            return name.replace("_", " ").title()
+            return metric_key
 
         table = Table(title="Top Stage Metric Differences")
         table.add_column("Metric", style="cyan")
@@ -1714,10 +1713,14 @@ class OutputFormatter:
         if not isinstance(data, dict) or len(data) == 0:
             return False
 
-        # Check if all values are simple types (not tuples or complex objects)
+        # Check if all values are numeric-like (not tuples or complex objects)
         for value in data.values():
             if isinstance(value, tuple):
                 return False  # This would be a comparison result
+            if isinstance(value, str):
+                return False
+            if isinstance(value, (list, set)):
+                return False
             if isinstance(value, dict) and len(value) > 5:
                 return False  # Complex nested dict
 

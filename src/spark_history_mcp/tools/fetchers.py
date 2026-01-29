@@ -24,9 +24,11 @@ def _resolve_client(server: Optional[str]):
     ctx = get_active_mcp_context()
     try:
         client = analysis_tools.get_client_or_default(ctx, server)
-    except Exception:
+    except Exception as err:
         if ctx is None:
-            raise ValueError("Spark MCP context is not available outside of a request")
+            raise ValueError(
+                "Spark MCP context is not available outside of a request"
+            ) from err
         client = get_client(ctx, server)
     use_cache = ctx is not None and not isinstance(client, mock.Mock)
     return client, use_cache

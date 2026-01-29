@@ -337,7 +337,9 @@ if CLI_AVAILABLE:
 
             with patch_tool_context(client, tools_module):
                 if analysis_type in ["jobs", "stages"]:
-                    slowest_data = analysis_func(app_id=app_id, server=server, n=top_n)
+                    slowest_data = analysis_func(
+                        app_id=app_id, server=server, n=top_n, compact=False
+                    )
                 else:  # sql
                     slowest_data = analysis_func(
                         app_id=app_id, server=server, top_n=top_n

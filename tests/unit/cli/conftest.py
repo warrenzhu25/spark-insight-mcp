@@ -8,23 +8,23 @@ used across all CLI test modules.
 import json
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
+
 import pytest
 
 try:
     from click.testing import CliRunner
-    import click
+
     CLI_AVAILABLE = True
 except ImportError:
     CLI_AVAILABLE = False
 
 from spark_history_mcp.models.spark_types import (
-    ApplicationInfo,
     ApplicationAttemptInfo,
+    ApplicationInfo,
+    ExecutorSummary,
     JobData,
     StageData,
-    ExecutorSummary
 )
 
 
@@ -60,8 +60,9 @@ def mock_config_file():
         },
     }
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         import yaml
+
         yaml.dump(config_content, f)
         yield Path(f.name)
 
@@ -80,7 +81,7 @@ def mock_spark_client():
     client.list_stages.return_value = [create_mock_stage(1, "Test Stage")]
     client.list_applications.return_value = [
         create_mock_application("app-123", "Test App 1"),
-        create_mock_application("app-456", "Test App 2")
+        create_mock_application("app-456", "Test App 2"),
     ]
 
     return client
@@ -95,18 +96,18 @@ def mock_tools_module():
     mock_tools.compare_app_performance.return_value = {
         "applications": {"app1": {"id": "app-123"}, "app2": {"id": "app-456"}},
         "performance_comparison": {"stages": {"top_stage_differences": []}},
-        "key_recommendations": []
+        "key_recommendations": [],
     }
 
     mock_tools.get_application_insights.return_value = {
         "application": {"id": "app-123", "name": "Test App"},
-        "insights": {"bottlenecks": [], "recommendations": []}
+        "insights": {"bottlenecks": [], "recommendations": []},
     }
 
     mock_tools.compare_stages.return_value = {
         "summary": {"significance_threshold": 0.1},
         "stage_comparison": {},
-        "recommendations": []
+        "recommendations": [],
     }
 
     return mock_tools
@@ -115,13 +116,9 @@ def mock_tools_module():
 @pytest.fixture
 def mock_comparison_context():
     """Mock comparison context file operations."""
-    context_data = {
-        "app_id1": "app-123",
-        "app_id2": "app-456",
-        "server": "local"
-    }
+    context_data = {"app_id1": "app-123", "app_id2": "app-456", "server": "local"}
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(context_data, f)
         yield Path(f.name), context_data
 
@@ -138,14 +135,10 @@ def create_mock_application(app_id: str, name: str) -> ApplicationInfo:
         last_updated="2023-01-01T11:00:00.000Z",
         duration=3600000,
         spark_user="test_user",
-        completed=True
+        completed=True,
     )
 
-    return ApplicationInfo(
-        id=app_id,
-        name=name,
-        attempts=[attempt]
-    )
+    return ApplicationInfo(id=app_id, name=name, attempts=[attempt])
 
 
 def create_mock_job(job_id: int, name: str) -> JobData:
@@ -164,7 +157,7 @@ def create_mock_job(job_id: int, name: str) -> JobData:
         num_active_stages=0,
         num_completed_stages=1,
         num_skipped_stages=0,
-        num_failed_stages=0
+        num_failed_stages=0,
     )
 
 
@@ -199,7 +192,7 @@ def create_mock_stage(stage_id: int, name: str) -> StageData:
         description=f"Test stage {stage_id}",
         scheduling_pool="default",
         rdd_ids=[],
-        accumulables=[]
+        accumulables=[],
     )
 
 
@@ -226,7 +219,7 @@ def create_mock_executor(executor_id: str) -> ExecutorSummary:
         is_blacklisted=False,
         max_memory=2000000000,
         add_time="2023-01-01T10:00:00.000Z",
-        executor_logs={}
+        executor_logs={},
     )
 
 
@@ -244,10 +237,9 @@ class CLITestCase:
 
     def assert_cli_success(self, result, expected_exit_code=0):
         """Assert that CLI command succeeded."""
-        if result.exit_code != expected_exit_code:
-            print(f"CLI Output: {result.output}")
-            print(f"Exception: {result.exception}")
-        assert result.exit_code == expected_exit_code
+        assert result.exit_code == expected_exit_code, (
+            f"CLI Output: {result.output}\nException: {result.exception}"
+        )
 
     def assert_cli_error(self, result, expected_message: str = None):
         """Assert that CLI command failed with expected message."""

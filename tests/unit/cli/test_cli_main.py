@@ -5,13 +5,14 @@ Tests for spark_history_mcp.cli.main module.
 import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 try:
-    from click.testing import CliRunner
     import click
+    from click.testing import CliRunner
+
     CLI_AVAILABLE = True
 except ImportError:
     CLI_AVAILABLE = False
@@ -26,8 +27,8 @@ class TestSetupLogging:
 
     def test_setup_logging_info_level(self):
         """Test logging setup with INFO level (default)."""
-        with patch('logging.basicConfig') as mock_basic_config:
-            with patch('logging.getLogger') as mock_get_logger:
+        with patch("logging.basicConfig") as mock_basic_config:
+            with patch("logging.getLogger") as mock_get_logger:
                 mock_logger = MagicMock()
                 mock_get_logger.return_value = mock_logger
 
@@ -36,18 +37,20 @@ class TestSetupLogging:
                 # Verify basicConfig was called with INFO level
                 mock_basic_config.assert_called_once()
                 call_args = mock_basic_config.call_args
-                assert call_args[1]['level'] == logging.INFO
-                assert call_args[1]['format'] == "%(message)s"
-                assert call_args[1]['datefmt'] == "[%X]"
+                assert call_args[1]["level"] == logging.INFO
+                assert call_args[1]["format"] == "%(message)s"
+                assert call_args[1]["datefmt"] == "[%X]"
 
                 # Verify specific loggers were configured
-                assert mock_get_logger.call_count >= 5  # spark_history_mcp + 4 third-party loggers
+                assert (
+                    mock_get_logger.call_count >= 5
+                )  # spark_history_mcp + 4 third-party loggers
                 mock_logger.setLevel.assert_called()
 
     def test_setup_logging_debug_level(self):
         """Test logging setup with DEBUG level."""
-        with patch('logging.basicConfig') as mock_basic_config:
-            with patch('logging.getLogger') as mock_get_logger:
+        with patch("logging.basicConfig") as mock_basic_config:
+            with patch("logging.getLogger") as mock_get_logger:
                 mock_logger = MagicMock()
                 mock_get_logger.return_value = mock_logger
 
@@ -56,12 +59,12 @@ class TestSetupLogging:
                 # Verify basicConfig was called with DEBUG level
                 mock_basic_config.assert_called_once()
                 call_args = mock_basic_config.call_args
-                assert call_args[1]['level'] == logging.DEBUG
+                assert call_args[1]["level"] == logging.DEBUG
 
     def test_setup_logging_third_party_loggers_suppressed(self):
         """Test that third-party loggers are suppressed in non-debug mode."""
-        with patch('logging.basicConfig'):
-            with patch('logging.getLogger') as mock_get_logger:
+        with patch("logging.basicConfig"):
+            with patch("logging.getLogger") as mock_get_logger:
                 mock_logger = MagicMock()
                 mock_get_logger.return_value = mock_logger
 
@@ -76,8 +79,8 @@ class TestSetupLogging:
 
     def test_setup_logging_cli_not_available(self):
         """Test logging setup when CLI is not available."""
-        with patch('spark_history_mcp.cli.main.CLI_AVAILABLE', False):
-            with patch('logging.basicConfig') as mock_basic_config:
+        with patch("spark_history_mcp.cli.main.CLI_AVAILABLE", False):
+            with patch("logging.basicConfig") as mock_basic_config:
                 setup_logging(debug=True)
 
                 # Should return early without configuring logging
@@ -113,7 +116,7 @@ class TestCLIGroup:
 
     def test_cli_group_context_setup_default_config(self, runner):
         """Test CLI context setup with default configuration."""
-        with patch('spark_history_mcp.cli.main.setup_logging') as mock_setup_logging:
+        with patch("spark_history_mcp.cli.main.setup_logging") as mock_setup_logging:
             result = runner.invoke(cli, [])
 
             assert result.exit_code == 0
@@ -125,7 +128,9 @@ class TestCLIGroup:
             config_path = Path(temp_dir) / "custom.yaml"
             config_path.touch()  # Create empty file
 
-            with patch('spark_history_mcp.cli.main.setup_logging') as mock_setup_logging:
+            with patch(
+                "spark_history_mcp.cli.main.setup_logging"
+            ) as mock_setup_logging:
                 result = runner.invoke(cli, ["--config", str(config_path)])
 
                 assert result.exit_code == 0
@@ -133,7 +138,7 @@ class TestCLIGroup:
 
     def test_cli_group_debug_option(self, runner):
         """Test CLI group with debug option."""
-        with patch('spark_history_mcp.cli.main.setup_logging') as mock_setup_logging:
+        with patch("spark_history_mcp.cli.main.setup_logging") as mock_setup_logging:
             result = runner.invoke(cli, ["--debug"])
 
             assert result.exit_code == 0
@@ -141,7 +146,7 @@ class TestCLIGroup:
 
     def test_cli_group_quiet_option(self, runner):
         """Test CLI group with quiet option."""
-        with patch('spark_history_mcp.cli.main.setup_logging') as mock_setup_logging:
+        with patch("spark_history_mcp.cli.main.setup_logging") as mock_setup_logging:
             result = runner.invoke(cli, ["--quiet"])
 
             assert result.exit_code == 0
@@ -149,7 +154,7 @@ class TestCLIGroup:
 
     def test_cli_group_debug_and_quiet_options(self, runner):
         """Test CLI group with both debug and quiet options."""
-        with patch('spark_history_mcp.cli.main.setup_logging') as mock_setup_logging:
+        with patch("spark_history_mcp.cli.main.setup_logging") as mock_setup_logging:
             result = runner.invoke(cli, ["--debug", "--quiet"])
 
             assert result.exit_code == 0
@@ -158,6 +163,7 @@ class TestCLIGroup:
 
     def test_cli_group_context_object_creation(self, runner):
         """Test that CLI context object is properly created and populated."""
+
         # Create a custom command to inspect the context
         @cli.command()
         @click.pass_context
@@ -195,12 +201,16 @@ class TestCLIGroup:
                 assert ctx.obj["quiet"] is True
 
             try:
-                result = runner.invoke(cli, [
-                    "--config", str(config_path),
-                    "--debug",
-                    "--quiet",
-                    "test-context-options"
-                ])
+                result = runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "--debug",
+                        "--quiet",
+                        "test-context-options",
+                    ],
+                )
                 assert result.exit_code == 0
             finally:
                 if "test-context-options" in cli.commands:
@@ -242,8 +252,9 @@ class TestCLICommandRegistration:
         # Since the CLI module is already loaded with successful imports,
         # we can't easily test the import error path. This test verifies
         # that the import error handling code exists and is structured correctly.
-        import spark_history_mcp.cli.main
         import inspect
+
+        import spark_history_mcp.cli.main
 
         # Verify the try/except block exists in the source
         source = inspect.getsource(spark_history_mcp.cli.main)
@@ -262,20 +273,23 @@ class TestCLIFallback:
         # to run these tests, but we can test the fallback function directly
 
         # Mock CLI_AVAILABLE = False
-        with patch('spark_history_mcp.cli.main.CLI_AVAILABLE', False):
-            with patch('builtins.print') as mock_print:
-                with patch('sys.exit') as mock_exit:
+        with patch("spark_history_mcp.cli.main.CLI_AVAILABLE", False):
+            with patch("builtins.print") as mock_print:
+                with patch("sys.exit") as mock_exit:
                     # Import the fallback function
                     from spark_history_mcp.cli.main import cli as fallback_cli
 
                     # The fallback should be the simple function
-                    if callable(fallback_cli) and not hasattr(fallback_cli, 'commands'):
+                    if callable(fallback_cli) and not hasattr(fallback_cli, "commands"):
                         fallback_cli()
 
                         # Verify the fallback message was printed
                         mock_print.assert_called()
                         print_calls = [call[0][0] for call in mock_print.call_args_list]
-                        assert any("CLI dependencies not installed" in call for call in print_calls)
+                        assert any(
+                            "CLI dependencies not installed" in call
+                            for call in print_calls
+                        )
                         mock_exit.assert_called_once_with(1)
 
 
@@ -288,7 +302,7 @@ class TestMainExecution:
         # This is primarily for coverage - the actual execution is handled by click
         # We can verify that the cli function is the main entry point
         assert callable(cli)
-        assert hasattr(cli, 'main')  # Click groups have a main method
+        assert hasattr(cli, "main")  # Click groups have a main method
 
     def test_cli_invoke_without_command_shows_help(self):
         """Test that invoking CLI without command shows help."""
@@ -298,7 +312,7 @@ class TestMainExecution:
         assert result.exit_code == 0
         assert "Usage:" in result.output or "Spark History Server MCP" in result.output
 
-    @patch('spark_history_mcp.cli.main.setup_logging')
+    @patch("spark_history_mcp.cli.main.setup_logging")
     def test_logging_setup_called_on_invocation(self, mock_setup_logging):
         """Test that logging setup is called when CLI is invoked."""
         runner = CliRunner()

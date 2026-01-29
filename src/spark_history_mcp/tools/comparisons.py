@@ -5,6 +5,7 @@ This module contains tools for comparing performance metrics, resource allocatio
 and configurations between different Spark applications.
 """
 
+import logging
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
@@ -29,6 +30,8 @@ from .recommendations import (
 )
 from .schema import CompareAppPerformanceOutput, validate_output
 from .timelines import merge_consecutive_intervals
+
+logger = logging.getLogger(__name__)
 
 # Import functions that we'll use in helper functions
 # These are defined later in this file, so we'll need to reference them carefully
@@ -62,6 +65,20 @@ def _resolve_client(server: Optional[str]) -> Any:
                 "Spark MCP context is not available outside of a request."
             ) from exc
         raise
+
+
+def _get_basic_app_info(app) -> Dict[str, Any]:
+    """Return a minimal app metadata snapshot for comparisons."""
+
+    return {
+        "id": getattr(app, "id", None),
+        "name": getattr(app, "name", None),
+        "cores_granted": getattr(app, "cores_granted", None),
+        "max_cores": getattr(app, "max_cores", None),
+        "cores_per_executor": getattr(app, "cores_per_executor", None),
+        "memory_per_executor_mb": getattr(app, "memory_per_executor_mb", None),
+        "max_executors": getattr(app, "max_executors", None),
+    }
 
 
 @mcp.tool()
@@ -167,17 +184,6 @@ def compare_app_performance(
 
     # Extract stage differences for recommendations logic
     detailed_comparisons = stage_analysis.get("top_stage_differences", [])
-
-    # Calculate summary statistics for compatibility
-    if detailed_comparisons:
-        time_diffs = [
-            comp["time_difference"]["absolute_seconds"] for comp in detailed_comparisons
-        ]
-        total_time_diff = sum(time_diffs)
-        avg_time_diff = total_time_diff / len(time_diffs)
-        max_time_diff = max(time_diffs)
-    else:
-        total_time_diff = avg_time_diff = max_time_diff = 0
 
     # Enhanced recommendations combining both application and stage-level insights
     # Start with basic recommendations already generated above
@@ -705,7 +711,6 @@ def compare_stages(
         Dictionary containing stage comparison with significant differences only
     """
     client = _resolve_client(server)
-
     try:
         # Get stage data with summaries
         stage1 = client.get_stage_attempt(
@@ -729,16 +734,16 @@ def compare_stages(
                 app_id=app_id1, stage_id=stage_id1, attempt_id=0
             )
             stage1.task_metrics_distributions = task_dist1
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to fetch task summary for app1 stage", exc_info=exc)
 
         try:
             task_dist2 = client.get_stage_task_summary(
                 app_id=app_id2, stage_id=stage_id2, attempt_id=0
             )
             stage2.task_metrics_distributions = task_dist2
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to fetch task summary for app2 stage", exc_info=exc)
 
     except Exception as e:
         return {
@@ -1187,7 +1192,6 @@ def compare_app_executor_timeline(
         Dictionary containing comprehensive application executor timeline comparison
     """
     client = _resolve_client(server)
-
     try:
         # Get application information for both apps
         app1 = client.get_application(app_id1)
@@ -1414,7 +1418,6 @@ def compare_app_executor_timeline(
             if not timeline:
                 return {}
 
-            total_intervals = len(timeline)
             non_zero_intervals = [t for t in timeline if t["active_executor_count"] > 0]
 
             if not non_zero_intervals:
@@ -1935,8 +1938,6 @@ def compare_app_executors(
     Returns:
         Dict containing executor performance comparison, efficiency ratios, and recommendations
     """
-    client = _resolve_client(server)
-
     try:
         # Get executor summaries for both applications
         exec_summary1 = executor_tools.get_executor_summary(app_id1, server)
@@ -2315,8 +2316,6 @@ def compare_app_stages_aggregated(
     Returns:
         Dict containing aggregated stage comparison, I/O analysis, and recommendations
     """
-    client = _resolve_client(server)
-
     try:
         # Get stages from both applications - try with summaries first, fallback if needed
         try:
@@ -2708,8 +2707,9 @@ def _calculate_stage_duration(stage) -> float:
     if submission and completion:
         try:
             return max((completion - submission).total_seconds(), 0.0)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to compute submission duration", exc_info=exc)
+            return 0.0
 
     executor_run_time = getattr(stage, "executor_run_time", None)
     if executor_run_time is not None:
