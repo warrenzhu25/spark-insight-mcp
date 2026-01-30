@@ -3,12 +3,13 @@
     "spark-history-mcp": {
       "command": "uv",
       "args": [
+        "--no-config",
         "run",
         "-m",
         "spark_history_mcp.core.main",
         "--frozen"
       ],
-      "cwd": "/Users/warren/github/mcp-apache-spark-history-server"
+      "cwd": "/usr/local/google/home/warrenzhu/spark-insight-mcp"
     }
   }
 }
