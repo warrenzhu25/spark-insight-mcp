@@ -245,9 +245,16 @@ def compare_app_performance(
         )
 
     # Environment and configuration comparison (using default filter_auto_generated=True)
-    environment_comparison = _compare_environments(
-        None, app_id1, app_id2, filter_auto_generated=True, server=server
-    )
+    from .comparison_modules.utils import _compare_environments as _cmp_env
+
+    try:
+        env1 = fetcher_tools.fetch_env(app_id=app_id1, server=server)
+        env2 = fetcher_tools.fetch_env(app_id=app_id2, server=server)
+        environment_comparison = _cmp_env(env1, env2, filter_auto_generated=True)
+    except Exception:
+        environment_comparison = _compare_environments(
+            None, app_id1, app_id2, filter_auto_generated=True, server=server
+        )
 
     # SQL execution plans comparison
     sql_plans_comparison = _compare_sql_execution_plans(None, app_id1, app_id2)
@@ -331,6 +338,9 @@ def compare_app_performance(
         "environment_comparison": environment_comparison,
     }
 
+    # Always include app_summary_diff so CLI can render "Application Metrics Comparison"
+    result["app_summary_diff"] = app_summary_diff
+
     if use_compact:
         # Compact: only key_recommendations with minimal fields
         result["key_recommendations"] = [
@@ -339,7 +349,6 @@ def compare_app_performance(
     else:
         # Full: include both duplicate structures for backward compat
         result["stage_deep_dive"] = stage_analysis
-        result["app_summary_diff"] = app_summary_diff
         result["recommendations"] = sorted_recommendations
         result["key_recommendations"] = filtered_recommendations
 

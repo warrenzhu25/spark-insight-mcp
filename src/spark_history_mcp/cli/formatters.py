@@ -632,13 +632,21 @@ class OutputFormatter:
         table.add_column("Property", style="cyan")
         table.add_column("App1", style="blue")
         table.add_column("App2", style="blue")
-        for prop in sorted(diff_props.keys()):
-            values = diff_props[prop]
-            table.add_row(
-                prop,
-                str(values.get("app1", "N/A")),
-                str(values.get("app2", "N/A")),
-            )
+        if isinstance(diff_props, list):
+            for entry in sorted(diff_props, key=lambda e: e.get("property", "")):
+                table.add_row(
+                    str(entry.get("property", "")),
+                    str(entry.get("app1_value", "N/A")),
+                    str(entry.get("app2_value", "N/A")),
+                )
+        else:
+            for prop in sorted(diff_props.keys()):
+                values = diff_props[prop]
+                table.add_row(
+                    prop,
+                    str(values.get("app1", "N/A")),
+                    str(values.get("app2", "N/A")),
+                )
         console.print(table)
 
     def _format_comparison_header(self, applications: Dict[str, Any]) -> None:
