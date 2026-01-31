@@ -495,6 +495,9 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
     menu_lines.extend(
         [
             "\\[t] Compare Application Timeline",  # Escape brackets for Rich
+            "\\[e] Compare Environment Configurations",
+            "\\[s] Compare Application Summaries",
+            "\\[a] Compare Aggregated Stage Metrics",
             "\\[q] Quit / Continue",
         ]
     )
@@ -524,8 +527,13 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
         if choice == "q":
             return
         elif choice == "t":
-            # Execute timeline comparison
             execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "e":
+            execute_env_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "s":
+            execute_summary_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "a":
+            execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice.isdigit():
             choice_num = int(choice)
             # Find matching stage option
@@ -645,6 +653,65 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
 
     except Exception as e:
         click.echo(f"Error executing stage timeline comparison: {e}")
+
+
+def execute_env_comparison(app_id1, app_id2, server, formatter, ctx):
+    """Execute environment comparison command."""
+    try:
+        click.echo("Comparing environment configurations...")
+
+        import spark_history_mcp.tools.tools as tools_module
+        from spark_history_mcp.tools import compare_app_environments
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        with patch_tool_context(client, tools_module):
+            data = compare_app_environments(
+                app_id1=app_id1, app_id2=app_id2, server=server
+            )
+            formatter.output(data, f"Environment Comparison: {app_id1} vs {app_id2}")
+
+    except Exception as e:
+        click.echo(f"Error comparing environments: {e}")
+
+
+def execute_summary_comparison(app_id1, app_id2, server, formatter, ctx):
+    """Execute application summary comparison command."""
+    try:
+        click.echo("Comparing application summaries...")
+
+        import spark_history_mcp.tools.tools as tools_module
+        from spark_history_mcp.tools import compare_app_summaries
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        with patch_tool_context(client, tools_module):
+            data = compare_app_summaries(
+                app_id1=app_id1, app_id2=app_id2, server=server
+            )
+            formatter.output(data, f"Summary Comparison: {app_id1} vs {app_id2}")
+
+    except Exception as e:
+        click.echo(f"Error comparing summaries: {e}")
+
+
+def execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx):
+    """Execute aggregated stage metrics comparison command."""
+    try:
+        click.echo("Comparing aggregated stage metrics...")
+
+        import spark_history_mcp.tools.tools as tools_module
+        from spark_history_mcp.tools import compare_app_stages_aggregated
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        with patch_tool_context(client, tools_module):
+            data = compare_app_stages_aggregated(
+                app_id1=app_id1, app_id2=app_id2, server=server
+            )
+            formatter.output(
+                data, f"Aggregated Stage Comparison: {app_id1} vs {app_id2}"
+            )
+
+    except Exception as e:
+        click.echo(f"Error comparing aggregated stages: {e}")
 
 
 def show_post_stage_menu(
@@ -1397,7 +1464,7 @@ if CLI_AVAILABLE:
         except Exception as e:
             raise click.ClickException(f"Error comparing jobs: {e}") from e
 
-    @compare.command("stages-aggregated")
+    @compare.command("stages-agg")
     @click.option(
         "--apps",
         nargs=2,

@@ -613,7 +613,7 @@ class TestAdditionalCompareCommands:
 
         result = cli_runner.invoke(
             compare,
-            ["stages-aggregated", "--format", "json"],
+            ["stages-agg", "--format", "json"],
             obj={"config_path": CONFIG_PATH},
         )
 
@@ -1195,7 +1195,7 @@ class TestCompareMoreErrorsAndBranches:
         mock_get_client.return_value = MagicMock()
         result = cli_runner.invoke(
             compare,
-            ["stages-aggregated"],
+            ["stages-agg"],
             obj={"config_path": CONFIG_PATH},
         )
         assert result.exit_code != 0
