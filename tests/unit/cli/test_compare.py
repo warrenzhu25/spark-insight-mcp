@@ -601,25 +601,6 @@ class TestAdditionalCompareCommands:
         assert call_args.kwargs["stage_id2"] == 6
         assert call_args.kwargs["interval_minutes"] == 2
 
-    @patch("spark_history_mcp.cli.commands.compare.get_app_context")
-    @patch("spark_history_mcp.cli.commands.compare.get_spark_client")
-    @patch("spark_history_mcp.tools.compare_app_stages_aggregated")
-    def test_stages_aggregated_basic(
-        self, mock_stages_agg, mock_get_client, mock_get_context, cli_runner
-    ):
-        mock_get_context.return_value = ("app-1", "app-2", "local")
-        mock_get_client.return_value = MagicMock()
-        mock_stages_agg.return_value = {"stage_comparison": {}}
-
-        result = cli_runner.invoke(
-            compare,
-            ["stages-agg", "--format", "json"],
-            obj={"config_path": CONFIG_PATH},
-        )
-
-        assert result.exit_code == 0
-        mock_stages_agg.assert_called_once()
-
     @patch("spark_history_mcp.cli.commands.compare.resolve_app_identifiers")
     @patch("spark_history_mcp.cli.commands.compare.get_spark_client")
     @patch("spark_history_mcp.tools.compare_app_jobs")
@@ -1179,27 +1160,6 @@ class TestCompareMoreErrorsAndBranches:
         )
         assert result.exit_code != 0
         assert "Error comparing executors" in result.output
-
-    @patch(
-        "spark_history_mcp.cli.commands.compare.get_app_context",
-        return_value=("a1", "a2", "local"),
-    )
-    @patch("spark_history_mcp.cli.commands.compare.get_spark_client")
-    @patch(
-        "spark_history_mcp.tools.compare_app_stages_aggregated",
-        side_effect=Exception("boom"),
-    )
-    def test_stages_aggregated_error_handling(
-        self, mock_comp, mock_get_client, mock_get_ctx, cli_runner
-    ):
-        mock_get_client.return_value = MagicMock()
-        result = cli_runner.invoke(
-            compare,
-            ["stages-agg"],
-            obj={"config_path": CONFIG_PATH},
-        )
-        assert result.exit_code != 0
-        assert "Error comparing aggregated stages" in result.output
 
     @patch(
         "spark_history_mcp.cli.commands.compare.get_spark_client",

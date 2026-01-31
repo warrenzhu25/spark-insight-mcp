@@ -496,8 +496,7 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
         [
             "\\[t] Compare Application Timeline",  # Escape brackets for Rich
             "\\[e] Compare Environment Configurations",
-            "\\[s] Compare Application Summaries",
-            "\\[a] Compare Aggregated Stage Metrics",
+            "\\[s] Compare Application Summaries (includes stages)",
             "\\[q] Quit / Continue",
         ]
     )
@@ -532,8 +531,6 @@ def show_interactive_menu(comparison_data, app_id1, app_id2, server, formatter, 
             execute_env_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice == "s":
             execute_summary_comparison(app_id1, app_id2, server, formatter, ctx)
-        elif choice == "a":
-            execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice.isdigit():
             choice_num = int(choice)
             # Find matching stage option
@@ -651,9 +648,7 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
                 comparison_data, f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
             )
             if formatter.format_type == "human" and _is_interactive():
-                show_generic_follow_up_menu(
-                    app_id1, app_id2, server, formatter, ctx
-                )
+                show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
 
     except Exception as e:
         click.echo(f"Error executing stage timeline comparison: {e}")
@@ -699,29 +694,6 @@ def execute_summary_comparison(app_id1, app_id2, server, formatter, ctx):
 
     except Exception as e:
         click.echo(f"Error comparing summaries: {e}")
-
-
-def execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx):
-    """Execute aggregated stage metrics comparison command."""
-    try:
-        click.echo("Comparing aggregated stage metrics...")
-
-        import spark_history_mcp.tools.tools as tools_module
-        from spark_history_mcp.tools import compare_app_stages_aggregated
-
-        client = get_spark_client(ctx.obj["config_path"], server)
-        with patch_tool_context(client, tools_module):
-            data = compare_app_stages_aggregated(
-                app_id1=app_id1, app_id2=app_id2, server=server
-            )
-            formatter.output(
-                data, f"Aggregated Stage Comparison: {app_id1} vs {app_id2}"
-            )
-            if formatter.format_type == "human" and _is_interactive():
-                show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
-
-    except Exception as e:
-        click.echo(f"Error comparing aggregated stages: {e}")
 
 
 def show_post_stage_menu(
@@ -807,8 +779,7 @@ def show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx):
     menu_lines.extend(
         [
             "\\[a] Compare Applications (full)",
-            "\\[s] Compare Summaries",
-            "\\[g] Compare Aggregated Stages",
+            "\\[s] Compare Summaries (includes stages)",
             "\\[t] Compare Timeline",
             "\\[e] Compare Environment",
             "\\[q] Quit",
@@ -839,8 +810,6 @@ def show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx):
             execute_app_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice == "s":
             execute_summary_comparison(app_id1, app_id2, server, formatter, ctx)
-        elif choice == "g":
-            execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice == "t":
             execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
         elif choice == "e":
@@ -1555,79 +1524,6 @@ if CLI_AVAILABLE:
 
         except Exception as e:
             raise click.ClickException(f"Error comparing jobs: {e}") from e
-
-    @compare.command("stages-agg")
-    @click.option(
-        "--apps",
-        nargs=2,
-        metavar="APP1 APP2",
-        help="Override apps from context (app1 app2)",
-    )
-    @click.option("--server", "-s", help="Server name to use")
-    @click.option(
-        "--significance-threshold",
-        type=float,
-        default=0.1,
-        help="Minimum difference threshold to show metric",
-    )
-    @click.option(
-        "--show-only-significant/--show-all",
-        default=True,
-        help="Filter out metrics below significance threshold",
-    )
-    @click.option(
-        "--format",
-        "-f",
-        "output_format",
-        type=click.Choice(["human", "json", "table"]),
-        default="human",
-        help="Output format",
-    )
-    @click.pass_context
-    def stages_aggregated(
-        ctx,
-        apps: Optional[Tuple[str, str]],
-        server: Optional[str],
-        significance_threshold: float,
-        show_only_significant: bool,
-        output_format: str,
-    ):
-        """Compare aggregated stage metrics between applications."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
-        try:
-            # Get app context
-            if apps:
-                app_id1, app_id2 = apps
-                final_server = server
-            else:
-                app_id1, app_id2, final_server = get_app_context(server=server)
-
-            client = get_spark_client(config_path, final_server)
-
-            import spark_history_mcp.tools.tools as tools_module
-            from spark_history_mcp.tools import compare_app_stages_aggregated
-
-            with patch_tool_context(client, tools_module):
-                comparison_data = compare_app_stages_aggregated(
-                    app_id1=app_id1,
-                    app_id2=app_id2,
-                    server=final_server,
-                    significance_threshold=significance_threshold,
-                    show_only_significant=show_only_significant,
-                )
-                formatter.output(
-                    comparison_data,
-                    f"Stages Aggregated Comparison: {app_id1} vs {app_id2}",
-                )
-                if output_format == "human" and _is_interactive():
-                    show_generic_follow_up_menu(
-                        app_id1, app_id2, final_server, formatter, ctx
-                    )
-
-        except Exception as e:
-            raise click.ClickException(f"Error comparing aggregated stages: {e}") from e
 
     @compare.command("status")
     @click.option(

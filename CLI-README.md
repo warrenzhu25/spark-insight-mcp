@@ -307,8 +307,8 @@ uv run spark-mcp --cli compare executors
 # Job-level performance comparison (uses saved context)
 uv run spark-mcp --cli compare jobs
 
-# Aggregated stage metrics comparison (uses saved context)
-uv run spark-mcp --cli compare stages-agg
+# Aggregated stage metrics are included in application summaries
+uv run spark-mcp --cli compare apps app-123 app-456
 ```
 
 ### ⚡ Stage-Level Comparisons

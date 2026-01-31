@@ -18,6 +18,21 @@
     "significant_metrics": 2,
     "significance_threshold": 0.1,
     "filtering_applied": false
+  },
+  "aggregated_stage_comparison": {
+    "applications": {
+      "app1": {
+        "id": "app-1"
+      },
+      "app2": {
+        "id": "app-2"
+      }
+    },
+    "stage_comparison": {
+      "duration_ratio": 1.5
+    },
+    "efficiency_analysis": {
+      "app1_avg_tasks_per_stage": 10.0
+    }
   }
 }
-

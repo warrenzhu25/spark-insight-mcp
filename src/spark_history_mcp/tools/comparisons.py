@@ -422,6 +422,22 @@ def compare_app_summaries(
         },
     }
 
+    try:
+        aggregated_stage_comparison = compare_app_stages_aggregated(
+            app_id1=app_id1,
+            app_id2=app_id2,
+            server=server,
+            significance_threshold=significance_threshold,
+            show_only_significant=True,
+        )
+        if not aggregated_stage_comparison.get("error"):
+            result["aggregated_stage_comparison"] = aggregated_stage_comparison
+    except Exception as exc:
+        logger.debug(
+            "Failed to compute aggregated stage comparison for app summaries",
+            exc_info=exc,
+        )
+
     # Sort the result by difference percentage (descending)
     return sort_comparison_data(result, sort_key="change")
 
@@ -2620,7 +2636,11 @@ def compare_app_environments(
 
 
 def _compare_environments(
-    client, app_id1: str, app_id2: str, filter_auto_generated: bool = True, server: Optional[str] = None
+    client,
+    app_id1: str,
+    app_id2: str,
+    filter_auto_generated: bool = True,
+    server: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compare Spark environment configurations between two applications."""
     try:

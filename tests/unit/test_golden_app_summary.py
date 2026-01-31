@@ -83,9 +83,10 @@ def test_get_app_summary_golden(
     assert out == expected
 
 
+@patch("spark_history_mcp.tools.comparisons.compare_app_stages_aggregated")
 @patch("spark_history_mcp.tools.tools.get_app_summary")
 @patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_compare_app_summaries_golden(mock_ctx, mock_get_app_summary):
+def test_compare_app_summaries_golden(mock_ctx, mock_get_app_summary, mock_stage_agg):
     from spark_history_mcp.tools.tools import compare_app_summaries
 
     # app1 summary (subset of fields)
@@ -110,6 +111,11 @@ def test_compare_app_summaries_golden(mock_ctx, mock_get_app_summary):
         return app1 if app_id == "app-1" else app2
 
     mock_get_app_summary.side_effect = side_effect
+    mock_stage_agg.return_value = {
+        "applications": {"app1": {"id": "app-1"}, "app2": {"id": "app-2"}},
+        "stage_comparison": {"duration_ratio": 1.5},
+        "efficiency_analysis": {"app1_avg_tasks_per_stage": 10.0},
+    }
 
     out = compare_app_summaries("app-1", "app-2", significance_threshold=0.1)
 

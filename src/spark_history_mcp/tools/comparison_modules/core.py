@@ -5,6 +5,7 @@ This module contains the main application comparison functions including
 comprehensive performance comparison and summary comparison.
 """
 
+import logging
 from typing import Any, Dict, Optional
 
 from ...core.app import mcp
@@ -28,6 +29,8 @@ from .utils import (
     resolve_client,
     sort_comparison_data,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @mcp.tool()
@@ -327,6 +330,24 @@ def compare_app_summaries(
             "filtering_applied": len(diff) < len(app1_metrics) - 1,
         },
     }
+
+    try:
+        from .environment import compare_app_stages_aggregated
+
+        aggregated_stage_comparison = compare_app_stages_aggregated(
+            app_id1=app_id1,
+            app_id2=app_id2,
+            server=server,
+            significance_threshold=significance_threshold,
+            show_only_significant=True,
+        )
+        if not aggregated_stage_comparison.get("error"):
+            result["aggregated_stage_comparison"] = aggregated_stage_comparison
+    except Exception as exc:
+        logger.debug(
+            "Failed to compute aggregated stage comparison for app summaries",
+            exc_info=exc,
+        )
 
     return sort_comparison_data(result, sort_key="change")
 

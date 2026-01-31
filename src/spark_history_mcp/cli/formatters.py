@@ -561,6 +561,11 @@ class OutputFormatter:
         console.print()  # Empty line for spacing
         console.print(table)
 
+        aggregated_stage = app_summary_diff.get("aggregated_stage_comparison")
+        if aggregated_stage:
+            console.print()
+            self._format_aggregated_stage_comparison_result(aggregated_stage)
+
     def _format_top_metrics_differences(self, metrics: List[Dict[str, Any]]) -> None:
         """Format top application-level metric differences."""
         if not metrics:
