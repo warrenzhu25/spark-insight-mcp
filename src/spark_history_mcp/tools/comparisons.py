@@ -2583,6 +2583,49 @@ def compare_app_stages_aggregated(
         }
 
 
+@mcp.tool()
+def compare_app_environments(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+    filter_auto_generated: bool = True,
+) -> Dict[str, Any]:
+    """
+    Compare environment configurations between two Spark applications.
+
+    Compares Spark properties, system properties, and JVM information to identify
+    configuration differences that may affect performance.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional Spark History Server name
+        filter_auto_generated: Whether to filter auto-generated properties (default: True)
+
+    Returns:
+        Dict containing environment configuration differences
+    """
+    from .comparison_modules.utils import _compare_environments as _cmp_env
+
+    try:
+        env1 = fetcher_tools.fetch_env(app_id=app_id1, server=server)
+        env2 = fetcher_tools.fetch_env(app_id=app_id2, server=server)
+
+        result = _cmp_env(env1, env2, filter_auto_generated=filter_auto_generated)
+        result["applications"] = {
+            "app1": {"id": app_id1},
+            "app2": {"id": app_id2},
+        }
+        return result
+
+    except Exception as e:
+        logger.exception("Failed to compare environments")
+        return {
+            "error": f"Failed to compare environments: {str(e)}",
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
+        }
+
+
 # Helper functions that are missing from the refactoring
 
 

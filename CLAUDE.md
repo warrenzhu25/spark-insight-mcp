@@ -32,6 +32,9 @@ spark-mcp --cli analyze insights app-20231201-123456
 # Compare two applications
 spark-mcp --cli analyze compare app1 app2
 
+# Compare environment configurations
+spark-mcp --cli compare env --apps app1 app2
+
 # Configuration management
 spark-mcp --cli config init --interactive
 spark-mcp --cli config show

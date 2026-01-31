@@ -155,6 +155,8 @@ class OutputFormatter:
                 self._format_job_comparison_result(data, title)
             elif self._is_aggregated_stage_comparison_result(data):
                 self._format_aggregated_stage_comparison_result(data, title)
+            elif self._is_environment_comparison_result(data):
+                self._format_environment_comparison_result(data, title)
             elif self._is_resource_comparison_result(data):
                 self._format_resource_comparison_result(data, title)
             elif self._is_standardized_comparison_result(data):
@@ -394,6 +396,10 @@ class OutputFormatter:
         """Detect aggregated stage comparison results."""
         agg_keys = {"applications", "stage_comparison", "efficiency_analysis"}
         return len(agg_keys.intersection(data.keys())) >= 2
+
+    def _is_environment_comparison_result(self, data: Dict[str, Any]) -> bool:
+        """Detect environment comparison results."""
+        return "spark_properties" in data and "system_properties" in data
 
     def _is_resource_comparison_result(self, data: Dict[str, Any]) -> bool:
         """Detect resource comparison results."""
@@ -1644,6 +1650,100 @@ class OutputFormatter:
 
         if table.rows:
             console.print(table)
+
+    def _format_environment_comparison_result(
+        self, data: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
+        """Format environment configuration comparison."""
+        # Header
+        if "applications" in data:
+            app1_data = data["applications"].get("app1", {})
+            app2_data = data["applications"].get("app2", {})
+            app1_name = app1_data.get("name", app1_data.get("id", "App1"))
+            app2_name = app2_data.get("name", app2_data.get("id", "App2"))
+            console.print(f"[cyan]{app1_name}[/cyan] vs [cyan]{app2_name}[/cyan]")
+            console.print("─" * 80)
+            console.print()
+
+        # JVM info
+        jvm_info = data.get("jvm_info", {})
+        if jvm_info:
+            console.print("[bold]JVM Information[/bold]")
+            jvm_table = Table(show_lines=True)
+            jvm_table.add_column("Property", style="cyan")
+            jvm_table.add_column("App1", style="blue")
+            jvm_table.add_column("App2", style="blue")
+            for key, vals in jvm_info.items():
+                if isinstance(vals, dict):
+                    jvm_table.add_row(
+                        key,
+                        str(vals.get("app1", "")),
+                        str(vals.get("app2", "")),
+                    )
+            if jvm_table.rows:
+                console.print(jvm_table)
+            console.print()
+
+        # Spark properties differences
+        spark_props = data.get("spark_properties", {})
+        diff_list = spark_props.get("different", [])
+        if diff_list:
+            table = Table(title="Spark Properties Differences", show_lines=True)
+            table.add_column("Property", style="cyan")
+            table.add_column("App1", style="blue")
+            table.add_column("App2", style="blue")
+            for item in diff_list:
+                table.add_row(
+                    item.get("property", ""),
+                    str(item.get("app1_value", "")),
+                    str(item.get("app2_value", "")),
+                )
+            console.print(table)
+            total = spark_props.get("total_different", len(diff_list))
+            if total > len(diff_list):
+                console.print(
+                    f"  ... and {total - len(diff_list)} more differences"
+                )
+            console.print()
+
+        # System properties differences
+        sys_props = data.get("system_properties", {})
+        sys_diff = sys_props.get("different", [])
+        if sys_diff:
+            table = Table(title="System Properties Differences", show_lines=True)
+            table.add_column("Property", style="cyan")
+            table.add_column("App1", style="blue")
+            table.add_column("App2", style="blue")
+            for item in sys_diff:
+                table.add_row(
+                    item.get("property", ""),
+                    str(item.get("app1_value", "")),
+                    str(item.get("app2_value", "")),
+                )
+            console.print(table)
+            total = sys_props.get("total_different", len(sys_diff))
+            if total > len(sys_diff):
+                console.print(
+                    f"  ... and {total - len(sys_diff)} more differences"
+                )
+            console.print()
+
+        # Summary counts
+        summary_parts = []
+        if spark_props.get("total_different"):
+            summary_parts.append(
+                f"Spark props: {spark_props['total_different']} different"
+            )
+        if spark_props.get("app1_only_count"):
+            summary_parts.append(f"{spark_props['app1_only_count']} app1-only")
+        if spark_props.get("app2_only_count"):
+            summary_parts.append(f"{spark_props['app2_only_count']} app2-only")
+        if sys_props.get("total_different"):
+            summary_parts.append(
+                f"System props: {sys_props['total_different']} different"
+            )
+        if summary_parts:
+            console.print("[bold]Summary:[/bold] " + " | ".join(summary_parts))
 
     def _format_resource_comparison_result(
         self, data: Dict[str, Any], title: Optional[str] = None

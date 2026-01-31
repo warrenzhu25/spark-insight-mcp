@@ -46,6 +46,15 @@ def _cache_set(key: Tuple[Any, ...], value: Any, use_cache: bool):
     return value
 
 
+def fetch_env(app_id: str, server: Optional[str] = None):
+    client, use_cache = _resolve_client(server)
+    key = (get_server_key(server), "env", app_id)
+    cached = _cache_get(key, use_cache)
+    if cached is not None:
+        return cached
+    return _cache_set(key, client.get_environment(app_id=app_id), use_cache)
+
+
 def fetch_app(app_id: str, server: Optional[str] = None):
     client, use_cache = _resolve_client(server)
     key = (get_server_key(server), "app", app_id)

@@ -19,6 +19,7 @@ from .application import (
 
 # Comparison tools
 from .comparisons import (
+    compare_app_environments,
     compare_app_executor_timeline,
     compare_app_executors,
     compare_app_jobs,
@@ -77,6 +78,7 @@ __all__ = [
     "analyze_shuffle_skew",
     "analyze_failed_tasks",
     # Comparison tools
+    "compare_app_environments",
     "compare_app_executor_timeline",
     "compare_app_executors",
     "compare_app_jobs",
