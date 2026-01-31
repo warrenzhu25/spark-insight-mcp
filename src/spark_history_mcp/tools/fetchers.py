@@ -7,6 +7,7 @@ tools remain thin and avoid duplication.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Optional, Tuple, Type
 from unittest import mock
 
@@ -24,6 +25,8 @@ from ..models.spark_types import (
 )
 from . import analysis as analysis_tools
 from .common import get_active_mcp_context, get_client, get_server_key
+
+logger = logging.getLogger(__name__)
 
 # Basic per-process caches keyed by (server_key, namespace, identifiers...)
 _CACHE: Dict[Tuple[Any, ...], Any] = {}
@@ -62,9 +65,7 @@ def _cache_set(key: Tuple[Any, ...], value: Any, use_cache: bool):
 # ---------------------------------------------------------------------------
 
 
-def _disk_get_single(
-    key: Tuple[Any, ...], model_cls: Type[BaseModel], use_disk: bool
-):
+def _disk_get_single(key: Tuple[Any, ...], model_cls: Type[BaseModel], use_disk: bool):
     """Try to load a single model from disk cache."""
     if not use_disk:
         return None
@@ -77,21 +78,17 @@ def _disk_get_single(
         return None
 
 
-def _disk_set_single(
-    key: Tuple[Any, ...], value: BaseModel, use_disk: bool
-) -> None:
+def _disk_set_single(key: Tuple[Any, ...], value: BaseModel, use_disk: bool) -> None:
     """Persist a single model to disk cache."""
     if not use_disk:
         return
     try:
         cache.disk_set(key, value.model_dump_json())
-    except Exception:  # noqa: S110
-        pass
+    except Exception as exc:  # noqa: S110
+        logger.debug("Failed to persist disk cache entry", exc_info=exc)
 
 
-def _disk_get_list(
-    key: Tuple[Any, ...], model_cls: Type[BaseModel], use_disk: bool
-):
+def _disk_get_list(key: Tuple[Any, ...], model_cls: Type[BaseModel], use_disk: bool):
     """Try to load a list of models from disk cache."""
     if not use_disk:
         return None
@@ -114,8 +111,8 @@ def _disk_set_list(
     try:
         data = json.dumps([v.model_dump(mode="json") for v in values])
         cache.disk_set(key, data)
-    except Exception:  # noqa: S110
-        pass
+    except Exception as exc:  # noqa: S110
+        logger.debug("Failed to persist disk cache list", exc_info=exc)
 
 
 # ---------------------------------------------------------------------------
@@ -313,8 +310,8 @@ def fetch_stage_task_summary(
 
                 result = TaskMetricDistributions.model_validate_json(raw)
                 return _cache_set(key, result, use_cache)
-            except Exception:  # noqa: S110
-                pass
+            except Exception as exc:  # noqa: S110
+                logger.debug("Failed to load cached task summary", exc_info=exc)
     kwargs: Dict[str, Any] = {
         "app_id": app_id,
         "stage_id": stage_id,
@@ -326,8 +323,8 @@ def fetch_stage_task_summary(
     if use_disk and result is not None:
         try:
             cache.disk_set(key, result.model_dump_json())
-        except Exception:  # noqa: S110
-            pass
+        except Exception as exc:  # noqa: S110
+            logger.debug("Failed to persist task summary", exc_info=exc)
     return _cache_set(key, result, use_cache)
 
 

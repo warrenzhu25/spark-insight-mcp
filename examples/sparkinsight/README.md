@@ -14,7 +14,7 @@ analyze_auto_scaling(app_id="application_123456789_0001")
 
 **What it does:**
 - Analyzes workload patterns during application execution
-- Recommends optimal initial and maximum executor counts  
+- Recommends optimal initial and maximum executor counts
 - Targets 2-minute stage completion times by default
 - Provides configuration diff between current and recommended settings
 
@@ -97,7 +97,7 @@ Ask your AI assistant:
 ### Auto-scaling Analysis
 - `target_stage_duration_minutes`: Target completion time (default: 2 minutes)
 
-### Shuffle Skew Analysis  
+### Shuffle Skew Analysis
 - `shuffle_threshold_gb`: Minimum shuffle data to analyze (default: 10 GB)
 - `skew_ratio_threshold`: Minimum ratio to flag as skewed (default: 2.0)
 
@@ -121,7 +121,7 @@ Ask your AI assistant:
       "description": "Based on stages running in first 2 minutes"
     },
     "max_executors": {
-      "current": "20", 
+      "current": "20",
       "recommended": "32",
       "description": "Based on peak concurrent stage demand"
     }
@@ -150,7 +150,7 @@ Ask your AI assistant:
 ## 💡 Best Practices
 
 1. **Run comprehensive analysis first**: Use `get_application_insights()` for overview
-2. **Focus on critical issues**: Address recommendations marked as "critical" priority first  
+2. **Focus on critical issues**: Address recommendations marked as "critical" priority first
 3. **Iterative optimization**: Re-run analysis after applying recommendations
 4. **Monitor trends**: Compare metrics across multiple application runs
 5. **Combine with existing tools**: Use alongside existing MCP tools for complete analysis
@@ -159,6 +159,6 @@ Ask your AI assistant:
 
 Combine SparkInsight analysis with existing MCP tools:
 - `get_job_bottlenecks()` - Performance bottleneck identification
-- `compare_job_performance()` - Cross-application comparison  
+- `compare_job_performance()` - Cross-application comparison
 - `get_resource_usage_timeline()` - Resource allocation timeline
 - `list_slowest_stages()` - Stage-level performance analysis

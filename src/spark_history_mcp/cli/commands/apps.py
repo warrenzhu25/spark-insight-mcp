@@ -281,6 +281,9 @@ if CLI_AVAILABLE:
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
+        if limit is not None and limit < 1:
+            raise click.BadParameter("limit must be >= 1", param_hint="--limit")
+
         try:
             client = get_spark_client(config_path, server)
 
@@ -310,6 +313,8 @@ if CLI_AVAILABLE:
                     if interactive:
                         show_post_list_menu(server, formatter, ctx)
 
+        except click.ClickException:
+            raise
         except Exception as err:
             raise click.ClickException(f"Error listing applications: {err}") from err
 

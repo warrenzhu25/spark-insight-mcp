@@ -121,8 +121,12 @@ def compare_stage_executor_timeline(
     """
     try:
         # Get stage information
-        stage1 = fetcher_tools.fetch_stage_attempt(app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server)
-        stage2 = fetcher_tools.fetch_stage_attempt(app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server)
+        stage1 = fetcher_tools.fetch_stage_attempt(
+            app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server
+        )
+        stage2 = fetcher_tools.fetch_stage_attempt(
+            app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server
+        )
 
         # Get executor information for both applications
         executors1 = fetcher_tools.fetch_executors(app_id=app_id1, server=server)
