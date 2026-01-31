@@ -91,6 +91,10 @@ def list_applications(
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
+    # When name filtering is requested, fetch all apps first so the name
+    # filter runs over the full set, then apply the limit afterwards.
+    api_limit = limit if not app_name else None
+
     # Get applications from the server with existing filters
     applications = client.list_applications(
         status=status,
@@ -98,7 +102,7 @@ def list_applications(
         max_date=max_date,
         min_end_date=min_end_date,
         max_end_date=max_end_date,
-        limit=limit,
+        limit=api_limit,
     )
 
     # If no name filtering is requested, return as-is
@@ -124,6 +128,10 @@ def list_applications(
         except re.error as e:
             # Re-raise regex errors with more context
             raise re.error(f"Invalid regex pattern '{app_name}': {str(e)}") from e
+
+    # Apply limit after name filtering
+    if limit and len(matching_apps) > limit:
+        matching_apps = matching_apps[:limit]
 
     return compact_output(matching_apps, compact)
 
