@@ -12,8 +12,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ..core.app import mcp
-from .common import get_client_or_default
+from .common import get_client_or_default  # noqa: F401 – re-exported for tests
 from .executors import get_executor_summary
+from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
 from .jobs_stages import list_slowest_jobs, list_slowest_stages
 
 
@@ -35,9 +36,6 @@ def get_job_bottlenecks(
     Returns:
         Dictionary containing identified bottlenecks and recommendations
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Get slowest stages
     slowest_stages = list_slowest_stages(app_id, server, False, top_n, compact=False)
 
@@ -47,7 +45,7 @@ def get_job_bottlenecks(
     # Get executor summary
     exec_summary = get_executor_summary(app_id, server)
 
-    all_stages = client.list_stages(app_id=app_id)
+    all_stages = fetch_stages(app_id=app_id, server=server)
 
     # Identify stages with high spill
     high_spill_stages = []
@@ -178,13 +176,12 @@ def analyze_auto_scaling(
     Returns:
         Dictionary containing auto-scaling analysis and recommendations
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    from .fetchers import fetch_app, fetch_env
 
     # Get application data
-    app = client.get_application(app_id)
-    environment = client.get_environment(app_id)
-    stages = client.list_stages(app_id=app_id)
+    app = fetch_app(app_id=app_id, server=server)
+    environment = fetch_env(app_id=app_id, server=server)
+    stages = fetch_stages(app_id=app_id, server=server)
 
     if not stages:
         return {"error": "No stages found for application", "application_id": app_id}
@@ -346,16 +343,13 @@ def analyze_shuffle_skew(
         Dictionary containing shuffle skew analysis results with both task-level
         and executor-level skew detection
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Try to get stages with summaries, fallback to basic stages if validation fails
     try:
-        stages = client.list_stages(app_id=app_id, with_summaries=True)
+        stages = fetch_stages(app_id=app_id, server=server, with_summaries=True)
     except Exception as e:
         if "executorMetricsDistributions.peakMemoryMetrics.quantiles" in str(e):
             # Known issue with executor metrics distributions - use stages without summaries
-            stages = client.list_stages(app_id=app_id, with_summaries=False)
+            stages = fetch_stages(app_id=app_id, server=server, with_summaries=False)
         else:
             raise e
 
@@ -385,7 +379,7 @@ def analyze_shuffle_skew(
 
         # Analyze task-level skew
         task_skew_result = _analyze_stage_task_skew(
-            stage, client, app_id, skew_ratio_threshold
+            stage, app_id, skew_ratio_threshold, server
         )
         if task_skew_result:
             stage_skew_info["task_skew"] = task_skew_result
@@ -461,11 +455,8 @@ def analyze_failed_tasks(
     Returns:
         Dictionary containing failed task analysis results
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    stages = client.list_stages(app_id=app_id)
-    executors = client.list_all_executors(app_id=app_id)
+    stages = fetch_stages(app_id=app_id, server=server)
+    executors = fetch_executors(app_id=app_id, server=server)
 
     # Analyze stages with failures
     failed_stages = []
@@ -572,7 +563,7 @@ def analyze_failed_tasks(
 
 # Helper functions for analyze_shuffle_skew refactoring
 def _analyze_stage_task_skew(
-    stage, client, app_id: str, skew_ratio_threshold: float
+    stage, app_id: str, skew_ratio_threshold: float, server: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """Analyze task-level shuffle skew for a stage."""
     try:
@@ -582,10 +573,11 @@ def _analyze_stage_task_skew(
         needs_summary_fetch = not quantiles or len(quantiles) < 5
         if needs_summary_fetch:
             try:
-                task_summary = client.get_stage_task_summary(
+                task_summary = fetch_stage_task_summary(
                     app_id=app_id,
                     stage_id=stage.stage_id,
                     attempt_id=getattr(stage, "attempt_id", 0),
+                    server=server,
                 )
                 if task_summary:
                     stage.task_metrics_distributions = task_summary

@@ -1002,8 +1002,38 @@ class OutputFormatter:
             "shuffle_write_ratio_change": "Shuffle Write",
             "input_ratio_change": "Input Data",
             "output_ratio_change": "Output Data",
+            # Aggregated stage metric keys (percent_change format)
+            "total_stages_percent_change": "Total Stages",
+            "total_input_bytes_percent_change": "Input Data",
+            "total_output_bytes_percent_change": "Output Data",
+            "total_shuffle_read_bytes_percent_change": "Shuffle Read",
+            "total_shuffle_write_bytes_percent_change": "Shuffle Write",
+            "total_memory_spilled_bytes_percent_change": "Memory Spilled",
+            "total_disk_spilled_bytes_percent_change": "Disk Spilled",
+            "total_executor_run_time_ms_percent_change": "Executor Runtime",
+            "total_executor_cpu_time_ns_percent_change": "Executor CPU Time",
+            "total_gc_time_ms_percent_change": "GC Time",
+            "avg_stage_duration_ms_percent_change": "Avg Stage Duration",
+            "total_tasks_percent_change": "Total Tasks",
+            "total_failed_tasks_percent_change": "Failed Tasks",
         }
         return stage_metric_names.get(metric_key, metric_key.replace("_", " ").title())
+
+    def _format_stage_metric_value(self, metric_key: str, value) -> str:
+        """Format a stage metric value based on its type."""
+        if value is None:
+            return "N/A"
+        if "bytes" in metric_key:
+            return self._format_bytes(value)
+        elif metric_key.endswith("_ms") or "duration_ms" in metric_key:
+            return self._format_milliseconds(value)
+        elif metric_key.endswith("_ns"):
+            # Nanoseconds - convert to milliseconds for display
+            return self._format_milliseconds(value / 1_000_000)
+        elif isinstance(value, float):
+            return f"{value:,.1f}"
+        else:
+            return f"{value:,}"
 
     def _format_stage_performance_metrics(self, data: Dict[str, Any]) -> None:
         """Format stage performance metrics in a comparison table with all available metrics."""
@@ -1625,41 +1655,52 @@ class OutputFormatter:
         table.add_column("App2", style="blue")
         table.add_column("Change", style="magenta")
 
-        # Stage comparison metrics
-        stage_comp = data.get("stage_comparison", {})
+        # Get raw metrics and comparison data
+        agg_metrics = data.get("aggregated_stage_metrics", {})
+        app1_metrics = agg_metrics.get("app1", {})
+        app2_metrics = agg_metrics.get("app2", {})
+        stage_comp = data.get("stage_performance_comparison", {})
 
-        # Metrics are already sorted by the MCP tool, use existing order
-        for metric_key in stage_comp.keys():
-            if metric_key.endswith("_change"):
+        # Iterate over percent_change entries in the comparison
+        for metric_key in sorted(stage_comp.keys()):
+            if metric_key.endswith("_percent_change"):
+                # Extract base metric name
+                base_metric = metric_key.replace("_percent_change", "")
                 display_name = self._get_stage_metric_display_name(metric_key)
-                change = stage_comp[metric_key]
+                change_pct = stage_comp[metric_key]
 
-                # Extract base metric name to get the ratio
-                base_key = metric_key.replace("_change", "")
-                ratio = stage_comp.get(base_key, 0)
+                # Get actual values from aggregated metrics
+                app1_val = app1_metrics.get(base_metric, 0)
+                app2_val = app2_metrics.get(base_metric, 0)
 
-                # Calculate approximate values (simplified)
-                if ratio > 0:
-                    table.add_row(
-                        display_name, "Baseline", f"{ratio:.1%} of App1", change
+                # Format values based on metric type
+                app1_display = self._format_stage_metric_value(base_metric, app1_val)
+                app2_display = self._format_stage_metric_value(base_metric, app2_val)
+
+                change_str = f"{change_pct:+.1f}%"
+                table.add_row(display_name, app1_display, app2_display, change_str)
+
+        # If no comparison entries but we have raw metrics, show all metrics
+        if not table.rows and app1_metrics and app2_metrics:
+            for metric_key in sorted(app1_metrics.keys()):
+                if metric_key in app2_metrics:
+                    display_name = self._get_stage_metric_display_name(
+                        metric_key + "_percent_change"
                     )
-
-        # Efficiency analysis
-        eff_analysis = data.get("efficiency_analysis", {})
-        if (
-            "app1_avg_tasks_per_stage" in eff_analysis
-            and "app2_avg_tasks_per_stage" in eff_analysis
-        ):
-            app1_tasks = eff_analysis["app1_avg_tasks_per_stage"]
-            app2_tasks = eff_analysis["app2_avg_tasks_per_stage"]
-            change = (
-                f"{((app2_tasks - app1_tasks) / app1_tasks * 100):.1f}%"
-                if app1_tasks > 0
-                else "N/A"
-            )
-            table.add_row(
-                "Avg Tasks per Stage", f"{app1_tasks:.1f}", f"{app2_tasks:.1f}", change
-            )
+                    app1_val = app1_metrics[metric_key]
+                    app2_val = app2_metrics[metric_key]
+                    app1_display = self._format_stage_metric_value(metric_key, app1_val)
+                    app2_display = self._format_stage_metric_value(metric_key, app2_val)
+                    if max(abs(app1_val), abs(app2_val)) > 0:
+                        change_pct = (
+                            ((app2_val - app1_val) / max(abs(app1_val), 1)) * 100
+                        )
+                        change_str = f"{change_pct:+.1f}%"
+                    else:
+                        change_str = "N/A"
+                    table.add_row(
+                        display_name, app1_display, app2_display, change_str
+                    )
 
         if table.rows:
             console.print(table)

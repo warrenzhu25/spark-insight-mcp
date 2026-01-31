@@ -16,7 +16,7 @@ from .common import (
     compact_output,
     get_client_or_default,
 )
-from .fetchers import fetch_executors
+from .fetchers import fetch_app, fetch_executors, fetch_stages
 from .timelines import build_app_executor_timeline
 
 
@@ -109,11 +109,8 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
     Returns:
         Dictionary containing aggregated executor metrics and utilization efficiency
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     executors = fetch_executors(app_id=app_id, server=server)
-    app = client.get_application(app_id)
+    app = fetch_app(app_id=app_id, server=server)
 
     summary = {
         "total_executors": len(executors),
@@ -222,17 +219,14 @@ def get_resource_usage_timeline(
     Returns:
         Dictionary containing timeline of resource usage
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Get application info
-    app = client.get_application(app_id)
+    app = fetch_app(app_id=app_id, server=server)
 
     # Get all executors
-    executors = client.list_all_executors(app_id=app_id)
+    executors = fetch_executors(app_id=app_id, server=server)
 
     # Get stages
-    stages = client.list_stages(app_id=app_id)
+    stages = fetch_stages(app_id=app_id, server=server)
 
     # Create timeline events
     timeline_events = []
@@ -367,17 +361,14 @@ def get_app_executor_timeline(
         Dictionary containing app info, simplified timeline with active executor counts,
         and summary statistics
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Get application info
-    app = client.get_application(app_id)
+    app = fetch_app(app_id=app_id, server=server)
 
     # Get all executors
-    executors = client.list_all_executors(app_id=app_id)
+    executors = fetch_executors(app_id=app_id, server=server)
 
     # Get stages
-    stages = client.list_stages(app_id=app_id)
+    stages = fetch_stages(app_id=app_id, server=server)
 
     # Build full timeline using helper
     result = build_app_executor_timeline(

@@ -16,7 +16,7 @@ from .analysis import (
     analyze_shuffle_skew,
 )
 from .common import compact_output, get_client_or_default
-from .fetchers import fetch_app
+from .fetchers import fetch_app, fetch_env, fetch_executors, fetch_stages
 
 
 @mcp.tool()
@@ -154,10 +154,7 @@ def get_environment(
     Returns:
         ApplicationEnvironmentInfo object containing environment details (or compact summary)
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    environment = client.get_environment(app_id=app_id)
+    environment = fetch_env(app_id=app_id, server=server)
     return compact_output(environment, compact)
 
 
@@ -186,11 +183,8 @@ def get_application_insights(
     Returns:
         Dictionary containing comprehensive application insights
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     # Get basic application info
-    app = client.get_application(app_id)
+    app = fetch_app(app_id=app_id, server=server)
 
     insights = {
         "application_id": app_id,
@@ -305,14 +299,11 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
     Returns:
         Dictionary containing application performance summary
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
     try:
         # Get application data
-        app = client.get_application(app_id)
-        stages = client.list_stages(app_id=app_id, with_summaries=True)
-        executors = client.list_all_executors(app_id=app_id)
+        app = fetch_app(app_id=app_id, server=server)
+        stages = fetch_stages(app_id=app_id, server=server, with_summaries=True)
+        executors = fetch_executors(app_id=app_id, server=server)
 
         if not app.attempts:
             return {"error": "No application attempts found", "application_id": app_id}

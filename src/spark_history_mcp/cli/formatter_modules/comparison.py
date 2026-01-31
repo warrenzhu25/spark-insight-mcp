@@ -63,7 +63,7 @@ class ComparisonFormatMixin:
 
     def _is_aggregated_stage_comparison_result(self, data: Dict[str, Any]) -> bool:
         """Detect aggregated stage comparison results."""
-        agg_keys = {"applications", "stage_comparison", "efficiency_analysis"}
+        agg_keys = {"applications", "aggregated_stage_metrics", "stage_performance_comparison"}
         return len(agg_keys.intersection(data.keys())) >= 2
 
     def _is_resource_comparison_result(self, data: Dict[str, Any]) -> bool:

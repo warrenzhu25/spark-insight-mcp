@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from ...core.app import mcp
 from .. import fetchers as fetcher_tools
 from .. import matching as matching_tools
-from .utils import calculate_stage_duration, resolve_client
+from .utils import calculate_stage_duration
 
 
 @mcp.tool()
@@ -199,29 +199,27 @@ def compare_stages(
     Returns:
         Dictionary containing stage comparison with significant differences only
     """
-    client = resolve_client(server)
-
     try:
         # Get stage data with summaries
-        stage1 = client.get_stage_attempt(
+        stage1 = fetcher_tools.fetch_stage_attempt(
             app_id=app_id1,
             stage_id=stage_id1,
             attempt_id=0,
-            details=False,
+            server=server,
             with_summaries=True,
         )
-        stage2 = client.get_stage_attempt(
+        stage2 = fetcher_tools.fetch_stage_attempt(
             app_id=app_id2,
             stage_id=stage_id2,
             attempt_id=0,
-            details=False,
+            server=server,
             with_summaries=True,
         )
 
         # Get task metric distributions
         try:
-            task_dist1 = client.get_stage_task_summary(
-                app_id=app_id1, stage_id=stage_id1, attempt_id=0
+            task_dist1 = fetcher_tools.fetch_stage_task_summary(
+                app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server
             )
             stage1.task_metrics_distributions = task_dist1
         except Exception as e:
@@ -231,8 +229,8 @@ def compare_stages(
             )
 
         try:
-            task_dist2 = client.get_stage_task_summary(
-                app_id=app_id2, stage_id=stage_id2, attempt_id=0
+            task_dist2 = fetcher_tools.fetch_stage_task_summary(
+                app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server
             )
             stage2.task_metrics_distributions = task_dist2
         except Exception as e:

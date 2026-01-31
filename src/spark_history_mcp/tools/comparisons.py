@@ -119,8 +119,6 @@ def compare_app_performance(
     - significance_threshold: 0.1 for metric filtering
     - filter_auto_generated: True for cleaner environment comparison
     """
-    client = _resolve_client(server)
-
     # Safely fetch both applications with centralized error handling
     app1, app2, error_response = _fetch_applications_safely(
         app_id1, app_id2, server, top_n, similarity_threshold
@@ -241,11 +239,11 @@ def compare_app_performance(
 
     # Environment and configuration comparison (using default filter_auto_generated=True)
     environment_comparison = _compare_environments(
-        client, app_id1, app_id2, filter_auto_generated=True
+        None, app_id1, app_id2, filter_auto_generated=True, server=server
     )
 
     # SQL execution plans comparison
-    sql_plans_comparison = _compare_sql_execution_plans(client, app_id1, app_id2)
+    sql_plans_comparison = _compare_sql_execution_plans(None, app_id1, app_id2)
 
     # Merge SQL recommendations with existing recommendations
     if sql_plans_comparison.get("sql_recommendations"):
@@ -710,36 +708,35 @@ def compare_stages(
     Returns:
         Dictionary containing stage comparison with significant differences only
     """
-    client = _resolve_client(server)
     try:
         # Get stage data with summaries
-        stage1 = client.get_stage_attempt(
+        stage1 = fetcher_tools.fetch_stage_attempt(
             app_id=app_id1,
             stage_id=stage_id1,
             attempt_id=0,
-            details=False,
+            server=server,
             with_summaries=True,
         )
-        stage2 = client.get_stage_attempt(
+        stage2 = fetcher_tools.fetch_stage_attempt(
             app_id=app_id2,
             stage_id=stage_id2,
             attempt_id=0,
-            details=False,
+            server=server,
             with_summaries=True,
         )
 
         # Get task metric distributions
         try:
-            task_dist1 = client.get_stage_task_summary(
-                app_id=app_id1, stage_id=stage_id1, attempt_id=0
+            task_dist1 = fetcher_tools.fetch_stage_task_summary(
+                app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server
             )
             stage1.task_metrics_distributions = task_dist1
         except Exception as exc:
             logger.debug("Failed to fetch task summary for app1 stage", exc_info=exc)
 
         try:
-            task_dist2 = client.get_stage_task_summary(
-                app_id=app_id2, stage_id=stage_id2, attempt_id=0
+            task_dist2 = fetcher_tools.fetch_stage_task_summary(
+                app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server
             )
             stage2.task_metrics_distributions = task_dist2
         except Exception as exc:
@@ -1191,11 +1188,10 @@ def compare_app_executor_timeline(
     Returns:
         Dictionary containing comprehensive application executor timeline comparison
     """
-    client = _resolve_client(server)
     try:
         # Get application information for both apps
-        app1 = client.get_application(app_id1)
-        app2 = client.get_application(app_id2)
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+        app2 = fetcher_tools.fetch_app(app_id2, server)
 
         if not app1.attempts or not app2.attempts:
             return {
@@ -1207,12 +1203,12 @@ def compare_app_executor_timeline(
             }
 
         # Get executors for both applications
-        executors1 = client.list_all_executors(app_id=app_id1)
-        executors2 = client.list_all_executors(app_id=app_id2)
+        executors1 = fetcher_tools.fetch_executors(app_id=app_id1, server=server)
+        executors2 = fetcher_tools.fetch_executors(app_id=app_id2, server=server)
 
         # Get stages for both applications to track active stages
-        stages1 = client.list_stages(app_id=app_id1)
-        stages2 = client.list_stages(app_id=app_id2)
+        stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server)
+        stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server)
 
         def build_app_executor_timeline(app, executors, stages, app_id):
             """Build timeline for an application"""
@@ -1593,28 +1589,24 @@ def compare_stage_executor_timeline(
     Returns:
         Dictionary containing stage executor timeline comparison
     """
-    client = _resolve_client(server)
-
     try:
         # Get stage information for both applications
-        stage1 = client.get_stage_attempt(
+        stage1 = fetcher_tools.fetch_stage_attempt(
             app_id=app_id1,
             stage_id=stage_id1,
             attempt_id=0,
-            details=False,
-            with_summaries=False,
+            server=server,
         )
-        stage2 = client.get_stage_attempt(
+        stage2 = fetcher_tools.fetch_stage_attempt(
             app_id=app_id2,
             stage_id=stage_id2,
             attempt_id=0,
-            details=False,
-            with_summaries=False,
+            server=server,
         )
 
         # Get executors for both applications
-        executors1 = client.list_all_executors(app_id=app_id1)
-        executors2 = client.list_all_executors(app_id=app_id2)
+        executors1 = fetcher_tools.fetch_executors(app_id=app_id1, server=server)
+        executors2 = fetcher_tools.fetch_executors(app_id=app_id2, server=server)
 
         # Helper function to build timeline for a stage
         def build_stage_executor_timeline(stage, executors, app_id):
@@ -1821,12 +1813,10 @@ def compare_app_resources(
     Returns:
         Dict containing resource allocation comparison, efficiency ratios, and recommendations
     """
-    client = _resolve_client(server)
-
     try:
         # Get application info
-        app1 = client.get_application(app_id1)
-        app2 = client.get_application(app_id2)
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+        app2 = fetcher_tools.fetch_app(app_id2, server)
 
         app1_info = _get_basic_app_info(app1)
         app2_info = _get_basic_app_info(app2)
@@ -2630,12 +2620,12 @@ def compare_app_environments(
 
 
 def _compare_environments(
-    client, app_id1: str, app_id2: str, filter_auto_generated: bool = True
+    client, app_id1: str, app_id2: str, filter_auto_generated: bool = True, server: Optional[str] = None
 ) -> Dict[str, Any]:
     """Compare Spark environment configurations between two applications."""
     try:
-        env1 = client.get_environment(app_id=app_id1)
-        env2 = client.get_environment(app_id=app_id2)
+        env1 = fetcher_tools.fetch_env(app_id=app_id1, server=server)
+        env2 = fetcher_tools.fetch_env(app_id=app_id2, server=server)
 
         def props_to_dict(props):
             return {k: v for k, v in props} if props else {}

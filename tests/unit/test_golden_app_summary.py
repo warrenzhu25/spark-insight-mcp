@@ -50,9 +50,10 @@ def make_executor(start: datetime, end: datetime):
     )
 
 
-@patch("spark_history_mcp.tools.tools.get_client_or_default")
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_get_app_summary_golden(mock_ctx, mock_get_client):
+@patch("spark_history_mcp.tools.application.fetch_executors")
+@patch("spark_history_mcp.tools.application.fetch_stages")
+@patch("spark_history_mcp.tools.application.fetch_app")
+def test_get_app_summary_golden(mock_fetch_app, mock_fetch_stages, mock_fetch_executors):
     from spark_history_mcp.tools.tools import get_app_summary
 
     now = datetime.utcnow()
@@ -65,12 +66,9 @@ def test_get_app_summary_golden(mock_ctx, mock_get_client):
         make_executor(now, now + timedelta(seconds=60)),
     ]
 
-    client = SimpleNamespace(
-        get_application=lambda app_id: app,
-        list_stages=lambda app_id, with_summaries=True: stages,
-        list_all_executors=lambda app_id: executors,
-    )
-    mock_get_client.return_value = client
+    mock_fetch_app.return_value = app
+    mock_fetch_stages.return_value = stages
+    mock_fetch_executors.return_value = executors
 
     out = get_app_summary("app-1")
 

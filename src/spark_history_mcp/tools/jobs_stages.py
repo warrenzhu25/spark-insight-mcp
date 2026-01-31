@@ -22,6 +22,7 @@ from .fetchers import (
     fetch_jobs,
     fetch_stage_attempt,
     fetch_stage_attempts,
+    fetch_stage_task_summary,
     fetch_stages,
 )
 
@@ -247,12 +248,11 @@ def get_stage(
         not hasattr(stage_data, "task_metrics_distributions")
         or stage_data.task_metrics_distributions is None
     ):
-        ctx = mcp.get_context()
-        client = get_client_or_default(ctx, server)
-        task_summary = client.get_stage_task_summary(
+        task_summary = fetch_stage_task_summary(
             app_id=app_id,
             stage_id=stage_id,
             attempt_id=stage_data.attempt_id,
+            server=server,
         )
         stage_data.task_metrics_distributions = task_summary
 
@@ -283,18 +283,13 @@ def get_stage_task_summary(
     Returns:
         TaskMetricDistributions object containing metric distributions
     """
-    ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
-
-    kwargs = {
-        "app_id": app_id,
-        "stage_id": stage_id,
-        "attempt_id": attempt_id,
-    }
-    if quantiles:
-        kwargs["quantiles"] = quantiles
-
-    return client.get_stage_task_summary(**kwargs)
+    return fetch_stage_task_summary(
+        app_id=app_id,
+        stage_id=stage_id,
+        attempt_id=attempt_id,
+        server=server,
+        quantiles=quantiles,
+    )
 
 
 @mcp.tool()

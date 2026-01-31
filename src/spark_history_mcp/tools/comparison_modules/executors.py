@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from ...core.app import mcp
 from .. import executors as executor_tools
 from .. import fetchers as fetcher_tools
-from .utils import calculate_safe_ratio, filter_significant_metrics, resolve_client
+from .utils import calculate_safe_ratio, filter_significant_metrics
 
 
 @mcp.tool()
@@ -34,12 +34,10 @@ def compare_app_executor_timeline(
     Returns:
         Dictionary containing comprehensive application executor timeline comparison
     """
-    client = resolve_client(server)
-
     try:
         # Get application information for both apps
-        app1 = client.get_application(app_id1)
-        app2 = client.get_application(app_id2)
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+        app2 = fetcher_tools.fetch_app(app_id2, server)
 
         if not app1.attempts or not app2.attempts:
             return {
@@ -51,12 +49,12 @@ def compare_app_executor_timeline(
             }
 
         # Get executors for both applications
-        executors1 = client.list_all_executors(app_id=app_id1)
-        executors2 = client.list_all_executors(app_id=app_id2)
+        executors1 = fetcher_tools.fetch_executors(app_id=app_id1, server=server)
+        executors2 = fetcher_tools.fetch_executors(app_id=app_id2, server=server)
 
         # Get stages for both applications to track active stages
-        stages1 = client.list_stages(app_id=app_id1)
-        stages2 = client.list_stages(app_id=app_id2)
+        stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server)
+        stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server)
 
         # Build timelines for both applications
         timeline1 = _build_app_executor_timeline(
@@ -121,16 +119,14 @@ def compare_stage_executor_timeline(
     Returns:
         Dictionary containing stage executor timeline comparison
     """
-    client = resolve_client(server)
-
     try:
         # Get stage information
-        stage1 = client.get_stage_attempt(app_id1, stage_id1, 0)
-        stage2 = client.get_stage_attempt(app_id2, stage_id2, 0)
+        stage1 = fetcher_tools.fetch_stage_attempt(app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server)
+        stage2 = fetcher_tools.fetch_stage_attempt(app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server)
 
         # Get executor information for both applications
-        executors1 = client.list_all_executors(app_id=app_id1)
-        executors2 = client.list_all_executors(app_id=app_id2)
+        executors1 = fetcher_tools.fetch_executors(app_id=app_id1, server=server)
+        executors2 = fetcher_tools.fetch_executors(app_id=app_id2, server=server)
 
         # Build stage-specific timelines
         timeline1 = _build_stage_executor_timeline(stage1, executors1, interval_minutes)

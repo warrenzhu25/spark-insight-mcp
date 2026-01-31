@@ -8,10 +8,10 @@ aggregated stage metrics, and application configurations between Spark applicati
 from typing import Any, Dict, Optional
 
 from ...core.app import mcp
+from .. import fetchers as fetcher_tools
 from .utils import (
     calculate_safe_ratio,
     filter_significant_metrics,
-    resolve_client,
     sort_comparison_data,
 )
 
@@ -34,12 +34,10 @@ def compare_app_resources(
     Returns:
         Dict containing resource allocation comparison, efficiency ratios, and recommendations
     """
-    client = resolve_client(server)
-
     try:
         # Get application info
-        app1 = client.get_application(app_id1)
-        app2 = client.get_application(app_id2)
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+        app2 = fetcher_tools.fetch_app(app_id2, server)
 
         app1_info = _get_basic_app_info(app1)
         app2_info = _get_basic_app_info(app2)
@@ -104,16 +102,14 @@ def compare_app_jobs(
     Returns:
         Dict containing job performance comparison, timing analysis, and recommendations
     """
-    client = resolve_client(server)
-
     try:
         # Get jobs for both applications
-        jobs1 = client.list_jobs(app_id=app_id1)
-        jobs2 = client.list_jobs(app_id=app_id2)
+        jobs1 = fetcher_tools.fetch_jobs(app_id=app_id1, server=server)
+        jobs2 = fetcher_tools.fetch_jobs(app_id=app_id2, server=server)
 
         # Get application info
-        app1 = client.get_application(app_id1)
-        app2 = client.get_application(app_id2)
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+        app2 = fetcher_tools.fetch_app(app_id2, server)
 
         # Calculate job statistics
         job_stats1 = _calculate_job_stats(jobs1)
@@ -172,14 +168,12 @@ def compare_app_stages_aggregated(
     Returns:
         Dict containing aggregated stage comparison, I/O analysis, and recommendations
     """
-    client = resolve_client(server)
-
     try:
         # Get stages and application info
-        stages1 = client.list_stages(app_id=app_id1)
-        stages2 = client.list_stages(app_id=app_id2)
-        app1 = client.get_application(app_id1)
-        app2 = client.get_application(app_id2)
+        stages1 = fetcher_tools.fetch_stages(app_id=app_id1, server=server)
+        stages2 = fetcher_tools.fetch_stages(app_id=app_id2, server=server)
+        app1 = fetcher_tools.fetch_app(app_id1, server)
+        app2 = fetcher_tools.fetch_app(app_id2, server)
 
         # Calculate aggregated stage metrics
         agg_metrics1 = _calculate_aggregated_stage_metrics(stages1)

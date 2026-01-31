@@ -285,6 +285,52 @@ def fetch_stage_attempts(
     return _cache_set(key, result, use_cache)
 
 
+def fetch_stage_task_summary(
+    app_id: str,
+    stage_id: int,
+    attempt_id: int = 0,
+    server: Optional[str] = None,
+    quantiles: Optional[str] = None,
+):
+    client, use_cache, use_disk = _resolve_client(server)
+    key = (
+        get_server_key(server),
+        "stage_task_summary",
+        app_id,
+        int(stage_id),
+        int(attempt_id),
+        quantiles or "",
+    )
+    cached = _cache_get(key, use_cache)
+    if cached is not None:
+        return cached
+    # Raw JSON caching (TaskMetricDistributions is not a simple model)
+    if use_disk:
+        raw = cache.disk_get(key)
+        if raw is not None:
+            try:
+                from ..models.spark_types import TaskMetricDistributions
+
+                result = TaskMetricDistributions.model_validate_json(raw)
+                return _cache_set(key, result, use_cache)
+            except Exception:  # noqa: S110
+                pass
+    kwargs: Dict[str, Any] = {
+        "app_id": app_id,
+        "stage_id": stage_id,
+        "attempt_id": attempt_id,
+    }
+    if quantiles:
+        kwargs["quantiles"] = quantiles
+    result = client.get_stage_task_summary(**kwargs)
+    if use_disk and result is not None:
+        try:
+            cache.disk_set(key, result.model_dump_json())
+        except Exception:  # noqa: S110
+            pass
+    return _cache_set(key, result, use_cache)
+
+
 def fetch_sql_pages(
     app_id: str,
     server: Optional[str] = None,
