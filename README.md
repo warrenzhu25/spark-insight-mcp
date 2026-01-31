@@ -127,6 +127,7 @@ uv run spark-mcp --cli server test
 - **Table**: Simple tabular format
 
 📚 **[See CLI-README.md](CLI-README.md) for complete CLI documentation**
+📚 **[MCP Tools Reference](docs/mcp-tools.md) (responses + samples)**
 
 ---
 
