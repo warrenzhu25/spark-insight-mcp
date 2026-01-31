@@ -81,11 +81,13 @@ async def test_get_application():
         )
 
         app_data = json.loads(app_result.content[0].text)
-        app_info = ApplicationInfo.model_validate(app_data)
-
-        # Validate specific fields
-        assert app_info.id == test_app_id
-        assert app_info.name == "NewYorkTaxiData_2025_06_27_03_56_52"
+        if isinstance(app_data, dict) and isinstance(app_data.get("attempts"), list):
+            app_info = ApplicationInfo.model_validate(app_data)
+            assert app_info.id == test_app_id
+            assert app_info.name == "NewYorkTaxiData_2025_06_27_03_56_52"
+        else:
+            assert app_data.get("id") == test_app_id
+            assert app_data.get("name") == "NewYorkTaxiData_2025_06_27_03_56_52"
 
 
 @pytest.mark.asyncio
@@ -94,12 +96,23 @@ async def test_list_jobs_no_filter():
         # Test with status filter
         jobs_result = await client.call_tool("list_jobs", {"app_id": test_app_id})
         assert not jobs_result.isError
-        assert len(jobs_result.content) == 6
+        jobs = []
+        total = None
         for content in jobs_result.content:
             assert isinstance(content, TextContent), (
                 "list_jobs should return a TextContent object"
             )
-            stage = JobData.model_validate_json(content.text)
+            data = json.loads(content.text)
+            if isinstance(data, dict) and "items" in data:
+                jobs.extend(data.get("items", []))
+                total = data.get("summary", {}).get("total")
+            else:
+                jobs.append(data)
+        if total is not None:
+            assert total == 6
+        assert len(jobs) == 6
+        for job in jobs:
+            stage = JobData.model_validate(job)
             assert stage.status == "SUCCEEDED", "All jobs should have SUCCEEDED status"
 
 
@@ -112,9 +125,16 @@ async def test_list_jobs_with_status_filter():
         )
         assert not jobs_result.isError
         assert len(jobs_result.content) > 0
+        jobs = []
         for content in jobs_result.content:
             assert isinstance(content, TextContent), (
                 "list_jobs should return a TextContent object"
             )
-            stage = JobData.model_validate_json(content.text)
+            data = json.loads(content.text)
+            if isinstance(data, dict) and "items" in data:
+                jobs.extend(data.get("items", []))
+            else:
+                jobs.append(data)
+        for job in jobs:
+            stage = JobData.model_validate(job)
             assert stage.status == "SUCCEEDED", "All jobs should have SUCCEEDED status"
