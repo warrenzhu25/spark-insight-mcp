@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -53,10 +53,12 @@ def make_executor(start: datetime, end: datetime):
 @patch("spark_history_mcp.tools.application.fetch_executors")
 @patch("spark_history_mcp.tools.application.fetch_stages")
 @patch("spark_history_mcp.tools.application.fetch_app")
-def test_get_app_summary_golden(mock_fetch_app, mock_fetch_stages, mock_fetch_executors):
+def test_get_app_summary_golden(
+    mock_fetch_app, mock_fetch_stages, mock_fetch_executors
+):
     from spark_history_mcp.tools.tools import get_app_summary
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     app = SimpleNamespace(
         name="TestApp", attempts=[make_attempt(60000, now)], cores_per_executor=2
     )

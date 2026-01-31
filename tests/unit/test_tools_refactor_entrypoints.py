@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -10,7 +10,7 @@ def make_app(app_id: str, name: str, cores: int = 0, mem_mb: int = 0):
 
 
 def make_stage(stage_id: int, name: str, seconds: int):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return SimpleNamespace(
         stage_id=stage_id,
         name=name,

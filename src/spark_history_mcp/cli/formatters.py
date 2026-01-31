@@ -399,11 +399,7 @@ class OutputFormatter:
 
     def _is_app_summary_comparison_result(self, data: Dict[str, Any]) -> bool:
         """Detect compare_app_summaries result structure."""
-        return (
-            "app1_summary" in data
-            and "app2_summary" in data
-            and "diff" in data
-        )
+        return "app1_summary" in data and "app2_summary" in data and "diff" in data
 
     def _is_aggregated_stage_comparison_result(self, data: Dict[str, Any]) -> bool:
         """Detect aggregated stage comparison results."""
@@ -996,6 +992,15 @@ class OutputFormatter:
     def _get_stage_metric_display_name(self, metric_key: str) -> str:
         """Get user-friendly display name for stage ratio metrics."""
         stage_metric_names = {
+            "stage_count_ratio": "Total Stages",
+            "duration_ratio": "Total Stage Duration",
+            "executor_runtime_ratio": "Executor Runtime",
+            "memory_spill_ratio": "Memory Spilled",
+            "shuffle_read_ratio": "Shuffle Read",
+            "shuffle_write_ratio": "Shuffle Write",
+            "input_ratio": "Input Data",
+            "output_ratio": "Output Data",
+            "task_failure_ratio": "Failed Tasks",
             "duration_ratio_change": "Total Duration",
             "executor_runtime_ratio_change": "Executor Runtime",
             "shuffle_read_ratio_change": "Shuffle Read",
@@ -1659,7 +1664,28 @@ class OutputFormatter:
         agg_metrics = data.get("aggregated_stage_metrics", {})
         app1_metrics = agg_metrics.get("app1", {})
         app2_metrics = agg_metrics.get("app2", {})
+        if not app1_metrics and not app2_metrics:
+            app1_metrics = (
+                data.get("applications", {}).get("app1", {}).get("stage_metrics", {})
+            )
+            app2_metrics = (
+                data.get("applications", {}).get("app2", {}).get("stage_metrics", {})
+            )
         stage_comp = data.get("stage_performance_comparison", {})
+        if not stage_comp:
+            stage_comp = data.get("stage_comparison", {})
+
+        ratio_metric_map = {
+            "stage_count_ratio": "total_stages",
+            "duration_ratio": "total_stage_duration",
+            "executor_runtime_ratio": "total_executor_run_time",
+            "memory_spill_ratio": "total_memory_spilled",
+            "shuffle_read_ratio": "total_shuffle_read_bytes",
+            "shuffle_write_ratio": "total_shuffle_write_bytes",
+            "input_ratio": "total_input_bytes",
+            "output_ratio": "total_output_bytes",
+            "task_failure_ratio": "total_failed_tasks",
+        }
 
         # Iterate over percent_change entries in the comparison
         for metric_key in sorted(stage_comp.keys()):
@@ -1679,6 +1705,31 @@ class OutputFormatter:
 
                 change_str = f"{change_pct:+.1f}%"
                 table.add_row(display_name, app1_display, app2_display, change_str)
+            elif metric_key.endswith("_ratio"):
+                base_metric = ratio_metric_map.get(
+                    metric_key, metric_key.replace("_ratio", "")
+                )
+                display_name = self._get_stage_metric_display_name(metric_key)
+                ratio_val = stage_comp.get(metric_key, 0)
+
+                app1_val = app1_metrics.get(base_metric)
+                app2_val = app2_metrics.get(base_metric)
+                app1_display = self._format_stage_metric_value(base_metric, app1_val)
+                app2_display = self._format_stage_metric_value(base_metric, app2_val)
+
+                change_str = "N/A"
+                if isinstance(ratio_val, (int, float)):
+                    change_str = f"{ratio_val:.2f}x"
+                if isinstance(app1_val, (int, float)) and isinstance(
+                    app2_val, (int, float)
+                ):
+                    if max(abs(app1_val), 0) > 0:
+                        change_pct = (
+                            (app2_val - app1_val) / max(abs(app1_val), 1)
+                        ) * 100
+                        change_str = f"{change_pct:+.1f}%"
+
+                table.add_row(display_name, app1_display, app2_display, change_str)
 
         # If no comparison entries but we have raw metrics, show all metrics
         if not table.rows and app1_metrics and app2_metrics:
@@ -1693,14 +1744,12 @@ class OutputFormatter:
                     app2_display = self._format_stage_metric_value(metric_key, app2_val)
                     if max(abs(app1_val), abs(app2_val)) > 0:
                         change_pct = (
-                            ((app2_val - app1_val) / max(abs(app1_val), 1)) * 100
-                        )
+                            (app2_val - app1_val) / max(abs(app1_val), 1)
+                        ) * 100
                         change_str = f"{change_pct:+.1f}%"
                     else:
                         change_str = "N/A"
-                    table.add_row(
-                        display_name, app1_display, app2_display, change_str
-                    )
+                    table.add_row(display_name, app1_display, app2_display, change_str)
 
         if table.rows:
             console.print(table)
@@ -1755,9 +1804,7 @@ class OutputFormatter:
             console.print(table)
             total = spark_props.get("total_different", len(diff_list))
             if total > len(diff_list):
-                console.print(
-                    f"  ... and {total - len(diff_list)} more differences"
-                )
+                console.print(f"  ... and {total - len(diff_list)} more differences")
             console.print()
 
         # System properties differences
@@ -1777,9 +1824,7 @@ class OutputFormatter:
             console.print(table)
             total = sys_props.get("total_different", len(sys_diff))
             if total > len(sys_diff):
-                console.print(
-                    f"  ... and {total - len(sys_diff)} more differences"
-                )
+                console.print(f"  ... and {total - len(sys_diff)} more differences")
             console.print()
 
         # Summary counts

@@ -21,7 +21,9 @@ if CLI_AVAILABLE:
         server,
         start_server,
         status_server,
-        test_server,
+    )
+    from spark_history_mcp.cli.commands.server import (
+        test_server as server_test_cmd,
     )
 
 
@@ -320,7 +322,9 @@ class TestTestServer:
         mock_response.raise_for_status.return_value = None
         mock_requests.return_value = mock_response
 
-        result = runner.invoke(test_server, [], obj={"config_path": sample_config_path})
+        result = runner.invoke(
+            server_test_cmd, [], obj={"config_path": sample_config_path}
+        )
 
         assert result.exit_code == 0
         assert "Testing server configuration..." in result.output
@@ -365,7 +369,9 @@ class TestTestServer:
         mock_requests.return_value = mock_response
 
         result = runner.invoke(
-            test_server, ["--timeout", "30"], obj={"config_path": sample_config_path}
+            server_test_cmd,
+            ["--timeout", "30"],
+            obj={"config_path": sample_config_path},
         )
 
         assert result.exit_code == 0
@@ -397,7 +403,9 @@ class TestTestServer:
         mock_requests.side_effect = requests.exceptions.Timeout("Request timed out")
 
         result = runner.invoke(
-            test_server, ["--timeout", "5"], obj={"config_path": sample_config_path}
+            server_test_cmd,
+            ["--timeout", "5"],
+            obj={"config_path": sample_config_path},
         )
 
         assert result.exit_code == 0  # Command succeeds but reports connection failure
@@ -425,7 +433,9 @@ class TestTestServer:
             "Connection refused"
         )
 
-        result = runner.invoke(test_server, [], obj={"config_path": sample_config_path})
+        result = runner.invoke(
+            server_test_cmd, [], obj={"config_path": sample_config_path}
+        )
 
         assert result.exit_code == 0  # Command succeeds but reports connection failure
         assert "Could not connect to 'unreachable'" in result.output
@@ -454,7 +464,9 @@ class TestTestServer:
         )
         mock_requests.return_value = mock_response
 
-        result = runner.invoke(test_server, [], obj={"config_path": sample_config_path})
+        result = runner.invoke(
+            server_test_cmd, [], obj={"config_path": sample_config_path}
+        )
 
         assert result.exit_code == 0  # Command succeeds but reports connection failure
         assert "Error connecting to 'local': 404 Not Found" in result.output
@@ -465,7 +477,9 @@ class TestTestServer:
     )
     def test_test_server_config_error(self, mock_config, runner, sample_config_path):
         """Test handling of configuration loading errors."""
-        result = runner.invoke(test_server, [], obj={"config_path": sample_config_path})
+        result = runner.invoke(
+            server_test_cmd, [], obj={"config_path": sample_config_path}
+        )
 
         assert result.exit_code != 0
         assert "Error testing server: Config error" in result.output
