@@ -650,6 +650,10 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
             formatter.output(
                 comparison_data, f"Stage {stage_id1} vs {stage_id2} Timeline Comparison"
             )
+            if formatter.format_type == "human" and _is_interactive():
+                show_generic_follow_up_menu(
+                    app_id1, app_id2, server, formatter, ctx
+                )
 
     except Exception as e:
         click.echo(f"Error executing stage timeline comparison: {e}")
@@ -669,6 +673,8 @@ def execute_env_comparison(app_id1, app_id2, server, formatter, ctx):
                 app_id1=app_id1, app_id2=app_id2, server=server
             )
             formatter.output(data, f"Environment Comparison: {app_id1} vs {app_id2}")
+            if formatter.format_type == "human" and _is_interactive():
+                show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
 
     except Exception as e:
         click.echo(f"Error comparing environments: {e}")
@@ -688,6 +694,8 @@ def execute_summary_comparison(app_id1, app_id2, server, formatter, ctx):
                 app_id1=app_id1, app_id2=app_id2, server=server
             )
             formatter.output(data, f"Summary Comparison: {app_id1} vs {app_id2}")
+            if formatter.format_type == "human" and _is_interactive():
+                show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
 
     except Exception as e:
         click.echo(f"Error comparing summaries: {e}")
@@ -709,6 +717,8 @@ def execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx):
             formatter.output(
                 data, f"Aggregated Stage Comparison: {app_id1} vs {app_id2}"
             )
+            if formatter.format_type == "human" and _is_interactive():
+                show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
 
     except Exception as e:
         click.echo(f"Error comparing aggregated stages: {e}")
@@ -775,6 +785,68 @@ def show_post_stage_menu(
         else:
             click.echo(f"Invalid choice: {choice}")
 
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nExiting interactive mode.")
+
+
+def show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx):
+    """Show generic follow-up options after any comparison command."""
+    if not _is_interactive():
+        click.echo("Interactive menu requires a TTY. Skipping prompt.")
+        return
+
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
+    menu_lines = ["Choose your next analysis:", ""]
+    menu_lines.extend(
+        [
+            "\\[a] Compare Applications (full)",
+            "\\[s] Compare Summaries",
+            "\\[g] Compare Aggregated Stages",
+            "\\[t] Compare Timeline",
+            "\\[e] Compare Environment",
+            "\\[q] Quit",
+        ]
+    )
+
+    if console:
+        content = "\n".join(menu_lines)
+        console.print(Panel(content, title="What's Next?", border_style="green"))
+    else:
+        click.echo("\n" + "=" * 50)
+        click.echo("What's Next?")
+        click.echo("=" * 50)
+        for line in menu_lines:
+            click.echo(line)
+        click.echo("=" * 50)
+
+    try:
+        try:
+            choice = click.getchar().lower()
+            click.echo()
+        except OSError:
+            choice = click.prompt("Enter choice", type=str, default="q").lower()
+
+        if choice == "q":
+            return
+        elif choice == "a":
+            execute_app_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "s":
+            execute_summary_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "g":
+            execute_stages_agg_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "t":
+            execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)
+        elif choice == "e":
+            execute_env_comparison(app_id1, app_id2, server, formatter, ctx)
+        else:
+            click.echo(f"Invalid choice: {choice}")
     except (KeyboardInterrupt, EOFError):
         click.echo("\nExiting interactive mode.")
 
@@ -1235,6 +1307,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stage Timeline Comparison: {app_id1}:stage{stage_id1} vs {app_id2}:stage{stage_id2}",
                 )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing stage timelines: {e}") from e
@@ -1287,6 +1363,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Resource Comparison: {app_id1} vs {app_id2}",
                 )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing resources: {e}") from e
@@ -1339,6 +1419,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Environment Comparison: {app_id1} vs {app_id2}",
                 )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing environments: {e}") from e
@@ -1408,6 +1492,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Executor Comparison: {app_id1} vs {app_id2}",
                 )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing executors: {e}") from e
@@ -1460,6 +1548,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Job Comparison: {app_id1} vs {app_id2}",
                 )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing jobs: {e}") from e
@@ -1529,6 +1621,10 @@ if CLI_AVAILABLE:
                     comparison_data,
                     f"Stages Aggregated Comparison: {app_id1} vs {app_id2}",
                 )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
 
         except Exception as e:
             raise click.ClickException(f"Error comparing aggregated stages: {e}") from e
