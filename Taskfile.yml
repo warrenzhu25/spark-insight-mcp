@@ -149,7 +149,7 @@ tasks:
     cmds:
       - |
         echo "Starting MCP server in background..."
-        bash -c 'nohup uv run -m spark_history_mcp.core.main > mcp-server.log 2>&1 &'
+        bash -c 'SHS_MCP_TRANSPORT=streamable-http nohup uv run -m spark_history_mcp.core.main > mcp-server.log 2>&1 &'
 
       - task: wait-for-mcp
     status:
