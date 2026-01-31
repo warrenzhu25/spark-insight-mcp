@@ -104,7 +104,10 @@ class OutputFormatter:
 
         # Single object - check for standardized formats first
         if isinstance(data, dict):
-            if self._is_standardized_comparison_result(data):
+            if self._is_app_summary_comparison_result(data):
+                self._format_app_summary_diff(data)
+                return
+            elif self._is_standardized_comparison_result(data):
                 self._output_table_comparison(data, title)
                 return
             elif self._is_standardized_metrics_result(data):
@@ -153,6 +156,8 @@ class OutputFormatter:
                 self._format_executor_comparison_result(data, title)
             elif self._is_job_comparison_result(data):
                 self._format_job_comparison_result(data, title)
+            elif self._is_app_summary_comparison_result(data):
+                self._format_app_summary_diff(data)
             elif self._is_aggregated_stage_comparison_result(data):
                 self._format_aggregated_stage_comparison_result(data, title)
             elif self._is_environment_comparison_result(data):
@@ -391,6 +396,14 @@ class OutputFormatter:
         """Detect job comparison results."""
         job_keys = {"applications", "job_comparison", "timing_analysis"}
         return len(job_keys.intersection(data.keys())) >= 2
+
+    def _is_app_summary_comparison_result(self, data: Dict[str, Any]) -> bool:
+        """Detect compare_app_summaries result structure."""
+        return (
+            "app1_summary" in data
+            and "app2_summary" in data
+            and "diff" in data
+        )
 
     def _is_aggregated_stage_comparison_result(self, data: Dict[str, Any]) -> bool:
         """Detect aggregated stage comparison results."""
