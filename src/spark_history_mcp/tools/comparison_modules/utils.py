@@ -109,8 +109,17 @@ def _compare_environments(
         if filter_auto_generated:
             auto_gen_patterns = [
                 "spark.app.id",
+                "spark.app.startTime",
                 "spark.driver.host",
                 "spark.driver.port",
+                "spark.driver.appUIAddress",
+                "spark.yarn.app.",
+                "spark.yarn.credentials",
+                "spark.ui.",
+                "spark.repl.",
+                "spark.jars",
+                "spark.submit.",
+                "spark.master",
             ]
             app1_spark = {
                 k: v
@@ -143,6 +152,15 @@ def _compare_environments(
                     {"property": key, "value": app2_spark[key]}
                 )
 
+        # Cap spark diffs and replace only-lists with counts
+        spark_props = comparison["spark_properties"]
+        spark_props["total_different"] = len(spark_props["different"])
+        spark_props["different"] = spark_props["different"][:10]
+        spark_props["app1_only_count"] = len(spark_props["app1_only"])
+        spark_props["app2_only_count"] = len(spark_props["app2_only"])
+        del spark_props["app1_only"]
+        del spark_props["app2_only"]
+
     # Compare system properties (similar logic)
     if app1_env.system_properties and app2_env.system_properties:
         app1_system = {k: v for k, v in app1_env.system_properties}
@@ -168,6 +186,15 @@ def _compare_environments(
                     {"property": key, "value": app2_system[key]}
                 )
 
+        # Cap system diffs and replace only-lists with counts
+        sys_props = comparison["system_properties"]
+        sys_props["total_different"] = len(sys_props["different"])
+        sys_props["different"] = sys_props["different"][:3]
+        sys_props["app1_only_count"] = len(sys_props["app1_only"])
+        sys_props["app2_only_count"] = len(sys_props["app2_only"])
+        del sys_props["app1_only"]
+        del sys_props["app2_only"]
+
     # Compare JVM information
     if hasattr(app1_env, "runtime") and hasattr(app2_env, "runtime"):
         comparison["jvm_info"] = {
@@ -186,13 +213,18 @@ def _compare_environments(
         }
 
     # Create summary
+    spark_props = comparison["spark_properties"]
+    sys_props = comparison["system_properties"]
     comparison["summary"] = {
-        "total_spark_differences": len(comparison["spark_properties"]["different"]),
-        "spark_app1_only": len(comparison["spark_properties"]["app1_only"]),
-        "spark_app2_only": len(comparison["spark_properties"]["app2_only"]),
-        "total_system_differences": len(comparison["system_properties"]["different"]),
-        "system_app1_only": len(comparison["system_properties"]["app1_only"]),
-        "system_app2_only": len(comparison["system_properties"]["app2_only"]),
+        "total_spark_differences": spark_props.get("total_different", 0),
+        "shown_spark_differences": len(spark_props.get("different", [])),
+        "spark_app1_only": spark_props.get("app1_only_count", 0),
+        "spark_app2_only": spark_props.get("app2_only_count", 0),
+        "total_system_differences": sys_props.get("total_different", 0),
+        "shown_system_differences": len(sys_props.get("different", [])),
+        "system_app1_only": sys_props.get("app1_only_count", 0),
+        "system_app2_only": sys_props.get("app2_only_count", 0),
+        "note": "Use get_environment tool for full property details",
     }
 
     return comparison
