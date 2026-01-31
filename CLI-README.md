@@ -307,6 +307,9 @@ uv run spark-mcp --cli compare executors
 # Job-level performance comparison (uses saved context)
 uv run spark-mcp --cli compare jobs
 
+# Environment config comparison (auto-generated values are filtered)
+uv run spark-mcp --cli compare env
+
 # Application summaries (includes aggregated stage metrics)
 uv run spark-mcp --cli compare summaries --apps app-123 app-456
 ```

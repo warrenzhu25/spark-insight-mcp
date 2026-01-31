@@ -5,6 +5,7 @@ This module contains shared utilities used across comparison modules including
 context management, client resolution, calculation helpers, and data processing utilities.
 """
 
+import os
 from typing import Any, Dict, Optional
 
 from ...core.app import mcp
@@ -93,6 +94,72 @@ def _compare_environments(
     app1_env, app2_env, filter_auto_generated: bool = True
 ) -> Dict[str, Any]:
     """Compare environment configurations between applications."""
+
+    def _normalize_env_value(key: str, value):
+        if value is None:
+            return None
+
+        val = str(value)
+        if not val:
+            return val
+
+        lower_val = val.lower()
+        if key in {"spark.app.id", "spark.app.startTime"}:
+            return "<auto>"
+
+        if "spark.app.id" in lower_val:
+            return "<auto>"
+
+        if "spark.kubernetes" in key or "kubernetes" in lower_val:
+            if "pod" in lower_val or "container" in lower_val:
+                return "<auto:k8s_id>"
+
+        if f"{os.sep}tmp" in val or "temp" in lower_val:
+            return "<auto:temp_path>"
+
+        if "://" not in val and "/" in val and "file:" not in lower_val:
+            if "/var/lib" in val or "/data" in val or "/mnt" in val:
+                return "<auto:path>"
+
+        # UUID patterns
+        if len(val) >= 32:
+            uuid_chars = "0123456789abcdef-"
+            if all(c in uuid_chars for c in lower_val) and lower_val.count("-") in {
+                4,
+                5,
+            }:
+                return "<auto:uuid>"
+
+        # Spark app ids
+        if lower_val.startswith("spark-") and any(ch.isdigit() for ch in lower_val):
+            return "<auto:spark_id>"
+
+        # IP address
+        ip_parts = val.split(".")
+        if len(ip_parts) == 4 and all(p.isdigit() for p in ip_parts):
+            return "<auto:ip>"
+
+        # Host:port
+        if ":" in val:
+            host, _, port = val.rpartition(":")
+            if port.isdigit():
+                return "<auto:hostport>"
+
+        # Epoch/timestamp-ish
+        if val.isdigit() and len(val) >= 10:
+            return "<auto:timestamp>"
+
+        if "timestamp" in lower_val or "time" in lower_val:
+            if any(ch.isdigit() for ch in lower_val):
+                return "<auto:timestamp>"
+
+        return value
+
+    def _normalize_props(props):
+        if not props:
+            return {}
+        return {k: _normalize_env_value(k, v) for k, v in props.items()}
+
     comparison = {
         "spark_properties": {"different": [], "app1_only": [], "app2_only": []},
         "system_properties": {"different": [], "app1_only": [], "app2_only": []},
@@ -132,6 +199,10 @@ def _compare_environments(
                 if not any(pattern in k for pattern in auto_gen_patterns)
             }
 
+        if filter_auto_generated:
+            app1_spark = _normalize_props(app1_spark)
+            app2_spark = _normalize_props(app2_spark)
+
         all_keys = set(app1_spark.keys()) | set(app2_spark.keys())
         for key in sorted(all_keys):
             if key in app1_spark and key in app2_spark:
@@ -165,6 +236,9 @@ def _compare_environments(
     if app1_env.system_properties and app2_env.system_properties:
         app1_system = {k: v for k, v in app1_env.system_properties}
         app2_system = {k: v for k, v in app2_env.system_properties}
+        if filter_auto_generated:
+            app1_system = _normalize_props(app1_system)
+            app2_system = _normalize_props(app2_system)
 
         all_keys = set(app1_system.keys()) | set(app2_system.keys())
         for key in sorted(all_keys):
