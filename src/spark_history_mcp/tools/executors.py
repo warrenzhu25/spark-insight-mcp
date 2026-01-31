@@ -13,6 +13,7 @@ from ..core.app import mcp
 from .common import (
     DEFAULT_INTERVAL_MINUTES,
     MAX_INTERVALS,
+    compact_dict,
     compact_output,
     get_client_or_default,
 )
@@ -315,26 +316,29 @@ def get_resource_usage_timeline(
             }
         )
 
-    return {
-        "application_id": app_id,
-        "application_name": app.name,
-        "summary": {
-            "total_events": len(timeline_events),
-            "executor_additions": len(
-                [e for e in timeline_events if e["type"] == "executor_add"]
-            ),
-            "executor_removals": len(
-                [e for e in timeline_events if e["type"] == "executor_remove"]
-            ),
-            "stage_executions": len(
-                [e for e in timeline_events if e["type"] == "stage_start"]
-            ),
-            "peak_executors": max(
-                [r["active_executors"] for r in resource_timeline] + [0]
-            ),
-            "peak_cores": max([r["total_cores"] for r in resource_timeline] + [0]),
-        },
-    }
+    return compact_dict(
+        {
+            "application_id": app_id,
+            "application_name": app.name,
+            "timeline": resource_timeline,
+            "summary": {
+                "total_events": len(timeline_events),
+                "executor_additions": len(
+                    [e for e in timeline_events if e["type"] == "executor_add"]
+                ),
+                "executor_removals": len(
+                    [e for e in timeline_events if e["type"] == "executor_remove"]
+                ),
+                "stage_executions": len(
+                    [e for e in timeline_events if e["type"] == "stage_start"]
+                ),
+                "peak_executors": max(
+                    [r["active_executors"] for r in resource_timeline] + [0]
+                ),
+                "peak_cores": max([r["total_cores"] for r in resource_timeline] + [0]),
+            },
+        }
+    )
 
 
 @mcp.tool()
@@ -395,8 +399,10 @@ def get_app_executor_timeline(
         for entry in result["timeline"]
     ]
 
-    return {
-        "app_info": result["app_info"],
-        "timeline": simplified_timeline,
-        "summary": result["summary"],
-    }
+    return compact_dict(
+        {
+            "app_info": result["app_info"],
+            "timeline": simplified_timeline,
+            "summary": result["summary"],
+        }
+    )

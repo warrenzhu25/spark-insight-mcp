@@ -15,9 +15,16 @@ from . import executors as executor_tools
 from . import fetchers as fetcher_tools
 from . import matching as matching_tools
 from .application import get_app_summary as _get_app_summary_impl
-from .common import get_config, resolve_legacy_tool
+from .common import (
+    get_config,
+    resolve_legacy_tool,
+    strip_applications_metadata,
+)
 from .recommendations import (
     apply_rules as apply_rec_rules,
+)
+from .recommendations import (
+    compact_recommendation,
 )
 from .recommendations import (
     dedupe as dedupe_recs,
@@ -291,6 +298,25 @@ def compare_app_performance(
         }
     aggregated_overview["job_performance"] = job_overview
 
+    cfg = get_config()
+    use_compact = cfg.compact_tool_output
+
+    # Strip redundant applications metadata from nested sub-results
+    if use_compact:
+        for key in (
+            "executor_performance",
+            "stage_metrics",
+            "application_summary",
+            "job_performance",
+        ):
+            if key in aggregated_overview and isinstance(
+                aggregated_overview[key], dict
+            ):
+                aggregated_overview[key] = strip_applications_metadata(
+                    aggregated_overview[key]
+                )
+
+    # Build result — compact mode removes duplicated keys
     result = {
         "schema_version": 1,
         "applications": {
@@ -302,17 +328,25 @@ def compare_app_performance(
             "stages": stage_analysis,
         },
         "aggregated_overview": aggregated_overview,
-        "stage_deep_dive": stage_analysis,
-        "app_summary_diff": app_summary_diff,
         "environment_comparison": environment_comparison,
-        "recommendations": sorted_recommendations,
-        "key_recommendations": filtered_recommendations,
     }
+
+    if use_compact:
+        # Compact: only key_recommendations with minimal fields
+        result["key_recommendations"] = [
+            compact_recommendation(r) for r in filtered_recommendations
+        ]
+    else:
+        # Full: include both duplicate structures for backward compat
+        result["stage_deep_dive"] = stage_analysis
+        result["app_summary_diff"] = app_summary_diff
+        result["recommendations"] = sorted_recommendations
+        result["key_recommendations"] = filtered_recommendations
 
     # Sort the result by mixed metrics (change percentages and ratios)
     # Optionally validate against schema in debug mode
     result = validate_output(
-        CompareAppPerformanceOutput, result, enabled=get_config().debug_validate_schema
+        CompareAppPerformanceOutput, result, enabled=cfg.debug_validate_schema
     )
     return sort_comparison_data(result, sort_key="mixed")
 

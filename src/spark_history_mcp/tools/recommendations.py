@@ -42,6 +42,15 @@ def dedupe(recs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return result
 
 
+def compact_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a compact version of a recommendation, keeping only essential fields."""
+    return {
+        "priority": rec.get("priority", "low"),
+        "issue": rec.get("issue", ""),
+        "suggestion": rec.get("suggestion", ""),
+    }
+
+
 def prioritize(recs: List[Dict[str, Any]], top_n: int = 5) -> List[Dict[str, Any]]:
     """Sort recommendations by priority and return top N of critical/high/medium."""
     filtered = [r for r in recs if r.get("priority") in {"critical", "high", "medium"}]

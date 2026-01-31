@@ -98,6 +98,12 @@ class ToolConfig(BaseSettings):
     compact_property_sample_limit: int = Field(
         default=25, description="Max property entries to sample in compact outputs"
     )
+    compact_recommendations_limit: int = Field(
+        default=5, description="Max recommendations to include in compact outputs"
+    )
+    compact_timeline_limit: int = Field(
+        default=100, description="Max timeline entries to include in compact outputs"
+    )
 
     # Thresholds used in recommendations
     large_stage_diff_seconds: int = Field(
@@ -142,6 +148,55 @@ def compact_output(data: Any, compact: Optional[bool] = None) -> Any:
     if not use_compact:
         return data
     return _compact_data(data, cfg)
+
+
+def compact_dict(
+    data: dict[str, Any], compact: Optional[bool] = None
+) -> dict[str, Any]:
+    """Compact a dict-based tool output when enabled.
+
+    Strips redundant keys, truncates recommendation/timeline lists,
+    and adds truncation metadata.
+    """
+    cfg = get_config()
+    use_compact = cfg.compact_tool_output if compact is None else compact
+    if not use_compact or not isinstance(data, dict):
+        return data
+    return _compact_dict(data, cfg)
+
+
+def _compact_dict(data: dict[str, Any], cfg: ToolConfig) -> dict[str, Any]:
+    """Recursively compact a dict output."""
+    result = {}
+    for key, value in data.items():
+        if key == "recommendations" and isinstance(value, list):
+            limit = cfg.compact_recommendations_limit
+            result[key] = value[:limit]
+            if len(value) > limit:
+                result["_recommendations_truncated"] = {
+                    "total": len(value),
+                    "returned": limit,
+                }
+        elif key == "timeline" and isinstance(value, list):
+            limit = cfg.compact_timeline_limit
+            result[key] = value[:limit]
+            if len(value) > limit:
+                result["_timeline_truncated"] = {
+                    "total": len(value),
+                    "returned": limit,
+                }
+        elif isinstance(value, dict):
+            result[key] = _compact_dict(value, cfg)
+        else:
+            result[key] = value
+    return result
+
+
+def strip_applications_metadata(data: dict[str, Any]) -> dict[str, Any]:
+    """Remove redundant 'applications' key from sub-comparison results."""
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k != "applications"}
+    return data
 
 
 def _compact_data(data: Any, cfg: ToolConfig) -> Any:

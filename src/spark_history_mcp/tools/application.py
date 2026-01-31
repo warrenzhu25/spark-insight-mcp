@@ -15,8 +15,9 @@ from .analysis import (
     analyze_failed_tasks,
     analyze_shuffle_skew,
 )
-from .common import compact_output, get_client_or_default
+from .common import compact_output, get_client_or_default, get_config
 from .fetchers import fetch_app, fetch_env, fetch_executors, fetch_stages
+from .recommendations import compact_recommendation
 
 
 @mcp.tool()
@@ -278,7 +279,32 @@ def get_application_insights(
         else "needs_attention",
     }
 
-    insights["recommendations"] = all_recommendations
+    cfg = get_config()
+    if cfg.compact_tool_output:
+        # Compact: summarize each sub-analysis instead of full results
+        compact_analyses = {}
+        for name, result in insights["analyses"].items():
+            if "error" in result:
+                compact_analyses[name] = {"status": "error", "error": result["error"]}
+            else:
+                compact_analyses[name] = {
+                    "status": "ok",
+                    "recommendation_count": len(result.get("recommendations", [])),
+                }
+        insights["analyses"] = compact_analyses
+
+        # Compact recommendations: top N with minimal fields
+        limit = cfg.compact_recommendations_limit
+        insights["recommendations"] = [
+            compact_recommendation(r) for r in all_recommendations[:limit]
+        ]
+        if len(all_recommendations) > limit:
+            insights["_recommendations_truncated"] = {
+                "total": len(all_recommendations),
+                "returned": limit,
+            }
+    else:
+        insights["recommendations"] = all_recommendations
 
     return insights
 
