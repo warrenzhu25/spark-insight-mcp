@@ -1396,6 +1396,61 @@ if CLI_AVAILABLE:
         except Exception as e:
             raise click.ClickException(f"Error comparing environments: {e}") from e
 
+    @compare.command("summaries")
+    @click.option(
+        "--apps",
+        nargs=2,
+        metavar="APP1 APP2",
+        help="Override apps from context (app1 app2)",
+    )
+    @click.option("--server", "-s", help="Server name to use")
+    @click.option(
+        "--format",
+        "-f",
+        "output_format",
+        type=click.Choice(["human", "json", "table"]),
+        default="human",
+        help="Output format",
+    )
+    @click.pass_context
+    def summaries(
+        ctx,
+        apps: Optional[Tuple[str, str]],
+        server: Optional[str],
+        output_format: str,
+    ):
+        """Compare application summaries between applications."""
+        config_path = ctx.obj["config_path"]
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
+
+        try:
+            if apps:
+                app_id1, app_id2 = apps
+                final_server = server
+            else:
+                app_id1, app_id2, final_server = get_app_context(server=server)
+
+            client = get_spark_client(config_path, final_server)
+
+            import spark_history_mcp.tools.tools as tools_module
+            from spark_history_mcp.tools import compare_app_summaries
+
+            with patch_tool_context(client, tools_module):
+                comparison_data = compare_app_summaries(
+                    app_id1=app_id1, app_id2=app_id2, server=final_server
+                )
+                formatter.output(
+                    comparison_data,
+                    f"Summary Comparison: {app_id1} vs {app_id2}",
+                )
+                if output_format == "human" and _is_interactive():
+                    show_generic_follow_up_menu(
+                        app_id1, app_id2, final_server, formatter, ctx
+                    )
+
+        except Exception as e:
+            raise click.ClickException(f"Error comparing summaries: {e}") from e
+
     @compare.command("executors")
     @click.option(
         "--apps",
