@@ -6,11 +6,20 @@ tools remain thin and avoid duplication.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+import json
+from typing import Any, Dict, List, Optional, Tuple, Type
 from unittest import mock
 
+from pydantic import BaseModel
+
+from .. import cache
 from ..models.spark_types import (
+    ApplicationEnvironmentInfo,
+    ApplicationInfo,
+    ExecutorSummary,
+    JobData,
     JobExecutionStatus,
+    StageData,
     StageStatus,
 )
 from . import analysis as analysis_tools
@@ -30,14 +39,16 @@ def _resolve_client(server: Optional[str]):
                 "Spark MCP context is not available outside of a request"
             ) from err
         client = get_client(ctx, server)
-    use_cache = ctx is not None and not isinstance(client, mock.Mock)
-    return client, use_cache
+    is_mock = isinstance(client, mock.Mock)
+    use_cache = ctx is not None and not is_mock
+    use_disk = not is_mock
+    return client, use_cache, use_disk
 
 
 def _cache_get(key: Tuple[Any, ...], use_cache: bool):
-    if not use_cache:
-        return None
-    return _CACHE.get(key)
+    if use_cache and key in _CACHE:
+        return _CACHE[key]
+    return None
 
 
 def _cache_set(key: Tuple[Any, ...], value: Any, use_cache: bool):
@@ -46,28 +57,104 @@ def _cache_set(key: Tuple[Any, ...], value: Any, use_cache: bool):
     return value
 
 
+# ---------------------------------------------------------------------------
+# Typed disk-cache helpers
+# ---------------------------------------------------------------------------
+
+
+def _disk_get_single(
+    key: Tuple[Any, ...], model_cls: Type[BaseModel], use_disk: bool
+):
+    """Try to load a single model from disk cache."""
+    if not use_disk:
+        return None
+    raw = cache.disk_get(key)
+    if raw is None:
+        return None
+    try:
+        return model_cls.model_validate_json(raw)
+    except Exception:
+        return None
+
+
+def _disk_set_single(
+    key: Tuple[Any, ...], value: BaseModel, use_disk: bool
+) -> None:
+    """Persist a single model to disk cache."""
+    if not use_disk:
+        return
+    try:
+        cache.disk_set(key, value.model_dump_json())
+    except Exception:  # noqa: S110
+        pass
+
+
+def _disk_get_list(
+    key: Tuple[Any, ...], model_cls: Type[BaseModel], use_disk: bool
+):
+    """Try to load a list of models from disk cache."""
+    if not use_disk:
+        return None
+    raw = cache.disk_get(key)
+    if raw is None:
+        return None
+    try:
+        items = json.loads(raw)
+        return [model_cls.model_validate(d) for d in items]
+    except Exception:
+        return None
+
+
+def _disk_set_list(
+    key: Tuple[Any, ...], values: List[BaseModel], use_disk: bool
+) -> None:
+    """Persist a list of models to disk cache."""
+    if not use_disk:
+        return
+    try:
+        data = json.dumps([v.model_dump(mode="json") for v in values])
+        cache.disk_set(key, data)
+    except Exception:  # noqa: S110
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Fetchers
+# ---------------------------------------------------------------------------
+
+
 def fetch_env(app_id: str, server: Optional[str] = None):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
     key = (get_server_key(server), "env", app_id)
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(key, client.get_environment(app_id=app_id), use_cache)
+    disk = _disk_get_single(key, ApplicationEnvironmentInfo, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.get_environment(app_id=app_id)
+    _disk_set_single(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_app(app_id: str, server: Optional[str] = None):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
     key = (get_server_key(server), "app", app_id)
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(key, client.get_application(app_id), use_cache)
+    disk = _disk_get_single(key, ApplicationInfo, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.get_application(app_id)
+    _disk_set_single(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_jobs(
     app_id: str, server: Optional[str] = None, status: Optional[List[str]] = None
 ):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
 
     job_statuses = None
     if status:
@@ -77,9 +164,12 @@ def fetch_jobs(
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(
-        key, client.list_jobs(app_id=app_id, status=job_statuses), use_cache
-    )
+    disk = _disk_get_list(key, JobData, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.list_jobs(app_id=app_id, status=job_statuses)
+    _disk_set_list(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_stages(
@@ -88,7 +178,7 @@ def fetch_stages(
     status: Optional[List[str]] = None,
     with_summaries: bool = False,
 ):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
 
     stage_statuses = None
     if status:
@@ -104,26 +194,32 @@ def fetch_stages(
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(
-        key,
-        client.list_stages(
-            app_id=app_id, status=stage_statuses, with_summaries=with_summaries
-        ),
-        use_cache,
+    disk = _disk_get_list(key, StageData, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.list_stages(
+        app_id=app_id, status=stage_statuses, with_summaries=with_summaries
     )
+    _disk_set_list(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_executors(
     app_id: str, server: Optional[str] = None, include_inactive: bool = True
 ):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
 
     # list_all_executors already includes inactive in most SHS implementations
     key = (get_server_key(server), "executors", app_id, bool(include_inactive))
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(key, client.list_all_executors(app_id=app_id), use_cache)
+    disk = _disk_get_list(key, ExecutorSummary, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.list_all_executors(app_id=app_id)
+    _disk_set_list(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_stage_attempt(
@@ -133,7 +229,7 @@ def fetch_stage_attempt(
     server: Optional[str] = None,
     with_summaries: bool = False,
 ):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
     key = (
         get_server_key(server),
         "stage_attempt",
@@ -145,17 +241,18 @@ def fetch_stage_attempt(
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(
-        key,
-        client.get_stage_attempt(
-            app_id=app_id,
-            stage_id=stage_id,
-            attempt_id=attempt_id,
-            details=False,
-            with_summaries=with_summaries,
-        ),
-        use_cache,
+    disk = _disk_get_single(key, StageData, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.get_stage_attempt(
+        app_id=app_id,
+        stage_id=stage_id,
+        attempt_id=attempt_id,
+        details=False,
+        with_summaries=with_summaries,
     )
+    _disk_set_single(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_stage_attempts(
@@ -164,7 +261,7 @@ def fetch_stage_attempts(
     server: Optional[str] = None,
     with_summaries: bool = False,
 ):
-    client, use_cache = _resolve_client(server)
+    client, use_cache, use_disk = _resolve_client(server)
     key = (
         get_server_key(server),
         "stage_attempts",
@@ -175,16 +272,17 @@ def fetch_stage_attempts(
     cached = _cache_get(key, use_cache)
     if cached is not None:
         return cached
-    return _cache_set(
-        key,
-        client.list_stage_attempts(
-            app_id=app_id,
-            stage_id=stage_id,
-            details=False,
-            with_summaries=with_summaries,
-        ),
-        use_cache,
+    disk = _disk_get_list(key, StageData, use_disk)
+    if disk is not None:
+        return _cache_set(key, disk, use_cache)
+    result = client.list_stage_attempts(
+        app_id=app_id,
+        stage_id=stage_id,
+        details=False,
+        with_summaries=with_summaries,
     )
+    _disk_set_list(key, result, use_disk)
+    return _cache_set(key, result, use_cache)
 
 
 def fetch_sql_pages(
@@ -199,7 +297,7 @@ def fetch_sql_pages(
 
     If paging is not supported by the client, falls back to a single call.
     """
-    client, _ = _resolve_client(server)
+    client, _, _ = _resolve_client(server)
 
     # Try an API that supports paging; otherwise use the simple list
     if hasattr(client, "get_sql_list_paged"):

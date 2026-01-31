@@ -96,6 +96,7 @@ if CLI_RUNTIME_AVAILABLE:
     try:
         from spark_history_mcp.cli.commands.analyze import analyze
         from spark_history_mcp.cli.commands.apps import apps
+        from spark_history_mcp.cli.commands.cache import cache_cmd
         from spark_history_mcp.cli.commands.compare import compare
         from spark_history_mcp.cli.commands.config import config_cmd
         from spark_history_mcp.cli.commands.server import server
@@ -105,6 +106,7 @@ if CLI_RUNTIME_AVAILABLE:
         cli.add_command(compare)
         cli.add_command(server)
         cli.add_command(config_cmd, name="config")
+        cli.add_command(cache_cmd, name="cache")
     except ImportError:
         pass  # Commands will be unavailable if dependencies missing
 
