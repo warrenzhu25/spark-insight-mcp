@@ -240,6 +240,71 @@ uv run spark-mcp --cli apps compare app1 app2
 
 The `compare` command group provides **stateful multi-app comparisons** with session context management. Set your comparison context once, then drill down into granular analysis without repeating app IDs.
 
+## 📚 Command Reference (All CLI Commands)
+
+Top-level:
+- `apps` - list, inspect, and compare applications
+- `analyze` - targeted analyses and diagnostics
+- `compare` - stateful multi-app comparisons
+- `server` - manage MCP server
+- `config` - manage configuration files
+- `cache` - clear CLI cache
+
+`apps` subcommands:
+- `apps list`
+- `apps compare`
+- `apps show`
+- `apps jobs`
+- `apps stages`
+- `apps summary`
+
+`analyze` subcommands:
+- `analyze insights`
+- `analyze bottlenecks`
+- `analyze auto-scaling`
+- `analyze shuffle-skew`
+- `analyze slowest`
+- `analyze compare` (deprecated)
+
+`compare` subcommands:
+- `compare apps`
+- `compare stages`
+- `compare timeline`
+- `compare stage-timeline`
+- `compare resources`
+- `compare env`
+- `compare summaries`
+- `compare executors`
+- `compare jobs`
+- `compare status`
+- `compare clear`
+
+`server` subcommands:
+- `server start`
+- `server test`
+- `server status`
+
+`config` subcommands:
+- `config init`
+- `config show`
+- `config validate`
+- `config edit`
+
+`cache` subcommands:
+- `cache clear`
+
+### Sample Output
+
+Example: `apps list --limit 3`
+
+```
+Spark Applications (limit: 3)
+------------------------------------------------------------
+[1] app-20250131-010203  Daily ETL Job        FINISHED  8.4m
+[2] app-20250131-004455  Daily ETL Job        FINISHED  7.9m
+[3] app-20250130-231122  Weekly Backfill     FAILED    42.1m
+```
+
 ### 📝 Quoting Application Names
 
 **When quotes are REQUIRED:**
