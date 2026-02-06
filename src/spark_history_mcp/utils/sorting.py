@@ -197,6 +197,7 @@ def sort_comparison_data(
     # Also check nested paths like 'app_summary_diff' -> 'diff'
     nested_paths = [
         ["app_summary_diff", "diff"],
+        ["aggregated_overview", "application_summary", "diff"],
         ["performance_comparison", "executors"],
         ["performance_comparison", "stages"],
     ]

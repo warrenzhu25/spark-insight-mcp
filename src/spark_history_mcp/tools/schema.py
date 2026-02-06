@@ -13,7 +13,6 @@ class CompareAppPerformanceOutput(BaseModel):
     schema_version: int = Field(default=1)
     applications: Dict[str, Any]
     performance_comparison: Dict[str, Any]
-    app_summary_diff: Optional[Dict[str, Any]] = None
     environment_comparison: Dict[str, Any]
     key_recommendations: List[Dict[str, Any]]
     # These fields are omitted in compact mode

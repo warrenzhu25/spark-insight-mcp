@@ -44,18 +44,20 @@ class TestOutputFormatterHuman:
                 "app2": {"id": "app-2", "name": "App Two"},
             },
             "performance_comparison": {"stages": {"top_stage_differences": []}},
-            "app_summary_diff": {
-                "diff": {
-                    "application_duration_minutes_change": "+10%",
-                    "total_executor_runtime_minutes_change": "-5%",
-                },
-                "app1_summary": {
-                    "application_duration_minutes": 12.34,
-                    "total_executor_runtime_minutes": 11.0,
-                },
-                "app2_summary": {
-                    "application_duration_minutes": 13.57,
-                    "total_executor_runtime_minutes": 10.45,
+            "aggregated_overview": {
+                "application_summary": {
+                    "diff": {
+                        "application_duration_minutes_change": "+10%",
+                        "total_executor_runtime_minutes_change": "-5%",
+                    },
+                    "app1_summary": {
+                        "application_duration_minutes": 12.34,
+                        "total_executor_runtime_minutes": 11.0,
+                    },
+                    "app2_summary": {
+                        "application_duration_minutes": 13.57,
+                        "total_executor_runtime_minutes": 10.45,
+                    },
                 },
             },
         }

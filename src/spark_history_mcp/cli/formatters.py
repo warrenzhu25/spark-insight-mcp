@@ -452,8 +452,14 @@ class OutputFormatter:
             self._format_stage_differences(data["performance_comparison"]["stages"])
 
         # 4. App Summary Diff table THIRD (aggregated metrics comparison)
-        if "app_summary_diff" in data:
-            self._format_app_summary_diff(data["app_summary_diff"])
+        # Look in aggregated_overview.application_summary first, fall back to top-level
+        app_summary_diff = data.get("app_summary_diff")
+        if app_summary_diff is None:
+            app_summary_diff = data.get("aggregated_overview", {}).get(
+                "application_summary"
+            )
+        if app_summary_diff:
+            self._format_app_summary_diff(app_summary_diff)
 
         # 5. Environment comparison summary
         if "environment_comparison" in data:

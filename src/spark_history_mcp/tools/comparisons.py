@@ -117,7 +117,7 @@ def compare_app_performance(
         - performance_comparison:
           - executors: Key executor efficiency metrics and comparisons
           - stages: Top N stages with largest time differences and performance metrics
-        - app_summary_diff: Application-level aggregated metrics comparison with percentage changes
+        - aggregated_overview: Application-level aggregated metrics (application_summary, executor_performance, job_performance)
         - environment_comparison: Configuration and environment differences
         - key_recommendations: Up to 5 highest priority (critical/high/medium) recommendations
 
@@ -213,13 +213,15 @@ def compare_app_performance(
             aggregated_overview["executor_performance"]["recommendations"]
         )
 
-    # Stage-level aggregated recommendations
-    if (
-        aggregated_overview["stage_metrics"]
-        and isinstance(aggregated_overview["stage_metrics"], dict)
-        and "recommendations" in aggregated_overview["stage_metrics"]
-    ):
-        recommendations.extend(aggregated_overview["stage_metrics"]["recommendations"])
+    # Stage-level aggregated recommendations (from application_summary if available)
+    app_summary = aggregated_overview.get("application_summary", {})
+    agg_stage = (
+        app_summary.get("aggregated_stage_comparison", {})
+        if isinstance(app_summary, dict)
+        else {}
+    )
+    if isinstance(agg_stage, dict) and "recommendations" in agg_stage:
+        recommendations.extend(agg_stage["recommendations"])
 
     # STAGE-LEVEL RECOMMENDATIONS (existing logic continues below)
 
@@ -312,7 +314,6 @@ def compare_app_performance(
     if use_compact:
         for key in (
             "executor_performance",
-            "stage_metrics",
             "application_summary",
             "job_performance",
         ):
@@ -337,9 +338,6 @@ def compare_app_performance(
         "aggregated_overview": aggregated_overview,
         "environment_comparison": environment_comparison,
     }
-
-    # Always include app_summary_diff so CLI can render "Application Metrics Comparison"
-    result["app_summary_diff"] = app_summary_diff
 
     if use_compact:
         # Compact: only key_recommendations with minimal fields
@@ -3107,22 +3105,13 @@ def _build_aggregated_overview(
     except Exception as e:
         executor_comparison = {"error": f"Failed to get executor comparison: {str(e)}"}
 
-    try:
-        stage_comparison = compare_app_stages_aggregated(
-            app_id1,
-            app_id2,
-            server,
-            significance_threshold=significance_threshold,
-            show_only_significant=True,
-        )
-    except Exception as e:
-        stage_comparison = {"error": f"Failed to get stage comparison: {str(e)}"}
-
     # Create streamlined aggregated overview using specialized tools
+    # Note: stage_metrics removed — it duplicated data already present in
+    # application_summary.aggregated_stage_comparison (populated later via
+    # compare_app_summaries).
     return {
         "application_summary": {},
         "job_performance": {},
-        "stage_metrics": stage_comparison,
         "executor_performance": executor_comparison,
     }
 
