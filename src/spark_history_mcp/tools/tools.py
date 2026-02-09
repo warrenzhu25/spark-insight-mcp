@@ -9,6 +9,7 @@ backward compatibility with existing tests and imports.
 from ..core.app import mcp  # noqa: F401
 from .analysis import *  # noqa: F401,F403
 from .application import *  # noqa: F401,F403
+from .cleanup import *  # noqa: F401,F403
 
 # Import common utilities that might be used by tests
 from .common import get_client_or_default, get_config  # noqa: F401

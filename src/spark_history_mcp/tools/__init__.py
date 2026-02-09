@@ -17,6 +17,9 @@ from .application import (
     list_applications,
 )
 
+# Cleanup tools
+from .cleanup import delete_event_logs
+
 # Comparison tools
 from .comparisons import (
     compare_app_environments,
@@ -77,6 +80,8 @@ __all__ = [
     "analyze_auto_scaling",
     "analyze_shuffle_skew",
     "analyze_failed_tasks",
+    # Cleanup tools
+    "delete_event_logs",
     # Comparison tools
     "compare_app_environments",
     "compare_app_executor_timeline",
