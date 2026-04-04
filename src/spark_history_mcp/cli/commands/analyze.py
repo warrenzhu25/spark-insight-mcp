@@ -14,36 +14,11 @@ from spark_history_mcp.cli._compat import (
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.apps import get_spark_client
+    from spark_history_mcp.cli.commands.apps import (
+        get_spark_client,
+        resolve_app_id_arg,
+    )
     from spark_history_mcp.cli.formatters import OutputFormatter
-    from spark_history_mcp.cli.session import is_number_ref, resolve_number_ref
-
-
-def resolve_app_id_arg(identifier: str) -> str:
-    """
-    Resolve an app identifier to an app ID.
-
-    Handles number references (1, 2, 3...) by looking up the saved mapping.
-    Returns the identifier unchanged if it's not a number ref.
-
-    Args:
-        identifier: Number ref like "1" or app ID like "app-123"
-
-    Returns:
-        The resolved app ID
-
-    Raises:
-        click.ClickException: If number ref not found in session
-    """
-    if is_number_ref(identifier):
-        app_id = resolve_number_ref(int(identifier))
-        if app_id:
-            click.echo(f"Resolved #{identifier} to: {app_id}")
-            return app_id
-        raise click.ClickException(
-            f"#{identifier} not found. Run 'apps list' first to set up references."
-        )
-    return identifier
 
 
 if CLI_AVAILABLE:

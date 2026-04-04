@@ -47,13 +47,9 @@ class SparkRestClient:
         self.auth = None
         self.session = None
         self.use_proxy = self.config.use_proxy
+        proxy_url = self.config.proxy_url or "socks5h://localhost:8157"
         self.proxies = (
-            self.use_proxy
-            and {
-                "http": "socks5h://localhost:8157",
-                "https": "socks5h://localhost:8157",
-            }
-            or None
+            {"http": proxy_url, "https": proxy_url} if self.use_proxy else None
         )
         self.pattern = re.compile(r"(.*?/applications/[^/]+/)(.+)")
 
@@ -68,7 +64,10 @@ class SparkRestClient:
                 self.auth = (self.config.auth.username, self.config.auth.password)
 
     def _make_request(
-        self, request_url: str, params: Optional[Dict[str, Any]]
+        self,
+        request_url: str,
+        params: Optional[Dict[str, Any]],
+        headers: Optional[Dict[str, str]] = None,
     ) -> requests.Response:
         """
         Make a GET request to the Spark REST API.
@@ -76,11 +75,13 @@ class SparkRestClient:
         Args:
             request_url: The request URL
             params: Optional query parameters
+            headers: Optional request headers (defaults to JSON Accept header)
 
         Returns:
             The response from the API
         """
-        headers = {"Accept": "application/json"}
+        if headers is None:
+            headers = {"Accept": "application/json"}
 
         # Add token to headers if provided
         if self.config.auth and self.config.auth.token:
@@ -739,39 +740,13 @@ class SparkRestClient:
 
         params = {"id": execution_id}
 
-        # Make HTML request (not JSON)
-        headers = {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        }
-
-        # Add token to headers if provided
-        if self.config.auth and self.config.auth.token:
-            headers["Authorization"] = f"Bearer {self.config.auth.token}"
-
-        verify = self.verify_ssl
-
-        if self.session:
-            # Add headers to the session
-            for key, value in headers.items():
-                self.session.headers[key] = value
-
-            response = self.session.get(
-                url,
-                params=params,
-                timeout=self.timeout,
-                verify=verify,
-                proxies=self.proxies,
-            )
-        else:
-            response = requests.get(
-                url,
-                params=params,
-                headers=headers,
-                auth=self.auth,
-                timeout=self.timeout,
-                verify=verify,
-                proxies=self.proxies,
-            )
+        response = self._make_request(
+            url,
+            params=params,
+            headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+        )
 
         response.raise_for_status()
         return response.text

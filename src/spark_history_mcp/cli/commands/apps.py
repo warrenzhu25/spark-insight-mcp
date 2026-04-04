@@ -4,6 +4,7 @@ Application-related CLI commands.
 Commands for listing and inspecting Spark applications.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -115,6 +116,8 @@ def create_mock_context(client):
 
 
 def _is_interactive() -> bool:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 

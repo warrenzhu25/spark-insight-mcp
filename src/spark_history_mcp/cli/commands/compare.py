@@ -5,8 +5,6 @@ Commands for comparing multiple Spark applications with stateful context managem
 """
 
 import json
-import os
-import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -14,12 +12,15 @@ from spark_history_mcp.cli._compat import (
     CLI_AVAILABLE,
     cli_unavailable_stub,
     click,
-    create_tool_context,
     patch_tool_context,
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.apps import get_spark_client
+    from spark_history_mcp.cli.commands.apps import (
+        _is_interactive,
+        create_mock_context,
+        get_spark_client,
+    )
     from spark_history_mcp.cli.formatters import OutputFormatter
     from spark_history_mcp.cli.session import is_number_ref, resolve_number_ref
 
@@ -305,18 +306,6 @@ def resolve_app_identifiers(
 
         feedback = "\n".join(feedback_parts) if feedback_parts else None
         return resolved_id1, resolved_id2, feedback
-
-
-def create_mock_context(client):
-    """Backward-compatible wrapper for tests relying on the old helper."""
-
-    return create_tool_context(client)
-
-
-def _is_interactive() -> bool:
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return True
-    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def _top_metric_differences(metrics: dict, limit: int = 5) -> list[dict[str, object]]:

@@ -27,6 +27,7 @@ class ServerConfig(BaseSettings):
     verify_ssl: bool = True
     emr_cluster_arn: Optional[str] = None  # EMR specific field
     use_proxy: bool = False
+    proxy_url: Optional[str] = None  # e.g. "socks5h://localhost:8157"
     timeout: int = 30  # HTTP request timeout in seconds
 
 
