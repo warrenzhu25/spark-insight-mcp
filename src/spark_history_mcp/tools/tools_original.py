@@ -7,7 +7,14 @@ callers while the new modules host the actual implementations.
 
 from spark_history_mcp.tools.analysis import *  # noqa: F401,F403
 from spark_history_mcp.tools.application import *  # noqa: F401,F403
-from spark_history_mcp.tools.comparisons import *  # noqa: F401,F403
+from spark_history_mcp.tools.comparison_modules.core import *  # noqa: F401,F403
+from spark_history_mcp.tools.comparison_modules.environment import *  # noqa: F401,F403
+from spark_history_mcp.tools.comparison_modules.executors import *  # noqa: F401,F403
+from spark_history_mcp.tools.comparison_modules.stages import *  # noqa: F401,F403
+from spark_history_mcp.tools.comparison_modules.utils import (  # noqa: F401
+    _compare_environments,
+    _compare_sql_execution_plans,
+)
 from spark_history_mcp.tools.executors import *  # noqa: F401,F403
 from spark_history_mcp.tools.jobs_stages import *  # noqa: F401,F403
 

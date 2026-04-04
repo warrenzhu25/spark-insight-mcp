@@ -11,7 +11,11 @@ from typing import Any, Dict, Optional
 from ...core.app import mcp
 from .. import fetchers as fetcher_tools
 from .. import matching as matching_tools
+from .constants import SIGNIFICANCE_THRESHOLD, SIMILARITY_THRESHOLD
 from .utils import calculate_stage_duration
+
+
+logger = logging.getLogger(__name__)
 
 
 @mcp.tool()
@@ -20,7 +24,7 @@ def find_top_stage_differences(
     app_id2: str,
     server: Optional[str] = None,
     top_n: int = 5,
-    similarity_threshold: float = 0.6,
+    similarity_threshold: float = SIMILARITY_THRESHOLD,
 ) -> Dict[str, Any]:
     """
     Find the top N stages with the most significant time differences between two Spark applications.
@@ -180,7 +184,7 @@ def compare_stages(
     stage_id1: int,
     stage_id2: int,
     server: Optional[str] = None,
-    significance_threshold: float = 0.1,
+    significance_threshold: float = SIGNIFICANCE_THRESHOLD,
 ) -> Dict[str, Any]:
     """
     Compare specific stages between two Spark applications.

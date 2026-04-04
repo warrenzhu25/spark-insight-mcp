@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from ...core.app import mcp
 from .. import executors as executor_tools
 from .. import fetchers as fetcher_tools
+from .constants import SIGNIFICANCE_THRESHOLD
 from .utils import calculate_safe_ratio, filter_significant_metrics
 
 
@@ -199,7 +200,7 @@ def compare_app_executors(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    significance_threshold: float = 0.1,
+    significance_threshold: float = SIGNIFICANCE_THRESHOLD,
     show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """

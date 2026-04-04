@@ -25,6 +25,12 @@ from ..recommendations import (
     prioritize as prioritize_recs,
 )
 from ..schema import CompareAppPerformanceOutput, validate_output
+from .constants import (
+    RECOMMENDATION_CORE_RATIO_THRESHOLD,
+    RECOMMENDATION_MEMORY_RATIO_THRESHOLD,
+    SIGNIFICANCE_THRESHOLD,
+    SIMILARITY_THRESHOLD,
+)
 from .utils import (
     resolve_client,
     sort_comparison_data,
@@ -39,8 +45,8 @@ def compare_app_performance(
     app_id2: str,
     server: Optional[str] = None,
     top_n: int = 3,
-    significance_threshold: float = 0.1,
-    similarity_threshold: float = 0.6,
+    significance_threshold: float = SIGNIFICANCE_THRESHOLD,
+    similarity_threshold: float = SIMILARITY_THRESHOLD,
 ) -> Dict[str, Any]:
     """
     Streamlined performance comparison between two Spark applications.
@@ -53,8 +59,8 @@ def compare_app_performance(
         app_id2: Second Spark application ID
         server: Optional server name to use (uses default if not specified)
         top_n: Number of top stage differences to return for analysis (default: 3)
-        significance_threshold: Minimum difference threshold to show metric (default: 0.1)
-        similarity_threshold: Minimum similarity for stage name matching (default: 0.6)
+        significance_threshold: Minimum difference threshold to show metric
+        similarity_threshold: Minimum similarity for stage name matching
 
     Returns:
         Dictionary containing:
@@ -238,7 +244,7 @@ def compare_app_summaries(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    significance_threshold: float = 0.1,
+    significance_threshold: float = SIGNIFICANCE_THRESHOLD,
 ) -> Dict[str, Any]:
     """
     Compare application-level summary metrics between two Spark applications.
@@ -428,9 +434,9 @@ def _generate_basic_recommendations(app1, app2) -> list:
     # Resource allocation differences
     if app1.cores_granted and app2.cores_granted:
         core_ratio = app2.cores_granted / app1.cores_granted
-        if core_ratio > 1.5 or core_ratio < 0.67:  # >50% difference
-            slower_app = "app1" if core_ratio > 1.5 else "app2"
-            faster_app = "app2" if core_ratio > 1.5 else "app1"
+        if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD or core_ratio < (1 / RECOMMENDATION_CORE_RATIO_THRESHOLD):
+            slower_app = "app1" if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD else "app2"
+            faster_app = "app2" if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD else "app1"
             basic_recommendations.append(
                 {
                     "type": "resource_allocation",
@@ -443,7 +449,7 @@ def _generate_basic_recommendations(app1, app2) -> list:
     # Memory allocation differences
     if app1.memory_per_executor_mb and app2.memory_per_executor_mb:
         memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
-        if memory_ratio > 1.5 or memory_ratio < 0.67:  # >50% difference
+        if memory_ratio > RECOMMENDATION_MEMORY_RATIO_THRESHOLD or memory_ratio < (1 / RECOMMENDATION_MEMORY_RATIO_THRESHOLD):
             basic_recommendations.append(
                 {
                     "type": "resource_allocation",

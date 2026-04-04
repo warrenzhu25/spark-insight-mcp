@@ -20,18 +20,23 @@ from .application import (
 # Cleanup tools
 from .cleanup import delete_event_logs
 
-# Comparison tools (MCP-exposed)
-# Comparison helpers (internal, used by CLI)
-from .comparisons import (
-    compare_app_environments,
-    compare_app_executor_timeline,
-    compare_app_executors,
-    compare_app_jobs,
+# Comparison tools (MCP-exposed and internal helpers)
+from .comparison_modules.core import (
     compare_app_performance,
+    compare_app_summaries,
+)
+from .comparison_modules.environment import (
+    compare_app_environments,
+    compare_app_jobs,
     compare_app_resources,
     compare_app_stages_aggregated,
-    compare_app_summaries,
+)
+from .comparison_modules.executors import (
+    compare_app_executor_timeline,
+    compare_app_executors,
     compare_stage_executor_timeline,
+)
+from .comparison_modules.stages import (
     compare_stages,
     find_top_stage_differences,
 )

@@ -13,6 +13,8 @@ from pydantic_settings import (
 # Default constants
 DEFAULT_PROXY_URL = "socks5h://localhost:8157"
 DEFAULT_SESSION_DIR = Path.home() / ".config" / "spark-history-mcp"
+DEFAULT_SIGNIFICANCE_THRESHOLD = 0.1
+DEFAULT_SIMILARITY_THRESHOLD = 0.6
 
 
 class AuthConfig(BaseSettings):

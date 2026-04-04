@@ -5,15 +5,61 @@ This module contains tools for comparing resource allocation, job-level metrics,
 aggregated stage metrics, and application configurations between Spark applications.
 """
 
+import logging
 from typing import Any, Dict, Optional
 
 from ...core.app import mcp
 from .. import fetchers as fetcher_tools
 from .utils import (
+    _compare_environments,
     calculate_safe_ratio,
     filter_significant_metrics,
     sort_comparison_data,
 )
+from .constants import SIGNIFICANCE_THRESHOLD
+
+logger = logging.getLogger(__name__)
+
+
+@mcp.tool()
+def compare_app_environments(
+    app_id1: str,
+    app_id2: str,
+    server: Optional[str] = None,
+    filter_auto_generated: bool = True,
+) -> Dict[str, Any]:
+    """
+    Compare environment configurations between two Spark applications.
+
+    Compares Spark properties, system properties, and JVM information to identify
+    configuration differences that may affect performance.
+
+    Args:
+        app_id1: First Spark application ID (baseline)
+        app_id2: Second Spark application ID (comparison target)
+        server: Optional Spark History Server name
+        filter_auto_generated: Whether to filter auto-generated properties (default: True)
+
+    Returns:
+        Dict containing environment configuration differences
+    """
+    try:
+        env1 = fetcher_tools.fetch_env(app_id=app_id1, server=server)
+        env2 = fetcher_tools.fetch_env(app_id=app_id2, server=server)
+
+        result = _compare_environments(env1, env2, filter_auto_generated=filter_auto_generated)
+        result["applications"] = {
+            "app1": {"id": app_id1},
+            "app2": {"id": app_id2},
+        }
+        return result
+
+    except Exception as e:
+        logger.exception("Failed to compare environments")
+        return {
+            "error": f"Failed to compare environments: {str(e)}",
+            "applications": {"app1": {"id": app_id1}, "app2": {"id": app_id2}},
+        }
 
 
 @mcp.tool()
@@ -149,7 +195,7 @@ def compare_app_stages_aggregated(
     app_id1: str,
     app_id2: str,
     server: Optional[str] = None,
-    significance_threshold: float = 0.1,
+    significance_threshold: float = SIGNIFICANCE_THRESHOLD,
     show_only_significant: bool = True,
 ) -> Dict[str, Any]:
     """
