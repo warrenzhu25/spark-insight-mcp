@@ -17,7 +17,7 @@ if CLI_AVAILABLE:
     from spark_history_mcp.cli.utils.context import get_spark_client
     from spark_history_mcp.cli.utils.resolution import resolve_app_identifier
 
-    from spark_history_mcp.cli.formatters import OutputFormatter
+    from spark_history_mcp.cli.formatter_modules import OutputFormatter
 
 
 if CLI_AVAILABLE:

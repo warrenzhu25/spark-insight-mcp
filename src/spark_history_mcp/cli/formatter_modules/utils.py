@@ -55,7 +55,7 @@ class FormatterUtilsMixin:
         """Get appropriate formatter function for executor metrics."""
         # Time-based metrics (in milliseconds)
         if metric_key in ["total_duration", "total_gc_time"]:
-            return self._format_milliseconds
+            return self._format_duration
         # Byte-based metrics
         elif metric_key in [
             "memory_used",
@@ -81,17 +81,20 @@ class FormatterUtilsMixin:
         }
         return stage_metric_names.get(metric_key, metric_key.replace("_", " ").title())
 
-    def _format_milliseconds(self, ms_value: float) -> str:
-        """Format milliseconds to human readable duration."""
-        if ms_value < 1000:
-            return f"{ms_value:.0f}ms"
+    def _format_duration(self, duration_ms: float) -> str:
+        """Format duration in human readable format."""
+        if duration_ms < 1000:
+            return f"{duration_ms}ms"
+        elif duration_ms < 60000:
+            return f"{duration_ms / 1000:.1f}s"
+        elif duration_ms < 3600000:
+            minutes = duration_ms // 60000
+            seconds = (duration_ms % 60000) // 1000
+            return f"{minutes}m {seconds}s"
         else:
-            seconds = ms_value / 1000
-            if seconds < 60:
-                return f"{seconds:.1f}s"
-            else:
-                minutes = seconds / 60
-                return f"{minutes:.1f}m"
+            hours = duration_ms // 3600000
+            minutes = (duration_ms % 3600000) // 60000
+            return f"{hours}h {minutes}m"
 
     def _format_bytes(self, bytes_value: int) -> str:
         """Format bytes in human readable format."""

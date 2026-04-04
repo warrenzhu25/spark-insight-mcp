@@ -7,7 +7,7 @@ Focus on JSON output and simple fallback when Rich is unavailable.
 import json
 from types import SimpleNamespace
 
-from spark_history_mcp.cli.formatters import OutputFormatter
+from spark_history_mcp.cli.formatter_modules import OutputFormatter
 from spark_history_mcp.models.spark_types import (
     ApplicationAttemptInfo,
     ApplicationInfo,

@@ -6,7 +6,7 @@ Contains the core OutputFormatter class and basic output methods.
 
 import json
 import sys
-from typing import Any, Optional
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 try:
     from rich.console import Console
@@ -16,17 +16,62 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
 
+from .utils import FormatterUtilsMixin
 
 if RICH_AVAILABLE:
     console = Console()
 
 
-class OutputFormatter:
+class FormatterRegistry:
+    """Registry for data-type specific formatters."""
+
+    def __init__(self):
+        # Maps types to formatter functions: Callable[[OutputFormatter, Any, Optional[str]], None]
+        self.type_formatters: Dict[Type, Callable] = {}
+        # Maps predicates to formatter functions: Callable[[Any], bool] -> Callable
+        self.pattern_formatters: List[tuple[Callable[[Any], bool], Callable]] = []
+
+    def register_type(self, data_type: Type, formatter_func: Callable):
+        """Register a formatter for a specific data type."""
+        self.type_formatters[data_type] = formatter_func
+
+    def register_pattern(self, predicate: Callable[[Any], bool], formatter_func: Callable):
+        """Register a formatter for data matching a predicate."""
+        self.pattern_formatters.append((predicate, formatter_func))
+
+    def get_formatter(self, data: Any) -> Optional[Callable]:
+        """Find a formatter for the given data."""
+        # Try exact type match
+        data_type = type(data)
+        if data_type in self.type_formatters:
+            return self.type_formatters[data_type]
+
+        # Try pattern matches (predicates)
+        for predicate, formatter_func in self.pattern_formatters:
+            if predicate(data):
+                return formatter_func
+
+        return None
+
+
+# Global registry
+registry = FormatterRegistry()
+
+
+class OutputFormatter(FormatterUtilsMixin):
     """Base output formatter with multiple format options."""
 
-    def __init__(self, format_type: str = "human", quiet: bool = False):
+    def __init__(
+        self,
+        format_type: str = "human",
+        quiet: bool = False,
+        show_all_metrics: bool = False,
+    ):
         self.format_type = format_type
         self.quiet = quiet
+        self.show_all_metrics = show_all_metrics
+        # Store last app mapping from application list for number references
+        self.last_app_mapping: dict[int, str] = {}
 
     def _write_line(self, text: str = "") -> None:
         """Write a line to stdout for fallback paths."""
@@ -68,6 +113,13 @@ class OutputFormatter:
             self._output_simple(data, title)
             return
 
+        # Check registry for custom table formatter
+        formatter_func = registry.get_formatter(data)
+        if formatter_func:
+            # For now, custom formatters are expected to handle human output.
+            # We'll refine this if we need custom table formatters too.
+            pass
+
         if isinstance(data, list) and len(data) > 0:
             # List of objects - create table
             if hasattr(data[0], "model_dump"):
@@ -103,12 +155,30 @@ class OutputFormatter:
 
     def _output_human(self, data: Any, title: Optional[str] = None) -> None:
         """Output in human-readable format using Rich."""
-        # For now, delegate to the original implementation to avoid circular imports
-        # Future iterations can implement full modular approach
-        from ..formatters import OutputFormatter as OriginalFormatter
+        if not RICH_AVAILABLE:
+            self._output_simple(data, title)
+            return
 
-        original = OriginalFormatter(self.format_type, self.quiet)
-        original._output_human(data, title)
+        if title:
+            console.print(f"\n[bold blue]{title}[/bold blue]")
+
+        # Check registry for type-specific formatter
+        formatter_func = registry.get_formatter(data)
+        if formatter_func:
+            formatter_func(self, data, title)
+            return
+
+        # Fallback to monolithic formatter for un-migrated types
+        from ..formatters import OutputFormatter as MonolithicFormatter
+
+        # Create a proxy for the monolithic formatter to handle the request
+        # We need to copy state over
+        proxy = MonolithicFormatter(
+            self.format_type, self.quiet, self.show_all_metrics
+        )
+        proxy.last_app_mapping = self.last_app_mapping
+        proxy._output_human(data, None)  # title already printed
+        self.last_app_mapping = proxy.last_app_mapping
 
     def _output_simple(self, data: Any, title: Optional[str] = None) -> None:
         """Simple fallback output when Rich is not available."""
@@ -129,3 +199,21 @@ class OutputFormatter:
                 self._write_line(f"{k}: {v}")
         else:
             self._write_line(str(data))
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate missing methods to monolithic formatter for backward compatibility."""
+        if name.startswith("_format_"):
+            from ..formatters import OutputFormatter as MonolithicFormatter
+
+            def proxy_method(*args, **kwargs):
+                proxy = MonolithicFormatter(
+                    self.format_type, self.quiet, self.show_all_metrics
+                )
+                proxy.last_app_mapping = self.last_app_mapping
+                method = getattr(proxy, name)
+                result = method(*args, **kwargs)
+                self.last_app_mapping = proxy.last_app_mapping
+                return result
+
+            return proxy_method
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")

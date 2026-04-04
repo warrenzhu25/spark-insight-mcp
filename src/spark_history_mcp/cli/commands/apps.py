@@ -20,7 +20,7 @@ from spark_history_mcp.cli._compat import (
 from spark_history_mcp.config.config import Config
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.formatters import OutputFormatter
+    from spark_history_mcp.cli.formatter_modules import OutputFormatter
     from spark_history_mcp.cli.session import (
         format_session_hint,
         save_app_refs,

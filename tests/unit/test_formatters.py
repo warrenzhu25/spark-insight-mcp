@@ -1,5 +1,5 @@
 from spark_history_mcp.cli import formatters as formatters_module
-from spark_history_mcp.cli.formatters import OutputFormatter
+from spark_history_mcp.cli.formatter_modules import OutputFormatter
 
 
 class DummyConsole:

@@ -20,7 +20,7 @@ if CLI_AVAILABLE:
         _is_interactive,
         create_mock_context,
     )
-    from spark_history_mcp.cli.formatters import OutputFormatter
+    from spark_history_mcp.cli.formatter_modules import OutputFormatter
     from spark_history_mcp.cli.session import (
         get_session_dir,
         is_number_ref,

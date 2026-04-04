@@ -18,6 +18,9 @@ complex operations to the original implementation to avoid circular imports.
 
 from .base import OutputFormatter
 from .utils import create_progress
+# Import modules to trigger registration
+from . import basic
+from . import comparison
 
 # Export main classes for use
 __all__ = ["OutputFormatter", "create_progress"]
