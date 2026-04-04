@@ -12,7 +12,16 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ..core.app import mcp
-from ..config.config import DEFAULT_SPILL_THRESHOLD_BYTES, DEFAULT_GC_PRESSURE_THRESHOLD
+from ..config.config import (
+    DEFAULT_SPILL_THRESHOLD_BYTES,
+    DEFAULT_GC_PRESSURE_THRESHOLD,
+    DEFAULT_AUTO_SCALING_TARGET_MINUTES,
+    DEFAULT_SHUFFLE_SKEW_THRESHOLD_GB,
+    DEFAULT_SHUFFLE_SKEW_RATIO,
+    DEFAULT_SHUFFLE_SKEW_EXTREME_RATIO,
+    DEFAULT_FAILURE_RATE_HIGH_THRESHOLD,
+    DEFAULT_HOST_CONCENTRATION_THRESHOLD,
+)
 from . import common
 from .executors import get_executor_summary
 from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
@@ -142,7 +151,9 @@ def get_job_bottlenecks(
 
 @mcp.tool()
 def analyze_auto_scaling(
-    app_id: str, server: Optional[str] = None, target_stage_duration_minutes: int = 2
+    app_id: str,
+    server: Optional[str] = None,
+    target_stage_duration_minutes: int = DEFAULT_AUTO_SCALING_TARGET_MINUTES,
 ) -> Dict[str, Any]:
     """
     Analyze application workload and provide auto-scaling recommendations.
@@ -303,8 +314,8 @@ def analyze_auto_scaling(
 def analyze_shuffle_skew(
     app_id: str,
     server: Optional[str] = None,
-    shuffle_threshold_gb: int = 10,
-    skew_ratio_threshold: float = 2.0,
+    shuffle_threshold_gb: int = DEFAULT_SHUFFLE_SKEW_THRESHOLD_GB,
+    skew_ratio_threshold: float = DEFAULT_SHUFFLE_SKEW_RATIO,
 ) -> Dict[str, Any]:
     """
     Analyze shuffle operations to identify data skew issues.
@@ -500,7 +511,7 @@ def analyze_failed_tasks(
         recommendations.append(
             {
                 "type": "reliability",
-                "priority": "high" if avg_failure_rate > 10 else "medium",
+                "priority": "high" if avg_failure_rate > DEFAULT_FAILURE_RATE_HIGH_THRESHOLD else "medium",
                 "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
                 "suggestion": "Investigate task failure logs and consider increasing task retry settings",
             }
@@ -514,7 +525,7 @@ def analyze_failed_tasks(
             host_failures[host] = host_failures.get(host, 0) + executor["failed_tasks"]
 
         max_host_failures = max(host_failures.values()) if host_failures else 0
-        if max_host_failures > total_failed_tasks * 0.5:
+        if max_host_failures > total_failed_tasks * DEFAULT_HOST_CONCENTRATION_THRESHOLD:
             recommendations.append(
                 {
                     "type": "infrastructure",
@@ -650,7 +661,7 @@ def _generate_shuffle_skew_recommendations(
         )
 
     max_skew = max(s["max_skew_ratio"] for s in skewed_stages)
-    if max_skew > 10:
+    if max_skew > DEFAULT_SHUFFLE_SKEW_EXTREME_RATIO:
         recommendations.append(
             {
                 "type": "performance",

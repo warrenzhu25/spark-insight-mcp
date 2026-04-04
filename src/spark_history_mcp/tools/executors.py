@@ -143,40 +143,27 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
         summary["total_shuffle_write"] += executor.total_shuffle_write
 
     # Calculate utilization efficiency if app has timing information
-    if app.attempts and app.attempts[0].start_time and app.attempts[0].end_time:
-        start_time = app.attempts[0].start_time
-        end_time = app.attempts[0].end_time
-        duration = end_time - start_time
-        total_minutes = int(duration.total_seconds() / 60)
+    timeline_result = build_app_executor_timeline(
+        app=app,
+        executors=executors,
+        stages=stages,
+    )
 
-        # Sample executor counts at 1-minute intervals
-        executor_counts = []
-        for minute in range(0, total_minutes + 1):
-            interval_time = start_time + timedelta(minutes=minute)
-            active_count = 0
-
-            for executor in executors:
-                add_time = getattr(executor, "add_time", None)
-                remove_time = getattr(executor, "remove_time", None) or end_time
-
-                if add_time and add_time <= interval_time < remove_time:
-                    active_count += 1
-
-            executor_counts.append(active_count)
-
-        # Calculate efficiency metrics
-        if executor_counts:
-            peak_executors = max(executor_counts)
-            avg_executors = statistics.mean(executor_counts)
-            utilization_efficiency = (
-                (avg_executors / peak_executors * 100) if peak_executors > 0 else 0
-            )
-
-            summary["peak_executors"] = peak_executors
-            summary["average_executors"] = round(avg_executors, 1)
-            summary["utilization_efficiency_percent"] = round(utilization_efficiency, 1)
+    if timeline_result:
+        summary["peak_executors"] = timeline_result["summary"]["peak_executor_count"]
+        summary["average_executors"] = round(timeline_result["summary"]["avg_executor_count"], 1)
+        
+        peak = summary["peak_executors"]
+        avg = summary["average_executors"]
+        utilization_efficiency = (avg / peak * 100) if peak > 0 else 0
+        summary["utilization_efficiency_percent"] = round(utilization_efficiency, 1)
 
         # Calculate executor utilization (task time vs available executor time)
+        # We can extract this from the timeline or calculate it directly as before but simplified
+        app_attempt = app.attempts[0]
+        start_time = app_attempt.start_time
+        end_time = app_attempt.end_time or (start_time + timedelta(hours=24))
+        
         app_end_time_ms = end_time.timestamp() * 1000
         total_executor_time_ms = 0
         executor_cores = app.cores_per_executor or 1

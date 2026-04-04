@@ -204,19 +204,9 @@ def strip_applications_metadata(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_data(data: Any, cfg: ToolConfig) -> Any:
-    from ..models.spark_types import (
-        ApplicationEnvironmentInfo,
-        ApplicationInfo,
-        ExecutorSummary,
-        JobData,
-        StageData,
-    )
-
     if isinstance(data, list):
         return _compact_list(data, cfg)
     if hasattr(data, "to_compact_dict"):
-        if isinstance(data, ApplicationEnvironmentInfo):
-            return _compact_environment(data, cfg)
         return data.to_compact_dict()
     return data
 
@@ -280,27 +270,6 @@ _SPARK_PROPERTY_KEYS = [
     "spark.dynamicAllocation.maxExecutors",
     "spark.serializer",
 ]
-
-
-def _compact_environment(env, cfg: ToolConfig) -> dict[str, Any]:
-    return {
-        "runtime": {
-            "java_version": getattr(env.runtime, "java_version", None),
-            "java_home": getattr(env.runtime, "java_home", None),
-            "scala_version": getattr(env.runtime, "scala_version", None),
-        },
-        "spark_properties": _summarize_kv(
-            env.spark_properties, _SPARK_PROPERTY_KEYS, cfg
-        ),
-        "hadoop_properties": _summarize_kv(env.hadoop_properties, [], cfg),
-        "system_properties": _summarize_kv(env.system_properties, [], cfg),
-        "metrics_properties": _summarize_kv(env.metrics_properties, [], cfg),
-        "classpath_entries": _summarize_kv(env.classpath_entries, [], cfg),
-        "resource_profiles": {
-            "count": len(env.resource_profiles or []),
-        },
-    }
-
 
 def bytes_to_gb(value: float | int) -> float:
     if not value:

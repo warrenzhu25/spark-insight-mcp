@@ -945,6 +945,29 @@ class ApplicationEnvironmentInfo(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
+    def to_compact_dict(self) -> Dict[str, Any]:
+        """Return a compact dictionary representation."""
+        from ..tools.common import _summarize_kv, get_config, _SPARK_PROPERTY_KEYS
+
+        cfg = get_config()
+        return {
+            "runtime": {
+                "java_version": getattr(self.runtime, "java_version", None),
+                "java_home": getattr(self.runtime, "java_home", None),
+                "scala_version": getattr(self.runtime, "scala_version", None),
+            },
+            "spark_properties": _summarize_kv(
+                self.spark_properties, _SPARK_PROPERTY_KEYS, cfg
+            ),
+            "hadoop_properties": _summarize_kv(self.hadoop_properties, [], cfg),
+            "system_properties": _summarize_kv(self.system_properties, [], cfg),
+            "metrics_properties": _summarize_kv(self.metrics_properties, [], cfg),
+            "classpath_entries": _summarize_kv(self.classpath_entries, [], cfg),
+            "resource_profiles": {
+                "count": len(self.resource_profiles or []),
+            },
+        }
+
 
 class RuntimeInfo(BaseModel):
     java_version: Optional[str] = Field(None, alias="javaVersion")
