@@ -47,7 +47,7 @@ class SparkRestClient:
         self.auth = None
         self.session = None
         self.use_proxy = self.config.use_proxy
-        proxy_url = self.config.proxy_url or "socks5h://localhost:8157"
+        proxy_url = self.config.proxy_url
         self.proxies = (
             {"http": proxy_url, "https": proxy_url} if self.use_proxy else None
         )

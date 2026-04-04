@@ -19,17 +19,23 @@ if CLI_AVAILABLE:
     from spark_history_mcp.cli.commands.apps import (
         _is_interactive,
         create_mock_context,
-        get_spark_client,
     )
     from spark_history_mcp.cli.formatters import OutputFormatter
-    from spark_history_mcp.cli.session import is_number_ref, resolve_number_ref
+    from spark_history_mcp.cli.session import (
+        get_session_dir,
+        is_number_ref,
+        resolve_number_ref,
+    )
+    from spark_history_mcp.cli.utils.context import get_spark_client
+    from spark_history_mcp.cli.utils.resolution import (
+        is_app_id,
+        resolve_app_identifier,
+    )
 
 
 def get_session_file() -> Path:
     """Get path to session state file."""
-    config_dir = Path.home() / ".config" / "spark-history-mcp"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "compare-session.json"
+    return get_session_dir() / "compare-session.json"
 
 
 def save_comparison_context(app_id1: str, app_id2: str, server: Optional[str] = None):
@@ -89,23 +95,6 @@ def get_app_context(
     # Use stored server if no server provided
     final_server = server if server is not None else stored_server
     return stored_app1, stored_app2, final_server
-
-
-def is_app_id(identifier: str) -> bool:
-    """Detect if identifier looks like an app ID vs app name."""
-    # Common app ID patterns: app-YYYYMMDD-*, application_*, etc.
-    import re
-
-    app_id_patterns = [
-        r"^app-\d{8}-\w+$",  # app-20231201-123456
-        r"^application_\d+_\d+$",  # application_1234567890_001
-        r"^app-\w{8,}$",  # app-abcd1234
-        r"^\w+-\d{4}\d{2}\d{2}-\w+$",  # any-20231201-something
-    ]
-
-    return any(
-        re.match(pattern, identifier, re.IGNORECASE) for pattern in app_id_patterns
-    )
 
 
 def resolve_app_name_to_recent_apps(

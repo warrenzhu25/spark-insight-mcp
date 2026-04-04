@@ -10,13 +10,15 @@ import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from spark_history_mcp.config.config import DEFAULT_SESSION_DIR
+
 # Session timeout in seconds (1 hour)
 SESSION_TIMEOUT_SECONDS = 3600
 
 
 def get_session_dir() -> Path:
     """Get the session directory for storing CLI state."""
-    config_dir = Path.home() / ".config" / "spark-history-mcp"
+    config_dir = DEFAULT_SESSION_DIR
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir
 

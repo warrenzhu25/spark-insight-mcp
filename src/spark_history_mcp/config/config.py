@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union
 
 import yaml
@@ -8,6 +9,10 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
+
+# Default constants
+DEFAULT_PROXY_URL = "socks5h://localhost:8157"
+DEFAULT_SESSION_DIR = Path.home() / ".config" / "spark-history-mcp"
 
 
 class AuthConfig(BaseSettings):
@@ -27,7 +32,7 @@ class ServerConfig(BaseSettings):
     verify_ssl: bool = True
     emr_cluster_arn: Optional[str] = None  # EMR specific field
     use_proxy: bool = False
-    proxy_url: Optional[str] = None  # e.g. "socks5h://localhost:8157"
+    proxy_url: Optional[str] = Field(default=DEFAULT_PROXY_URL)
     timeout: int = 30  # HTTP request timeout in seconds
 
 

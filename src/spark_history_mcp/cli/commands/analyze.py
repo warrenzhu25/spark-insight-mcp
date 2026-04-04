@@ -14,10 +14,9 @@ from spark_history_mcp.cli._compat import (
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.apps import (
-        get_spark_client,
-        resolve_app_id_arg,
-    )
+    from spark_history_mcp.cli.utils.context import get_spark_client
+    from spark_history_mcp.cli.utils.resolution import resolve_app_identifier
+
     from spark_history_mcp.cli.formatters import OutputFormatter
 
 
@@ -72,7 +71,7 @@ if CLI_AVAILABLE:
     ):
         """Get comprehensive application insights."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -118,7 +117,7 @@ if CLI_AVAILABLE:
     ):
         """Identify performance bottlenecks in the application."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -168,7 +167,7 @@ if CLI_AVAILABLE:
     ):
         """Analyze auto-scaling recommendations."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -225,7 +224,7 @@ if CLI_AVAILABLE:
     ):
         """Analyze shuffle data skew issues."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -281,7 +280,7 @@ if CLI_AVAILABLE:
     ):
         """Find slowest jobs, stages, or SQL queries."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -344,8 +343,8 @@ if CLI_AVAILABLE:
         This command will be removed in a future version.
         """
         # Resolve number references
-        app_id1 = resolve_app_id_arg(app_id1)
-        app_id2 = resolve_app_id_arg(app_id2)
+        app_id1 = resolve_app_identifier(app_id1)
+        app_id2 = resolve_app_identifier(app_id2)
 
         # Show deprecation warning
         click.echo(

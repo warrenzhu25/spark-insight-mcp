@@ -19,6 +19,9 @@ try:
         get_spark_client,
         is_application_id,
         load_config,
+    )
+    from spark_history_mcp.cli.utils.resolution import (
+        resolve_app_by_name,
         resolve_app_identifier,
     )
     from spark_history_mcp.config.config import Config
@@ -52,7 +55,7 @@ class TestConfigurationManagement:
         # Should include a default server
         assert "local" in config.servers
 
-    @patch("spark_history_mcp.cli.commands.apps.Config.from_file")
+    @patch("spark_history_mcp.cli.utils.context.Config.from_file")
     def test_load_config_parse_error(self, mock_from_file):
         """Test error when config file is invalid."""
         mock_from_file.side_effect = ValueError("Invalid YAML")
@@ -65,7 +68,7 @@ class TestConfigurationManagement:
     def test_get_spark_client_with_server(self, mock_config_file):
         """Test client creation with specific server."""
         with patch(
-            "spark_history_mcp.cli.commands.apps.SparkRestClient"
+            "spark_history_mcp.cli.utils.context.SparkRestClient"
         ) as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
@@ -85,7 +88,7 @@ class TestConfigurationManagement:
     def test_get_spark_client_default_server(self, mock_config_file):
         """Test client creation with default server."""
         with patch(
-            "spark_history_mcp.cli.commands.apps.SparkRestClient"
+            "spark_history_mcp.cli.utils.context.SparkRestClient"
         ) as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
@@ -119,9 +122,7 @@ class TestApplicationIdentification:
 
     def test_resolve_app_identifier_with_id(self):
         """Test resolving identifier that's already an app ID."""
-        mock_client = MagicMock()
-
-        result = resolve_app_identifier(mock_client, "app-123456")
+        result = resolve_app_identifier("app-123456")
 
         assert result == "app-123456"
 
@@ -133,7 +134,7 @@ class TestApplicationIdentification:
         mock_app.id = "app-resolved-123"
         mock_list_applications.return_value = [mock_app]
 
-        result = resolve_app_identifier(mock_client, "ETL Pipeline")
+        result = resolve_app_by_name(mock_client, "ETL Pipeline")
 
         assert result == "app-resolved-123"
         mock_list_applications.assert_called_once_with(
@@ -151,7 +152,7 @@ class TestApplicationIdentification:
         mock_list_applications.return_value = []
 
         with pytest.raises(click.ClickException) as exc_info:
-            resolve_app_identifier(mock_client, "NonexistentApp")
+            resolve_app_by_name(mock_client, "NonexistentApp")
 
         assert "No application found matching name: NonexistentApp" in str(
             exc_info.value

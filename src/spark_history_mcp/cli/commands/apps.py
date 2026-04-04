@@ -23,85 +23,10 @@ if CLI_AVAILABLE:
     from spark_history_mcp.cli.formatters import OutputFormatter
     from spark_history_mcp.cli.session import (
         format_session_hint,
-        is_number_ref,
-        resolve_number_ref,
         save_app_refs,
     )
-
-
-def load_config(config_path: Path) -> Config:
-    """Load configuration with error handling."""
-    try:
-        return Config.from_file(str(config_path))
-    except FileNotFoundError as err:
-        if CLI_AVAILABLE:
-            raise click.ClickException(
-                f"Configuration file not found: {config_path}"
-            ) from err
-        raise RuntimeError(f"Configuration file not found: {config_path}") from err
-    except Exception as err:
-        if CLI_AVAILABLE:
-            raise click.ClickException(f"Error loading configuration: {err}") from err
-        raise RuntimeError(f"Error loading configuration: {err}") from err
-
-
-def resolve_app_id_arg(identifier: str) -> str:
-    """
-    Resolve an app identifier to an app ID.
-
-    Handles number references (1, 2, 3...) by looking up the saved mapping.
-    Returns the identifier unchanged if it's not a number ref.
-
-    Args:
-        identifier: Number ref like "1" or app ID like "app-123"
-
-    Returns:
-        The resolved app ID
-
-    Raises:
-        click.ClickException: If number ref not found in session
-    """
-    if is_number_ref(identifier):
-        app_id = resolve_number_ref(int(identifier))
-        if app_id:
-            click.echo(f"Resolved #{identifier} to: {app_id}")
-            return app_id
-        raise click.ClickException(
-            f"#{identifier} not found. Run 'apps list' first to set up references."
-        )
-    return identifier
-
-
-def get_spark_client(
-    config_path: Path, server: Optional[str] = None
-) -> SparkRestClient:
-    """Get Spark client from configuration."""
-    config = load_config(config_path)
-
-    if server:
-        if server not in config.servers:
-            error_msg = f"Server '{server}' not found in configuration"
-            if CLI_AVAILABLE:
-                raise click.ClickException(error_msg)
-            else:
-                raise RuntimeError(error_msg)
-        server_config = config.servers[server]
-    else:
-        # Find default server
-        default_servers = [name for name, cfg in config.servers.items() if cfg.default]
-        if not default_servers:
-            if len(config.servers) == 1:
-                server_config = next(iter(config.servers.values()))
-            else:
-                error_msg = "No default server configured. Specify --server or set default=true in config."
-                if CLI_AVAILABLE:
-                    raise click.ClickException(error_msg)
-                else:
-                    raise RuntimeError(error_msg)
-        else:
-            server_config = config.servers[default_servers[0]]
-
-    return SparkRestClient(server_config)
+    from spark_history_mcp.cli.utils.context import get_spark_client, load_config
+    from spark_history_mcp.cli.utils.resolution import resolve_app_identifier
 
 
 def is_application_id(identifier: str) -> bool:
@@ -182,8 +107,8 @@ def show_post_list_menu(server, formatter, ctx) -> None:
             click.echo("Please enter exactly two app references.")
             return
 
-        app_id1 = resolve_app_id_arg(parts[0])
-        app_id2 = resolve_app_id_arg(parts[1])
+        app_id1 = resolve_app_identifier(parts[0])
+        app_id2 = resolve_app_identifier(parts[1])
 
         from spark_history_mcp.cli.commands.compare import apps as compare_apps_cmd
 
@@ -201,37 +126,6 @@ def show_post_list_menu(server, formatter, ctx) -> None:
 
     except (KeyboardInterrupt, EOFError):
         click.echo("\nExiting interactive mode.")
-
-
-def resolve_app_identifier(
-    client, identifier: str, server: Optional[str] = None
-) -> str:
-    """Resolve application name to ID if needed, return ID."""
-    if is_application_id(identifier):
-        return identifier  # Already an ID
-
-    # Search by name (contains match) and get latest (limit 1)
-    import spark_history_mcp.tools.tools as tools_module
-    from spark_history_mcp.tools import list_applications
-
-    with patch_tool_context(client, tools_module):
-        apps = list_applications(
-            server=server,
-            app_name=identifier,
-            search_type="contains",  # Fuzzy match
-            limit=1,  # Get only the latest
-            compact=False,
-        )
-
-        if not apps:
-            if CLI_AVAILABLE:
-                raise click.ClickException(
-                    f"No application found matching name: {identifier}"
-                )
-            else:
-                raise RuntimeError(f"No application found matching name: {identifier}")
-
-        return apps[0].id  # Return the latest match
 
 
 if CLI_AVAILABLE:
@@ -393,7 +287,7 @@ if CLI_AVAILABLE:
     def show_app(ctx, app_id: str, server: Optional[str], output_format: str):
         """Show detailed information about a specific application."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -430,7 +324,7 @@ if CLI_AVAILABLE:
     ):
         """List jobs for a specific application."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
@@ -471,7 +365,7 @@ if CLI_AVAILABLE:
     ):
         """List stages for a specific application."""
         # Resolve number references
-        app_id = resolve_app_id_arg(app_id)
+        app_id = resolve_app_identifier(app_id)
 
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
