@@ -25,6 +25,7 @@ from ..recommendations import (
     prioritize as prioritize_recs,
 )
 from ..schema import CompareAppPerformanceOutput, validate_output
+from .environment import compare_app_stages_aggregated
 from .constants import (
     RECOMMENDATION_CORE_RATIO_THRESHOLD,
     RECOMMENDATION_MEMORY_RATIO_THRESHOLD,
@@ -330,8 +331,6 @@ def compare_app_summaries(
     }
 
     try:
-        from .environment import compare_app_stages_aggregated
-
         aggregated_stage_comparison = compare_app_stages_aggregated(
             app_id1=app_id1,
             app_id2=app_id2,

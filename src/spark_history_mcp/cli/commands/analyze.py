@@ -15,7 +15,7 @@ from spark_history_mcp.cli._compat import (
 
 if CLI_AVAILABLE:
     from spark_history_mcp.cli.utils.context import get_spark_client
-    from spark_history_mcp.cli.utils.resolution import resolve_app_identifier
+    from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
 
     from spark_history_mcp.cli.formatter_modules import OutputFormatter
 
@@ -70,14 +70,14 @@ if CLI_AVAILABLE:
         include_executor_utilization: bool,
     ):
         """Get comprehensive application insights."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_application_insights
@@ -116,14 +116,14 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], top_n: int, output_format: str
     ):
         """Identify performance bottlenecks in the application."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_job_bottlenecks
@@ -166,14 +166,14 @@ if CLI_AVAILABLE:
         output_format: str,
     ):
         """Analyze auto-scaling recommendations."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import analyze_auto_scaling
@@ -223,14 +223,14 @@ if CLI_AVAILABLE:
         output_format: str,
     ):
         """Analyze shuffle data skew issues."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import analyze_shuffle_skew
@@ -279,14 +279,14 @@ if CLI_AVAILABLE:
         output_format: str,
     ):
         """Find slowest jobs, stages, or SQL queries."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             from spark_history_mcp.tools import find_slowest
 
@@ -342,26 +342,21 @@ if CLI_AVAILABLE:
         ⚠️  DEPRECATED: Use 'apps compare' instead.
         This command will be removed in a future version.
         """
-        # Resolve number references
-        app_id1 = resolve_app_identifier(app_id1)
-        app_id2 = resolve_app_identifier(app_id2)
-
-        # Show deprecation warning
-        click.echo(
-            "⚠️  WARNING: 'analyze compare' is deprecated. Use 'apps compare' instead.",
-            err=True,
-        )
-        click.echo(
-            f"   New command: spark-mcp --cli apps compare {app_id1} {app_id2}",
-            err=True,
-        )
-        click.echo()
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app IDs (handles #1, name, or ID)
+            app_id1 = canonicalize_app_id(app_id1, client, server)
+            app_id2 = canonicalize_app_id(app_id2, client, server)
+
+            # Show deprecation warning
+            click.echo(
+                f"⚠️  WARNING: 'analyze compare' is deprecated. Use 'apps compare' instead.",
+                err=True,
+            )
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_performance

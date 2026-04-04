@@ -83,7 +83,7 @@ def test_get_app_summary_golden(
     assert out == expected
 
 
-@patch("spark_history_mcp.tools.comparisons.compare_app_stages_aggregated")
+@patch("spark_history_mcp.tools.comparison_modules.core.compare_app_stages_aggregated")
 @patch("spark_history_mcp.tools.get_app_summary")
 @patch("spark_history_mcp.tools.mcp.get_context")
 def test_compare_app_summaries_golden(mock_ctx, mock_get_app_summary, mock_stage_agg):

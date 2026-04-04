@@ -112,6 +112,7 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
     """
     executors = fetch_executors(app_id=app_id, server=server)
     app = fetch_app(app_id=app_id, server=server)
+    stages = fetch_stages(app_id=app_id, server=server)
 
     summary = {
         "total_executors": len(executors),

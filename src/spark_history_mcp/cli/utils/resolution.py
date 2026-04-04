@@ -5,7 +5,7 @@ Handles mapping number references, app names, and app IDs to a canonical app ID.
 """
 
 import re
-from typing import Optional
+from typing import Any, Optional, Sequence
 from spark_history_mcp.cli._compat import CLI_AVAILABLE, click
 
 if CLI_AVAILABLE:
@@ -24,11 +24,10 @@ def is_app_id(identifier: str) -> bool:
     """
     # Common app ID patterns: app-YYYYMMDD-*, application_*, etc.
     app_id_patterns = [
-        r"^app-\d{8}-\w+$",  # app-20231201-123456
-        r"^application_\d+_\d+$",  # application_1234567890_001
-        r"^app-\w{8,}$",  # app-abcd1234
-        r"^\w+-\d{4}\d{2}\d{2}-\w+$",  # any-20231201-something
-        r"^local-\d+$",  # local-123456789
+        r"^app-.*$",  # app-*
+        r"^spark-.*$",  # spark-*
+        r"^application_.*$",  # application_*
+        r"^local-.*$",  # local-*
     ]
     return any(
         re.match(pattern, identifier, re.IGNORECASE) for pattern in app_id_patterns
@@ -104,3 +103,29 @@ def resolve_app_by_name(
                 raise RuntimeError(error_msg)
 
         return apps[0].id  # Return the latest match
+
+
+def canonicalize_app_id(
+    identifier: str, client: Any, server: Optional[str] = None
+) -> str:
+    """
+    Resolve any application identifier to a canonical app ID.
+
+    Handles:
+    - Number references (#1, #2...)
+    - Application names (fuzzy match)
+    - Application IDs (direct match)
+
+    Args:
+        identifier: The identifier to resolve
+        client: Spark REST client (for name resolution)
+        server: Optional server name
+
+    Returns:
+        The canonical app ID
+    """
+    # 1. Resolve number references first
+    resolved_id = resolve_app_identifier(identifier)
+
+    # 2. Resolve by name if it doesn't look like an ID
+    return resolve_app_by_name(client, resolved_id, server)

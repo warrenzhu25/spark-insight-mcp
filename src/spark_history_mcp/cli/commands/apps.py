@@ -26,12 +26,7 @@ if CLI_AVAILABLE:
         save_app_refs,
     )
     from spark_history_mcp.cli.utils.context import get_spark_client, load_config
-    from spark_history_mcp.cli.utils.resolution import resolve_app_identifier
-
-
-def is_application_id(identifier: str) -> bool:
-    """Check if identifier is an application ID vs application name."""
-    return identifier.startswith(("spark-", "app-"))
+    from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
 
 
 def create_mock_context(client):
@@ -286,14 +281,14 @@ if CLI_AVAILABLE:
     @click.pass_context
     def show_app(ctx, app_id: str, server: Optional[str], output_format: str):
         """Show detailed information about a specific application."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_application
@@ -323,14 +318,14 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], status: tuple, output_format: str
     ):
         """List jobs for a specific application."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_jobs as mcp_list_jobs
@@ -364,14 +359,14 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], status: tuple, output_format: str
     ):
         """List stages for a specific application."""
-        # Resolve number references
-        app_id = resolve_app_identifier(app_id)
-
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
         try:
             client = get_spark_client(config_path, server)
+
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_id, client, server)
 
             import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_stages as mcp_list_stages
@@ -416,31 +411,14 @@ if CLI_AVAILABLE:
 
         try:
             client = get_spark_client(config_path, server)
+            
+            # Resolve app ID (handles #1, name, or ID)
+            app_id = canonicalize_app_id(app_identifier, client, server)
 
             import spark_history_mcp.tools as tools_module
-            from spark_history_mcp.tools import get_app_summary, list_applications
+            from spark_history_mcp.tools import get_app_summary
 
             with patch_tool_context(client, tools_module):
-                # Resolve name to ID if needed (gets latest match)
-                if is_application_id(app_identifier):
-                    app_id = app_identifier  # Already an ID
-                else:
-                    # Search by name (contains match) and get latest (limit 1)
-                    apps = list_applications(
-                        server=server,
-                        app_name=app_identifier,
-                        search_type="contains",  # Fuzzy match
-                        limit=1,  # Get only the latest
-                        compact=False,
-                    )
-
-                    if not apps:
-                        raise click.ClickException(
-                            f"No application found matching name: {app_identifier}"
-                        )
-
-                    app_id = apps[0].id  # Return the latest match
-
                 summary_data = get_app_summary(app_id, server=server)
 
                 # Extract application name for title

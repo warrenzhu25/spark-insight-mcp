@@ -9,7 +9,6 @@ import heapq
 from typing import Any, List, Optional
 
 from ..core.app import mcp
-from ..models.mcp_types import JobSummary, SqlQuerySummary
 from ..models.spark_types import (
     ExecutionData,
     JobExecutionStatus,
@@ -21,36 +20,12 @@ from . import common
 from .common import compact_output
 from .fetchers import (
     fetch_jobs,
+    fetch_sql_pages,
     fetch_stage_attempt,
     fetch_stage_attempts,
     fetch_stage_task_summary,
     fetch_stages,
 )
-
-
-def truncate_plan_description(plan_desc: str, max_length: int) -> str:
-    """
-    Truncate plan description while preserving structure.
-
-    Args:
-        plan_desc: The plan description to truncate
-        max_length: Maximum length in characters
-
-    Returns:
-        Truncated plan description with indicator if truncated
-    """
-    if not plan_desc or len(plan_desc) <= max_length:
-        return plan_desc
-
-    # Try to truncate at a logical boundary (end of a line)
-    truncated = plan_desc[:max_length]
-    last_newline = truncated.rfind("\n")
-
-    # If we can preserve most content by truncating at newline, do so
-    if last_newline > max_length * 0.8:
-        truncated = truncated[:last_newline]
-
-    return truncated + "\n... [truncated]"
 
 
 @mcp.tool()
@@ -97,12 +72,7 @@ def _find_slowest_jobs(
     if not jobs:
         return []
 
-    def get_job_duration(job):
-        if job.completion_time and job.submission_time:
-            return (job.completion_time - job.submission_time).total_seconds()
-        return 0
-
-    slowest = heapq.nlargest(n, jobs, key=get_job_duration)
+    slowest = heapq.nlargest(n, jobs, key=lambda j: j.duration_ms or 0)
     return compact_output(slowest, compact)
 
 
@@ -154,14 +124,7 @@ def _find_slowest_stages(
     if not stages:
         return []
 
-    def get_stage_duration(stage: StageData):
-        if stage.completion_time and stage.first_task_launched_time:
-            return (
-                stage.completion_time - stage.first_task_launched_time
-            ).total_seconds()
-        return 0
-
-    slowest = heapq.nlargest(n, stages, key=get_stage_duration)
+    slowest = heapq.nlargest(n, stages, key=lambda s: s.duration_ms or 0)
     return compact_output(slowest, compact)
 
 
@@ -265,73 +228,31 @@ def _find_slowest_sql(
     server: Optional[str] = None,
     attempt_id: Optional[str] = None,
     n: int = 5,
-    page_size: int = 100,
     include_running: bool = False,
-    include_plan_description: bool = True,
-    plan_description_max_length: int = 2000,
-) -> List[SqlQuerySummary]:
+    compact: Optional[bool] = None,
+) -> Any:
     """Internal helper: Get the N slowest SQL queries for a Spark application."""
-    ctx = mcp.get_context()
-    client = common.get_client_or_default(ctx, server)
+    cfg = common.get_config()
+    
+    all_executions = fetch_sql_pages(
+        app_id=app_id,
+        server=server,
+        attempt_id=attempt_id,
+        page_size=cfg.sql_page_size,
+        details=True,
+        plan_description=False, # Don't fetch plans for ranking
+    )
 
-    all_executions: List[ExecutionData] = []
-    offset = 0
-
-    while True:
-        executions: List[ExecutionData] = client.get_sql_list(
-            app_id=app_id,
-            attempt_id=attempt_id,
-            details=True,
-            plan_description=True,
-            offset=offset,
-            length=page_size,
-        )
-
-        if not executions:
-            break
-
-        all_executions.extend(executions)
-        offset += page_size
-
-        if len(executions) < page_size:
-            break
+    if not all_executions:
+        return []
 
     if not include_running:
         all_executions = [
             e for e in all_executions if e.status != SQLExecutionStatus.RUNNING.value
         ]
 
-    slowest_executions = heapq.nlargest(n, all_executions, key=lambda e: e.duration)
-
-    simplified_results = []
-    for execution in slowest_executions:
-        job_summary = JobSummary(
-            success_job_ids=execution.success_job_ids,
-            failed_job_ids=execution.failed_job_ids,
-            running_job_ids=execution.running_job_ids,
-        )
-
-        plan_description = ""
-        if include_plan_description and execution.plan_description:
-            plan_description = truncate_plan_description(
-                execution.plan_description, plan_description_max_length
-            )
-
-        query_summary = SqlQuerySummary(
-            id=execution.id,
-            duration=execution.duration,
-            description=execution.description,
-            status=execution.status,
-            submission_time=execution.submission_time.isoformat()
-            if execution.submission_time
-            else None,
-            plan_description=plan_description,
-            job_summary=job_summary,
-        )
-
-        simplified_results.append(query_summary)
-
-    return simplified_results
+    slowest = heapq.nlargest(n, all_executions, key=lambda e: e.duration or 0)
+    return compact_output(slowest, compact)
 
 
 @mcp.tool()
@@ -383,6 +304,7 @@ def find_slowest(
             server=server,
             n=n,
             include_running=include_running,
+            compact=compact,
         )
     else:
         raise ValueError(f"Invalid type '{type}'. Must be one of: jobs, stages, sql")

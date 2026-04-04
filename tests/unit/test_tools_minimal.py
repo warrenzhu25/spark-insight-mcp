@@ -102,11 +102,13 @@ def test_find_slowest_jobs_and_empty(mock_fetch_jobs):
         status="SUCCEEDED",
         submission_time=now,
         completion_time=now + timedelta(seconds=5),
+        duration_ms=5000,
     )
     j2 = SimpleNamespace(
         status="RUNNING",
         submission_time=now,
         completion_time=None,
+        duration_ms=0,
     )
     mock_fetch_jobs.return_value = [j1, j2]
 
@@ -119,7 +121,7 @@ def test_find_slowest_jobs_and_empty(mock_fetch_jobs):
     assert _find_slowest_jobs(app_id="a") == []
 
 
-@patch("spark_history_mcp.tools.jobs_stages.get_config")
+@patch("spark_history_mcp.tools.jobs_stages.common.get_config")
 @patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
 def test_find_slowest_jobs_respects_include_running_default(
     mock_fetch_jobs, mock_get_config
@@ -131,16 +133,20 @@ def test_find_slowest_jobs_respects_include_running_default(
         status="RUNNING",
         submission_time=now,
         completion_time=None,
+        duration_ms=0,
     )
 
     mock_fetch_jobs.return_value = [running_job]
-    mock_get_config.return_value = SimpleNamespace(include_running_defaults=True)
+    mock_get_config.return_value = SimpleNamespace(
+        include_running_defaults=True,
+        compact_tool_output=False
+    )
 
     result = _find_slowest_jobs(app_id="app", n=1)
     assert result == [running_job]
 
 
-@patch("spark_history_mcp.tools.jobs_stages.get_config")
+@patch("spark_history_mcp.tools.jobs_stages.common.get_config")
 @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
 def test_find_slowest_stages_respects_include_running_default(
     mock_fetch_stages, mock_get_config
@@ -152,10 +158,14 @@ def test_find_slowest_stages_respects_include_running_default(
         status="RUNNING",
         completion_time=None,
         first_task_launched_time=now,
+        duration_ms=0,
     )
 
     mock_fetch_stages.return_value = [running_stage]
-    mock_get_config.return_value = SimpleNamespace(include_running_defaults=True)
+    mock_get_config.return_value = SimpleNamespace(
+        include_running_defaults=True,
+        compact_tool_output=False
+    )
 
     result = _find_slowest_stages(app_id="app", n=1)
     assert result == [running_stage]
@@ -183,11 +193,13 @@ def test_find_slowest_stages_filters_correctly(mock_fetch_stages):
         status="COMPLETE",
         completion_time=now + timedelta(seconds=10),
         first_task_launched_time=now,
+        duration_ms=10000,
     )
     s2 = SimpleNamespace(
         status="RUNNING",
         completion_time=None,
         first_task_launched_time=None,
+        duration_ms=0,
     )
     mock_fetch_stages.return_value = [s1, s2]
     slow = _find_slowest_stages(app_id="a", n=1)
@@ -211,6 +223,10 @@ def test_get_executor_and_summary(mock_get_context):
         total_input_bytes=1024,
         total_shuffle_read=2048,
         total_shuffle_write=4096,
+        add_time=datetime.now(),
+        remove_time=None,
+        total_cores=1,
+        max_memory=1024,
         memory_metrics=SimpleNamespace(
             used_on_heap_storage_memory=10, used_off_heap_storage_memory=20
         ),
@@ -226,6 +242,10 @@ def test_get_executor_and_summary(mock_get_context):
         total_input_bytes=512,
         total_shuffle_read=1024,
         total_shuffle_write=2048,
+        add_time=datetime.now(),
+        remove_time=datetime.now(),
+        total_cores=1,
+        max_memory=1024,
         memory_metrics=SimpleNamespace(
             used_on_heap_storage_memory=5, used_off_heap_storage_memory=5
         ),
@@ -238,6 +258,19 @@ def test_get_executor_and_summary(mock_get_context):
     assert get_executor("app", "x") is None
 
     # summary aggregation
+    now = datetime.now()
+    app = SimpleNamespace(
+        id="app",
+        name="Test App",
+        cores_per_executor=1,
+        attempts=[
+            SimpleNamespace(
+                start_time=now,
+                end_time=now + timedelta(seconds=10),
+            )
+        ],
+    )
+    c.get_application.return_value = app
     summary = get_executor_summary("app")
     assert summary["total_executors"] == 2
     assert summary["active_executors"] == 1
@@ -271,6 +304,8 @@ def test_get_executor_summary_with_utilization(mock_get_context):
         total_input_bytes=1024,
         total_shuffle_read=2048,
         total_shuffle_write=4096,
+        total_cores=2,
+        max_memory=1024,
         memory_metrics=SimpleNamespace(
             used_on_heap_storage_memory=10, used_off_heap_storage_memory=20
         ),
@@ -288,6 +323,8 @@ def test_get_executor_summary_with_utilization(mock_get_context):
         total_input_bytes=512,
         total_shuffle_read=1024,
         total_shuffle_write=2048,
+        total_cores=2,
+        max_memory=1024,
         memory_metrics=SimpleNamespace(
             used_on_heap_storage_memory=5, used_off_heap_storage_memory=5
         ),

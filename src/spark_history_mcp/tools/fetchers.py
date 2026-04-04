@@ -34,14 +34,8 @@ _CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 def _resolve_client(server: Optional[str]):
     ctx = get_active_mcp_context()
-    try:
-        client = common.get_client_or_default(ctx, server)
-    except Exception as err:
-        if ctx is None:
-            raise ValueError(
-                "Spark MCP context is not available outside of a request"
-            ) from err
-        client = get_client(ctx, server)
+    client = common.get_client_or_default(ctx, server)
+    
     is_mock = isinstance(client, mock.Mock)
     use_cache = ctx is not None and not is_mock
     use_disk = not is_mock
@@ -332,7 +326,7 @@ def fetch_sql_pages(
     app_id: str,
     server: Optional[str] = None,
     attempt_id: Optional[int] = None,
-    page_size: int = 100,
+    page_size: Optional[int] = None,
     details: bool = True,
     plan_description: bool = False,
 ):
@@ -340,6 +334,8 @@ def fetch_sql_pages(
 
     If paging is not supported by the client, falls back to a single call.
     """
+    cfg = common.get_config()
+    page_size = page_size or cfg.sql_page_size
     client, _, _ = _resolve_client(server)
 
     # Try an API that supports paging; otherwise use the simple list

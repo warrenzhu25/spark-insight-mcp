@@ -7,6 +7,7 @@ Handles loading configuration and initializing the Spark REST client.
 from pathlib import Path
 from typing import Optional
 
+from spark_history_mcp.api.factory import create_spark_client
 from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.cli._compat import CLI_AVAILABLE, click
 from spark_history_mcp.config.config import Config
@@ -57,4 +58,4 @@ def get_spark_client(
         else:
             server_config = config.servers[default_servers[0]]
 
-    return SparkRestClient(server_config)
+    return create_spark_client(server_config)

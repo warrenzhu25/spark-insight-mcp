@@ -125,23 +125,19 @@ class TestTools(unittest.TestCase):
         # Create mock jobs with different durations and statuses
         job1 = MagicMock(spec=JobData)
         job1.status = "RUNNING"
-        job1.submission_time = datetime.now() - timedelta(minutes=10)
-        job1.completion_time = None
+        job1.duration_ms = None
 
         job2 = MagicMock(spec=JobData)
         job2.status = "SUCCEEDED"
-        job2.submission_time = datetime.now() - timedelta(minutes=5)
-        job2.completion_time = datetime.now() - timedelta(minutes=3)  # 2 min duration
+        job2.duration_ms = 120000  # 2 min
 
         job3 = MagicMock(spec=JobData)
         job3.status = "SUCCEEDED"
-        job3.submission_time = datetime.now() - timedelta(minutes=10)
-        job3.completion_time = datetime.now() - timedelta(minutes=5)  # 5 min duration
+        job3.duration_ms = 300000  # 5 min
 
         job4 = MagicMock(spec=JobData)
         job4.status = "FAILED"
-        job4.submission_time = datetime.now() - timedelta(minutes=8)
-        job4.completion_time = datetime.now() - timedelta(minutes=7)  # 1 min duration
+        job4.duration_ms = 60000  # 1 min
 
         mock_fetch_jobs.return_value = [job1, job2, job3, job4]
 
@@ -162,20 +158,15 @@ class TestTools(unittest.TestCase):
         # Create mock jobs with different durations and statuses
         job1 = MagicMock(spec=JobData)
         job1.status = "RUNNING"
-        job1.submission_time = datetime.now() - timedelta(
-            minutes=20
-        )  # Running for 20 min
-        job1.completion_time = None
+        job1.duration_ms = 0  # Running job has 0 duration in this test's logic
 
         job2 = MagicMock(spec=JobData)
         job2.status = "SUCCEEDED"
-        job2.submission_time = datetime.now() - timedelta(minutes=5)
-        job2.completion_time = datetime.now() - timedelta(minutes=3)  # 2 min duration
+        job2.duration_ms = 120000  # 2 min
 
         job3 = MagicMock(spec=JobData)
         job3.status = "SUCCEEDED"
-        job3.submission_time = datetime.now() - timedelta(minutes=10)
-        job3.completion_time = datetime.now() - timedelta(minutes=5)  # 5 min duration
+        job3.duration_ms = 300000  # 5 min
 
         mock_fetch_jobs.return_value = [job1, job2, job3]
 
@@ -197,9 +188,7 @@ class TestTools(unittest.TestCase):
         for i in range(5):
             job = MagicMock(spec=JobData)
             job.status = "SUCCEEDED"
-            job.submission_time = datetime.now() - timedelta(minutes=10)
-            # Different completion times to create different durations
-            job.completion_time = datetime.now() - timedelta(minutes=10 - i)
+            job.duration_ms = (i + 1) * 1000
             jobs.append(job)
 
         mock_fetch_jobs.return_value = jobs
@@ -602,13 +591,8 @@ class TestTools(unittest.TestCase):
         stage_a.attempt_id = 0
         stage_a.name = "Stage A"
         stage_a.status = "COMPLETE"
-        # Total duration: 10 minutes (submission to completion)
-        stage_a.submission_time = datetime.now() - timedelta(minutes=10)
-        stage_a.first_task_launched_time = datetime.now() - timedelta(
-            minutes=5
-        )  # 5 min delay
-        stage_a.completion_time = datetime.now()
-        # Execution time: 5 minutes (first_task_launched to completion)
+        # Execution time: 5 minutes (300,000 ms)
+        stage_a.duration_ms = 300000
 
         # Create Stage B: Shorter total duration but longer execution time
         stage_b = MagicMock(spec=StageData)
@@ -616,13 +600,8 @@ class TestTools(unittest.TestCase):
         stage_b.attempt_id = 0
         stage_b.name = "Stage B"
         stage_b.status = "COMPLETE"
-        # Total duration: 8 minutes (submission to completion)
-        stage_b.submission_time = datetime.now() - timedelta(minutes=8)
-        stage_b.first_task_launched_time = datetime.now() - timedelta(
-            minutes=7
-        )  # 1 min delay
-        stage_b.completion_time = datetime.now()
-        # Execution time: 7 minutes (first_task_launched to completion)
+        # Execution time: 7 minutes (420,000 ms)
+        stage_b.duration_ms = 420000
 
         mock_fetch_stages.return_value = [stage_a, stage_b]
 
@@ -644,9 +623,7 @@ class TestTools(unittest.TestCase):
         running_stage.attempt_id = 0
         running_stage.name = "Running Stage"
         running_stage.status = "RUNNING"
-        running_stage.submission_time = datetime.now() - timedelta(minutes=20)
-        running_stage.first_task_launched_time = datetime.now() - timedelta(minutes=15)
-        running_stage.completion_time = None  # Still running
+        running_stage.duration_ms = 900000  # 15 min
 
         # Create completed stage with shorter execution time
         completed_stage = MagicMock(spec=StageData)
@@ -654,9 +631,7 @@ class TestTools(unittest.TestCase):
         completed_stage.attempt_id = 0
         completed_stage.name = "Completed Stage"
         completed_stage.status = "COMPLETE"
-        completed_stage.submission_time = datetime.now() - timedelta(minutes=5)
-        completed_stage.first_task_launched_time = datetime.now() - timedelta(minutes=4)
-        completed_stage.completion_time = datetime.now()
+        completed_stage.duration_ms = 240000  # 4 min
 
         mock_fetch_stages.return_value = [running_stage, completed_stage]
 
@@ -677,9 +652,7 @@ class TestTools(unittest.TestCase):
         running_stage.attempt_id = 0
         running_stage.name = "Running Stage"
         running_stage.status = "RUNNING"
-        running_stage.submission_time = datetime.now() - timedelta(minutes=10)
-        running_stage.first_task_launched_time = datetime.now() - timedelta(minutes=8)
-        running_stage.completion_time = None
+        running_stage.duration_ms = 0  # Running stage has 0 duration in this test's logic
 
         # Create completed stage
         completed_stage = MagicMock(spec=StageData)
@@ -687,9 +660,7 @@ class TestTools(unittest.TestCase):
         completed_stage.attempt_id = 0
         completed_stage.name = "Completed Stage"
         completed_stage.status = "COMPLETE"
-        completed_stage.submission_time = datetime.now() - timedelta(minutes=5)
-        completed_stage.first_task_launched_time = datetime.now() - timedelta(minutes=4)
-        completed_stage.completion_time = datetime.now()
+        completed_stage.duration_ms = 240000  # 4 min
 
         mock_fetch_stages.return_value = [running_stage, completed_stage]
 
@@ -711,9 +682,7 @@ class TestTools(unittest.TestCase):
         stage_missing_launch.attempt_id = 0
         stage_missing_launch.name = "Stage Missing Launch Time"
         stage_missing_launch.status = "COMPLETE"
-        stage_missing_launch.submission_time = datetime.now() - timedelta(minutes=10)
-        stage_missing_launch.first_task_launched_time = None
-        stage_missing_launch.completion_time = datetime.now()
+        stage_missing_launch.duration_ms = 0
 
         # Create stage with missing completion_time
         stage_missing_completion = MagicMock(spec=StageData)
@@ -721,11 +690,7 @@ class TestTools(unittest.TestCase):
         stage_missing_completion.attempt_id = 0
         stage_missing_completion.name = "Stage Missing Completion Time"
         stage_missing_completion.status = "COMPLETE"
-        stage_missing_completion.submission_time = datetime.now() - timedelta(minutes=5)
-        stage_missing_completion.first_task_launched_time = datetime.now() - timedelta(
-            minutes=4
-        )
-        stage_missing_completion.completion_time = None
+        stage_missing_completion.duration_ms = 0
 
         # Create valid stage
         valid_stage = MagicMock(spec=StageData)
@@ -733,9 +698,7 @@ class TestTools(unittest.TestCase):
         valid_stage.attempt_id = 0
         valid_stage.name = "Valid Stage"
         valid_stage.status = "COMPLETE"
-        valid_stage.submission_time = datetime.now() - timedelta(minutes=3)
-        valid_stage.first_task_launched_time = datetime.now() - timedelta(minutes=2)
-        valid_stage.completion_time = datetime.now()
+        valid_stage.duration_ms = 60000  # 1 min
 
         mock_fetch_stages.return_value = [
             stage_missing_launch,
@@ -772,10 +735,8 @@ class TestTools(unittest.TestCase):
             stage.attempt_id = 0
             stage.name = f"Stage {i}"
             stage.status = "COMPLETE"
-            stage.submission_time = datetime.now() - timedelta(minutes=10)
             # Different execution times: 1, 2, 3, 4, 5 minutes
-            stage.first_task_launched_time = datetime.now() - timedelta(minutes=i + 1)
-            stage.completion_time = datetime.now()
+            stage.duration_ms = (i + 1) * 60000
             stages.append(stage)
 
         mock_fetch_stages.return_value = stages
@@ -791,88 +752,56 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[2].stage_id, 2)  # 3 minutes
 
     # Tests for _find_slowest_sql internal helper
-    @patch("spark_history_mcp.tools.common.get_client_or_default")
-    def test_get_slowest_sql_queries_success(self, mock_get_client):
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_sql_pages")
+    def test_get_slowest_sql_queries_success(self, mock_fetch_sql):
         """Test successful SQL query retrieval and sorting"""
-        # Setup mock client
-        mock_client = MagicMock()
-
         # Create mock SQL executions with different durations
         sql1 = MagicMock(spec=ExecutionData)
         sql1.id = 1
         sql1.duration = 5000  # 5 seconds
         sql1.status = "COMPLETED"
-        sql1.success_job_ids = [1, 2]
-        sql1.failed_job_ids = []
-        sql1.running_job_ids = []
-        sql1.description = "Query 1"
-        sql1.submission_time = datetime.now()
-        sql1.plan_description = "Sample plan description"
+        sql1.to_compact_dict.return_value = {"id": 1, "duration_ms": 5000}
 
         sql2 = MagicMock(spec=ExecutionData)
         sql2.id = 2
         sql2.duration = 10000  # 10 seconds
         sql2.status = "COMPLETED"
-        sql2.success_job_ids = [3, 4]
-        sql2.failed_job_ids = []
-        sql2.running_job_ids = []
-        sql2.description = "Query 2"
-        sql2.submission_time = datetime.now()
-        sql2.plan_description = "Sample plan description"
+        sql2.to_compact_dict.return_value = {"id": 2, "duration_ms": 10000}
 
         sql3 = MagicMock(spec=ExecutionData)
         sql3.id = 3
         sql3.duration = 2000  # 2 seconds
         sql3.status = "COMPLETED"
-        sql3.success_job_ids = [5]
-        sql3.failed_job_ids = []
-        sql3.running_job_ids = []
-        sql3.description = "Query 3"
-        sql3.submission_time = datetime.now()
-        sql3.plan_description = "Sample plan description"
+        sql3.to_compact_dict.return_value = {"id": 3, "duration_ms": 2000}
 
-        mock_client.get_sql_list.return_value = [sql1, sql2, sql3]
-        mock_get_client.return_value = mock_client
+        mock_fetch_sql.return_value = [sql1, sql2, sql3]
 
         # Call the function
         result = _find_slowest_sql("spark-app-123", n=2)
 
         # Verify results are sorted by duration (descending)
         self.assertEqual(len(result), 2)
+        # Note: compact_output returns full objects in tests
         self.assertEqual(result[0].duration, 10000)  # Slowest first
         self.assertEqual(result[1].duration, 5000)  # Second slowest
 
-    @patch("spark_history_mcp.tools.common.get_client_or_default")
-    def test_get_slowest_sql_queries_exclude_running(self, mock_get_client):
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_sql_pages")
+    def test_get_slowest_sql_queries_exclude_running(self, mock_fetch_sql):
         """Test SQL query retrieval excluding running queries"""
-        # Setup mock client
-        mock_client = MagicMock()
-
         # Create mock SQL executions with different statuses
         sql1 = MagicMock(spec=ExecutionData)
         sql1.id = 1
         sql1.duration = 5000
         sql1.status = "RUNNING"
-        sql1.success_job_ids = []
-        sql1.failed_job_ids = []
-        sql1.running_job_ids = [1]
-        sql1.description = "Running Query"
-        sql1.submission_time = datetime.now()
-        sql1.plan_description = "Running plan description"
+        sql1.to_compact_dict.return_value = {"id": 1, "status": "RUNNING"}
 
         sql2 = MagicMock(spec=ExecutionData)
         sql2.id = 2
         sql2.duration = 10000
         sql2.status = "COMPLETED"
-        sql2.success_job_ids = [2, 3]
-        sql2.failed_job_ids = []
-        sql2.running_job_ids = []
-        sql2.description = "Completed Query"
-        sql2.submission_time = datetime.now()
-        sql2.plan_description = "Completed plan description"
+        sql2.to_compact_dict.return_value = {"id": 2, "status": "COMPLETED"}
 
-        mock_client.get_sql_list.return_value = [sql1, sql2]
-        mock_get_client.return_value = mock_client
+        mock_fetch_sql.return_value = [sql1, sql2]
 
         # Call the function (include_running=False by default)
         result = _find_slowest_sql("spark-app-123")
@@ -881,37 +810,23 @@ class TestTools(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].status, "COMPLETED")
 
-    @patch("spark_history_mcp.tools.common.get_client_or_default")
-    def test_get_slowest_sql_queries_include_running(self, mock_get_client):
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_sql_pages")
+    def test_get_slowest_sql_queries_include_running(self, mock_fetch_sql):
         """Test SQL query retrieval including running queries"""
-        # Setup mock client
-        mock_client = MagicMock()
-
         # Create mock SQL executions
         sql1 = MagicMock(spec=ExecutionData)
         sql1.id = 1
         sql1.duration = 5000
         sql1.status = "RUNNING"
-        sql1.success_job_ids = []
-        sql1.failed_job_ids = []
-        sql1.running_job_ids = [1]
-        sql1.description = "Running Query"
-        sql1.submission_time = datetime.now()
-        sql1.plan_description = "Running plan description"
+        sql1.to_compact_dict.return_value = {"id": 1, "status": "RUNNING"}
 
         sql2 = MagicMock(spec=ExecutionData)
         sql2.id = 2
         sql2.duration = 10000
         sql2.status = "COMPLETED"
-        sql2.success_job_ids = [2, 3]
-        sql2.failed_job_ids = []
-        sql2.running_job_ids = []
-        sql2.description = "Completed Query"
-        sql2.submission_time = datetime.now()
-        sql2.plan_description = "Completed plan description"
+        sql2.to_compact_dict.return_value = {"id": 2, "status": "COMPLETED"}
 
-        mock_client.get_sql_list.return_value = [sql1, sql2]
-        mock_get_client.return_value = mock_client
+        mock_fetch_sql.return_value = [sql1, sql2]
 
         # Call the function with include_running=True and n=2
         result = _find_slowest_sql("spark-app-123", include_running=True, n=2)
@@ -919,13 +834,10 @@ class TestTools(unittest.TestCase):
         # Should include both queries
         self.assertEqual(len(result), 2)
 
-    @patch("spark_history_mcp.tools.common.get_client_or_default")
-    def test_get_slowest_sql_queries_empty_result(self, mock_get_client):
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_sql_pages")
+    def test_get_slowest_sql_queries_empty_result(self, mock_fetch_sql):
         """Test SQL query retrieval with empty result"""
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.get_sql_list.return_value = []
-        mock_get_client.return_value = mock_client
+        mock_fetch_sql.return_value = []
 
         # Call the function
         result = _find_slowest_sql("spark-app-123")
@@ -933,12 +845,9 @@ class TestTools(unittest.TestCase):
         # Verify results
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.common.get_client_or_default")
-    def test_get_slowest_sql_queries_limit(self, mock_get_client):
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_sql_pages")
+    def test_get_slowest_sql_queries_limit(self, mock_fetch_sql):
         """Test SQL query retrieval with limit"""
-        # Setup mock client
-        mock_client = MagicMock()
-
         # Create mock SQL executions
         sql_execs = []
         for i in range(10):
@@ -946,16 +855,10 @@ class TestTools(unittest.TestCase):
             sql.id = i
             sql.duration = (10 - i) * 1000  # Decreasing durations
             sql.status = "COMPLETED"
-            sql.success_job_ids = [i]
-            sql.failed_job_ids = []
-            sql.running_job_ids = []
-            sql.description = f"Query {i}"
-            sql.submission_time = datetime.now()
-            sql.plan_description = f"Plan description for query {i}"
+            sql.to_compact_dict.return_value = {"id": i}
             sql_execs.append(sql)
 
-        mock_client.get_sql_list.return_value = sql_execs
-        mock_get_client.return_value = mock_client
+        mock_fetch_sql.return_value = sql_execs
 
         # Call the function with n=3
         result = _find_slowest_sql("spark-app-123", n=3)

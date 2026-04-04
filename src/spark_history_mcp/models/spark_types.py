@@ -1097,6 +1097,23 @@ class ExecutionData(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
+    def to_compact_dict(self) -> Dict[str, Any]:
+        """Return a compact dictionary representation."""
+        return {
+            "id": self.id,
+            "status": self.status,
+            "description": self.description,
+            "submission_time": self.submission_time.isoformat()
+            if self.submission_time
+            else None,
+            "duration_ms": self.duration,
+            "job_summary": {
+                "success_job_ids": list(self.success_job_ids),
+                "failed_job_ids": list(self.failed_job_ids),
+                "running_job_ids": list(self.running_job_ids),
+            },
+        }
+
     @field_validator("submission_time", mode="before")
     @classmethod
     def parse_datetime(cls, value):
