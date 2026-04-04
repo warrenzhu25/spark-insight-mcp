@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ..core.app import mcp
+from ..config.config import DEFAULT_SPILL_THRESHOLD_BYTES, DEFAULT_GC_PRESSURE_THRESHOLD
+from . import common
 from .executors import get_executor_summary
 from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
 from .jobs_stages import _find_slowest_jobs, _find_slowest_stages
@@ -35,7 +37,9 @@ def get_job_bottlenecks(
     Returns:
         Dictionary containing identified bottlenecks and recommendations
     """
-    # Get slowest stages
+    cfg = common.get_config()
+
+    # Get slowest stages (non-compact to get full objects)
     slowest_stages = _find_slowest_stages(app_id, server, False, top_n, compact=False)
 
     # Get slowest jobs
@@ -48,11 +52,12 @@ def get_job_bottlenecks(
 
     # Identify stages with high spill
     high_spill_stages = []
+    spill_threshold = DEFAULT_SPILL_THRESHOLD_BYTES
     for stage in all_stages:
         if (
             stage.memory_bytes_spilled
-            and stage.memory_bytes_spilled > 100 * 1024 * 1024
-        ):  # > 100MB
+            and stage.memory_bytes_spilled > spill_threshold
+        ):
             high_spill_stages.append(
                 {
                     "stage_id": stage.stage_id,
@@ -80,32 +85,11 @@ def get_job_bottlenecks(
         "application_id": app_id,
         "performance_bottlenecks": {
             "slowest_stages": [
-                {
-                    "stage_id": stage.stage_id,
-                    "attempt_id": stage.attempt_id,
-                    "name": stage.name,
-                    "duration_seconds": (
-                        stage.completion_time - stage.submission_time
-                    ).total_seconds()
-                    if stage.completion_time and stage.submission_time
-                    else 0,
-                    "task_count": stage.num_tasks,
-                    "failed_tasks": stage.num_failed_tasks,
-                }
+                stage.to_compact_dict()
                 for stage in slowest_stages[:top_n]
             ],
             "slowest_jobs": [
-                {
-                    "job_id": job.job_id,
-                    "name": job.name,
-                    "duration_seconds": (
-                        job.completion_time - job.submission_time
-                    ).total_seconds()
-                    if job.completion_time and job.submission_time
-                    else 0,
-                    "failed_tasks": job.num_failed_tasks,
-                    "status": job.status,
-                }
+                job.to_compact_dict()
                 for job in slowest_jobs[:top_n]
             ],
         },
@@ -123,7 +107,7 @@ def get_job_bottlenecks(
     }
 
     # Generate recommendations
-    if gc_pressure > 0.1:  # More than 10% time in GC
+    if gc_pressure > DEFAULT_GC_PRESSURE_THRESHOLD:
         bottlenecks["recommendations"].append(
             {
                 "type": "memory",
