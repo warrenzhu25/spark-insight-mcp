@@ -142,7 +142,7 @@ uv run pytest --cov=. --cov-report=term-missing
 
 ### Key Components
 - `src/spark_history_mcp/core/app.py` - Main FastMCP server setup and client management
-- `src/spark_history_mcp/tools/tools.py` - Complete tool implementation (50+ tools)
+- `src/spark_history_mcp.tools.py` - Complete tool implementation (50+ tools)
 - `src/spark_history_mcp/api/spark_client.py` - Spark History Server REST API client
 - `src/spark_history_mcp/api/emr_persistent_ui_client.py` - AWS EMR integration client
 - `src/spark_history_mcp/prompts/` - Intelligent prompt templates by category

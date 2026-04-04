@@ -83,7 +83,7 @@ def resolve_app_by_name(
         return identifier  # Already an ID
 
     # Search by name (contains match) and get latest (limit 1)
-    import spark_history_mcp.tools.tools as tools_module
+    import spark_history_mcp.tools as tools_module
     from spark_history_mcp.cli._compat import patch_tool_context
     from spark_history_mcp.tools import list_applications
 

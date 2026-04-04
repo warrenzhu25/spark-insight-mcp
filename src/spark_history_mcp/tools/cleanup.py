@@ -12,7 +12,7 @@ import subprocess
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.app import mcp
-from .common import get_client_or_default
+from . import common
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,7 @@ def delete_event_logs(
 
     # Get applications from Spark History Server
     ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = common.get_client_or_default(ctx, server)
     applications = client.list_applications(limit=limit)
 
     # Filter applications by duration and/or name pattern (AND logic)

@@ -56,7 +56,7 @@ def make_executor(start: datetime, end: datetime):
 def test_get_app_summary_golden(
     mock_fetch_app, mock_fetch_stages, mock_fetch_executors
 ):
-    from spark_history_mcp.tools.tools import get_app_summary
+    from spark_history_mcp.tools import get_app_summary
 
     now = datetime.now(timezone.utc)
     app = SimpleNamespace(
@@ -84,10 +84,10 @@ def test_get_app_summary_golden(
 
 
 @patch("spark_history_mcp.tools.comparisons.compare_app_stages_aggregated")
-@patch("spark_history_mcp.tools.tools.get_app_summary")
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.get_app_summary")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_compare_app_summaries_golden(mock_ctx, mock_get_app_summary, mock_stage_agg):
-    from spark_history_mcp.tools.tools import compare_app_summaries
+    from spark_history_mcp.tools import compare_app_summaries
 
     # app1 summary (subset of fields)
     app1 = {

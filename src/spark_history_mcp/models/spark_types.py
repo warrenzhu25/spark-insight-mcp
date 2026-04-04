@@ -1,8 +1,13 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional, Sequence, Set
+from typing import Any, Dict, List, Optional, Sequence, Set
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+
+
+def _dt_iso(value: Optional[datetime]) -> Optional[str]:
+    """Format datetime to ISO string."""
+    return value.isoformat() if value else None
 
 
 class JobExecutionStatus(str, Enum):
@@ -104,6 +109,36 @@ class ApplicationInfo(BaseModel):
     attempts: Sequence["ApplicationAttemptInfo"]
 
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
+
+    @computed_field
+    @property
+    def status(self) -> Optional[str]:
+        if not self.attempts:
+            return None
+        return "COMPLETED" if self.attempts[-1].completed else "RUNNING"
+
+    def to_compact_dict(self) -> Dict[str, Any]:
+        """Return a compact dictionary representation."""
+        latest = self.attempts[-1] if self.attempts else None
+        return {
+            "id": self.id,
+            "name": self.name,
+            "status": self.status,
+            "attempts": len(self.attempts),
+            "latest_attempt": {
+                "attempt_id": latest.attempt_id,
+                "start_time": latest.start_time.isoformat() if latest.start_time else None,
+                "end_time": latest.end_time.isoformat() if latest.end_time else None,
+                "last_updated": latest.last_updated.isoformat() if latest.last_updated else None,
+                "duration_ms": latest.duration,
+                "spark_user": latest.spark_user,
+                "spark_version": latest.app_spark_version,
+            }
+            if latest
+            else None,
+            "cores_per_executor": self.cores_per_executor,
+            "memory_per_executor_mb": self.memory_per_executor_mb,
+        }
 
 
 class ApplicationAttemptInfo(BaseModel):
@@ -221,6 +256,29 @@ class ExecutorSummary(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
+    def to_compact_dict(self) -> Dict[str, Any]:
+        """Return a compact dictionary representation."""
+        return {
+            "id": self.id,
+            "host_port": self.host_port,
+            "is_active": self.is_active,
+            "total_cores": self.total_cores,
+            "max_tasks": self.max_tasks,
+            "active_tasks": self.active_tasks,
+            "completed_tasks": self.completed_tasks,
+            "failed_tasks": self.failed_tasks,
+            "total_duration_ms": self.total_duration,
+            "total_gc_time_ms": self.total_gc_time,
+            "total_input_bytes": self.total_input_bytes,
+            "total_shuffle_read": self.total_shuffle_read,
+            "total_shuffle_write": self.total_shuffle_write,
+            "memory_used": self.memory_used,
+            "disk_used": self.disk_used,
+            "add_time": _dt_iso(self.add_time),
+            "remove_time": _dt_iso(self.remove_time),
+            "remove_reason": self.remove_reason,
+        }
+
     @field_validator("add_time", "remove_time", mode="before")
     @classmethod
     def parse_datetime(cls, value):
@@ -282,6 +340,31 @@ class JobData(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True, arbitrary_types_allowed=True, extra="ignore"
     )
+
+    @computed_field
+    @property
+    def duration_ms(self) -> Optional[int]:
+        if self.submission_time and self.completion_time:
+            return int((self.completion_time - self.submission_time).total_seconds() * 1000)
+        return None
+
+    def to_compact_dict(self) -> Dict[str, Any]:
+        """Return a compact dictionary representation."""
+        return {
+            "job_id": self.job_id,
+            "name": self.name,
+            "status": self.status,
+            "submission_time": self.submission_time.isoformat() if self.submission_time else None,
+            "completion_time": self.completion_time.isoformat() if self.completion_time else None,
+            "duration_ms": self.duration_ms,
+            "num_tasks": self.num_tasks,
+            "num_active_tasks": self.num_active_tasks,
+            "num_completed_tasks": self.num_completed_tasks,
+            "num_failed_tasks": self.num_failed_tasks,
+            "num_skipped_tasks": self.num_skipped_tasks,
+            "num_completed_stages": self.num_completed_stages,
+            "num_failed_stages": self.num_failed_stages,
+        }
 
     @field_validator("submission_time", "completion_time", mode="before")
     @classmethod
@@ -465,6 +548,36 @@ class StageData(BaseModel):
     shuffle_mergers_count: Optional[int] = Field(0, alias="shuffleMergersCount")
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    @computed_field
+    @property
+    def duration_ms(self) -> Optional[int]:
+        if self.first_task_launched_time and self.completion_time:
+            return int((self.completion_time - self.first_task_launched_time).total_seconds() * 1000)
+        return None
+
+    def to_compact_dict(self) -> Dict[str, Any]:
+        """Return a compact dictionary representation."""
+        return {
+            "stage_id": self.stage_id,
+            "attempt_id": self.attempt_id,
+            "name": self.name,
+            "status": self.status,
+            "submission_time": self.submission_time.isoformat() if self.submission_time else None,
+            "first_task_launched_time": self.first_task_launched_time.isoformat() if self.first_task_launched_time else None,
+            "completion_time": self.completion_time.isoformat() if self.completion_time else None,
+            "duration_ms": self.duration_ms,
+            "num_tasks": self.num_tasks,
+            "num_complete_tasks": self.num_complete_tasks,
+            "num_failed_tasks": self.num_failed_tasks,
+            "num_killed_tasks": self.num_killed_tasks,
+            "input_bytes": self.input_bytes,
+            "output_bytes": self.output_bytes,
+            "shuffle_read_bytes": self.shuffle_read_bytes,
+            "shuffle_write_bytes": self.shuffle_write_bytes,
+            "memory_bytes_spilled": self.memory_bytes_spilled,
+            "disk_bytes_spilled": self.disk_bytes_spilled,
+        }
 
     @field_validator(
         "submission_time", "first_task_launched_time", "completion_time", mode="before"

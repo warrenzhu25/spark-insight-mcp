@@ -265,7 +265,7 @@ def _make_app(app_id, name="", duration_ms=0):
 
 class TestDeleteEventLogs:
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_dry_run(self, mock_ctx, mock_gcs_list):
         client = MagicMock()
         client.list_applications.return_value = [
@@ -292,7 +292,7 @@ class TestDeleteEventLogs:
 
     @patch("spark_history_mcp.tools.cleanup._gcs_delete_files")
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_actual_delete(self, mock_ctx, mock_gcs_list, mock_gcs_delete):
         client = MagicMock()
         client.list_applications.return_value = [
@@ -314,7 +314,7 @@ class TestDeleteEventLogs:
         mock_gcs_delete.assert_called_once_with(["gs://bucket/events/app-1"])
 
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_name_pattern_filter(self, mock_ctx, mock_gcs_list):
         client = MagicMock()
         client.list_applications.return_value = [
@@ -337,7 +337,7 @@ class TestDeleteEventLogs:
         assert result["matched_applications"][0]["app_id"] == "app-1"
 
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_name_pattern_case_insensitive(self, mock_ctx, mock_gcs_list):
         client = MagicMock()
         client.list_applications.return_value = [
@@ -355,7 +355,7 @@ class TestDeleteEventLogs:
         assert len(result["matched_applications"]) == 1
 
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_both_filters_and_logic(self, mock_ctx, mock_gcs_list):
         client = MagicMock()
         client.list_applications.return_value = [
@@ -397,7 +397,7 @@ class TestDeleteEventLogs:
             delete_event_logs(gcs_dir="gs://bucket/events", max_duration="bad")
 
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_no_matching_apps(self, mock_ctx, mock_gcs_list):
         client = MagicMock()
         client.list_applications.return_value = [
@@ -417,7 +417,7 @@ class TestDeleteEventLogs:
         assert result["summary"]["apps_matched"] == 0
 
     @patch("spark_history_mcp.tools.cleanup._gcs_list_files")
-    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    @patch("spark_history_mcp.tools.mcp.get_context")
     def test_app_without_attempts(self, mock_ctx, mock_gcs_list):
         """Apps without attempts should have 0ms duration."""
         client = MagicMock()

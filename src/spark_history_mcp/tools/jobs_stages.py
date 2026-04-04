@@ -17,7 +17,8 @@ from ..models.spark_types import (
     StageData,
     TaskMetricDistributions,
 )
-from .common import compact_output, get_client_or_default, get_config
+from . import common
+from .common import compact_output
 from .fetchers import (
     fetch_jobs,
     fetch_stage_attempt,
@@ -84,7 +85,7 @@ def _find_slowest_jobs(
     compact: Optional[bool] = None,
 ) -> Any:
     """Internal helper: Get the N slowest jobs for a Spark application."""
-    cfg = get_config()
+    cfg = common.get_config()
     jobs = fetch_jobs(app_id=app_id, server=server)
 
     if not jobs:
@@ -144,7 +145,7 @@ def _find_slowest_stages(
     compact: Optional[bool] = None,
 ) -> Any:
     """Internal helper: Get the N slowest stages for a Spark application."""
-    cfg = get_config()
+    cfg = common.get_config()
     stages = fetch_stages(app_id=app_id, server=server)
 
     if not include_running and not cfg.include_running_defaults:
@@ -271,7 +272,7 @@ def _find_slowest_sql(
 ) -> List[SqlQuerySummary]:
     """Internal helper: Get the N slowest SQL queries for a Spark application."""
     ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = common.get_client_or_default(ctx, server)
 
     all_executions: List[ExecutionData] = []
     offset = 0

@@ -16,6 +16,7 @@ import requests
 from botocore.exceptions import ClientError
 
 from spark_history_mcp.config.config import ServerConfig
+from .base_client import BaseApiClient
 
 # Configure logging
 logging.basicConfig(
@@ -24,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class EMRPersistentUIClient:
+class EMRPersistentUIClient(BaseApiClient):
     """Client for managing EMR Persistent App UI and HTTP sessions."""
 
     def __init__(self, server_config: ServerConfig):
@@ -34,6 +35,7 @@ class EMRPersistentUIClient:
         Args:
             server_config: ServerConfig object
         """
+        super().__init__(server_config)
         self.emr_cluster_arn = server_config.emr_cluster_arn
         self.region = self.emr_cluster_arn.split(":")[3]  # Extract region from ARN
 
@@ -43,11 +45,9 @@ class EMRPersistentUIClient:
             region_name=self.region,
         )
 
-        self.session = requests.Session()
         self.persistent_ui_id: Optional[str] = None
         self.presigned_url: Optional[str] = None
         self.base_url: Optional[str] = None
-        self.timeout: int = server_config.timeout
 
     def create_persistent_app_ui(self) -> Dict:
         """

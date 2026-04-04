@@ -12,8 +12,8 @@ class TestSparkClient(unittest.TestCase):
         self.server_config = ServerConfig(url="http://spark-history-server:18080")
         self.client = SparkRestClient(self.server_config)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_list_applications(self, mock_get):
+    @patch("requests.Session.request")
+    def test_list_applications(self, mock_request):
         # Setup mock response
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -39,19 +39,19 @@ class TestSparkClient(unittest.TestCase):
             }
         ]
         mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Call the method
         apps = self.client.list_applications(status=["COMPLETED"], limit=10)
 
-        mock_get.assert_called_once_with(
-            "http://spark-history-server:18080/api/v1/applications",
+        mock_request.assert_called_once_with(
+            method="GET",
+            url="http://spark-history-server:18080/api/v1/applications",
             params={"status": ["COMPLETED"], "limit": 10},
             headers={"Accept": "application/json"},
             auth=None,
             timeout=30,
             verify=True,
-            proxies=None,
         )
 
         self.assertEqual(len(apps), 1)
@@ -63,8 +63,8 @@ class TestSparkClient(unittest.TestCase):
         self.assertEqual(apps[0].attempts[0].spark_user, "spark")
         self.assertTrue(apps[0].attempts[0].completed)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_list_applications_with_filters(self, mock_get):
+    @patch("requests.Session.request")
+    def test_list_applications_with_filters(self, mock_request):
         # Setup mock response
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -85,7 +85,7 @@ class TestSparkClient(unittest.TestCase):
             }
         ]
         mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Call the method with various filters
         apps = self.client.list_applications(
@@ -93,8 +93,9 @@ class TestSparkClient(unittest.TestCase):
         )
 
         # Assertions
-        mock_get.assert_called_once_with(
-            "http://spark-history-server:18080/api/v1/applications",
+        mock_request.assert_called_once_with(
+            method="GET",
+            url="http://spark-history-server:18080/api/v1/applications",
             params={
                 "status": ["COMPLETED"],
                 "minDate": "2023-01-01",
@@ -105,28 +106,27 @@ class TestSparkClient(unittest.TestCase):
             auth=None,
             timeout=30,
             verify=True,
-            proxies=None,
         )
 
         self.assertEqual(len(apps), 1)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_list_applications_empty_response(self, mock_get):
+    @patch("requests.Session.request")
+    def test_list_applications_empty_response(self, mock_request):
         # Setup mock response with empty list
         mock_response = MagicMock()
         mock_response.json.return_value = []
         mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Call the method
         apps = self.client.list_applications()
 
         # Assertions
-        mock_get.assert_called_once()
+        mock_request.assert_called_once()
         self.assertEqual(len(apps), 0)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_fallback_behavior(self, mock_get):
+    @patch("requests.Session.request")
+    def test_fallback_behavior(self, mock_request):
         # First request fails with 404
         error_response = MagicMock()
         error_response.status_code = 404
@@ -140,36 +140,36 @@ class TestSparkClient(unittest.TestCase):
         success_response.raise_for_status.return_value = None
 
         # Configure mock to return different responses
-        mock_get.side_effect = [error_response, success_response]
+        mock_request.side_effect = [error_response, success_response]
 
         # Call method that should trigger EMR fallback
         result = self.client._get("applications/app-123/jobs")
 
         # Verify both URLs were tried
-        mock_get.assert_any_call(
-            "http://spark-history-server:18080/api/v1/applications/app-123/jobs",
+        mock_request.assert_any_call(
+            method="GET",
+            url="http://spark-history-server:18080/api/v1/applications/app-123/jobs",
             params=None,
             headers={"Accept": "application/json"},
             auth=None,
             timeout=30,
             verify=True,
-            proxies=self.client.proxies,  # Use actual proxies value
         )
-        mock_get.assert_any_call(
-            "http://spark-history-server:18080/api/v1/applications/app-123/1/jobs",
+        mock_request.assert_any_call(
+            method="GET",
+            url="http://spark-history-server:18080/api/v1/applications/app-123/1/jobs",
             params=None,
             headers={"Accept": "application/json"},
             auth=None,
             timeout=30,
             verify=True,
-            proxies=self.client.proxies,  # Use actual proxies value
         )
 
         # Verify we got the success response
         self.assertEqual(result, {"key": "value"})
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_fallback_fail(self, mock_get):
+    @patch("requests.Session.request")
+    def test_fallback_fail(self, mock_request):
         # Create 404 response
         error_response = MagicMock()
         error_response.status_code = 404
@@ -178,23 +178,23 @@ class TestSparkClient(unittest.TestCase):
         error_response.raise_for_status.side_effect = http_error
 
         # Both requests fail
-        mock_get.side_effect = [error_response, error_response]
+        mock_request.side_effect = [error_response, error_response]
 
         # Call method and expect exception
         with self.assertRaises(requests.exceptions.HTTPError):
             self.client._get("applications/app-123/jobs")
 
         # Verify both URLs were tried
-        self.assertEqual(mock_get.call_count, 2)
+        self.assertEqual(mock_request.call_count, 2)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_proxy_configuration(self, mock_get):
+    @patch("requests.Session.request")
+    def test_proxy_configuration(self, mock_request):
         # Test with proxy enabled
         client = SparkRestClient(
             ServerConfig(url="http://spark-history-server:18080", use_proxy=True)
         )
         self.assertEqual(
-            client.proxies,
+            client.session.proxies,
             {"http": "socks5h://localhost:8157", "https": "socks5h://localhost:8157"},
         )
 
@@ -202,7 +202,7 @@ class TestSparkClient(unittest.TestCase):
         client = SparkRestClient(
             ServerConfig(url="http://spark-history-server:18080", use_proxy=False)
         )
-        self.assertIsNone(client.proxies)
+        self.assertEqual(client.session.proxies, {})
 
     def test_url_modification(self):
         """Test the URL modification logic for different URL patterns"""
@@ -239,8 +239,8 @@ class TestSparkClient(unittest.TestCase):
                 f"Failed to correctly modify URL.\nInput: {input_url}\nExpected: {expected_url}\nGot: {modified_url}",
             )
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_cache_get_application(self, mock_get):
+    @patch("requests.Session.request")
+    def test_cache_get_application(self, mock_request):
         """Test that get_application caches results."""
         # Setup mock response
         mock_response = MagicMock()
@@ -260,7 +260,7 @@ class TestSparkClient(unittest.TestCase):
             ],
         }
         mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Clear cache before test
         self.client.clear_cache()
@@ -268,18 +268,18 @@ class TestSparkClient(unittest.TestCase):
         # First call - should hit the API
         app1 = self.client.get_application("app-123")
         self.assertEqual(app1.id, "app-123")
-        self.assertEqual(mock_get.call_count, 1)
+        self.assertEqual(mock_request.call_count, 1)
 
         # Second call with same app_id - should use cache
         app2 = self.client.get_application("app-123")
         self.assertEqual(app2.id, "app-123")
-        self.assertEqual(mock_get.call_count, 1)  # Still 1, not 2
+        self.assertEqual(mock_request.call_count, 1)  # Still 1, not 2
 
         # Verify both returns are the same object (cached)
         self.assertIs(app1, app2)
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_cache_list_jobs(self, mock_get):
+    @patch("requests.Session.request")
+    def test_cache_list_jobs(self, mock_request):
         """Test that list_jobs caches results with tuple conversion."""
         # Setup mock response
         mock_response = MagicMock()
@@ -303,7 +303,7 @@ class TestSparkClient(unittest.TestCase):
             }
         ]
         mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Clear cache before test
         self.client.clear_cache()
@@ -313,12 +313,12 @@ class TestSparkClient(unittest.TestCase):
         # First call
         jobs1 = self.client.list_jobs("app-123", status=[JobExecutionStatus.SUCCEEDED])
         self.assertEqual(len(jobs1), 1)
-        self.assertEqual(mock_get.call_count, 1)
+        self.assertEqual(mock_request.call_count, 1)
 
         # Second call with same parameters - should use cache
         jobs2 = self.client.list_jobs("app-123", status=[JobExecutionStatus.SUCCEEDED])
         self.assertEqual(len(jobs2), 1)
-        self.assertEqual(mock_get.call_count, 1)  # Still 1
+        self.assertEqual(mock_request.call_count, 1)  # Still 1
 
     def test_clear_cache(self):
         """Test that clear_cache clears all cached methods."""
@@ -333,8 +333,8 @@ class TestSparkClient(unittest.TestCase):
                 info["currsize"], 0, f"{method_name} should have 0 cache size"
             )
 
-    @patch("spark_history_mcp.api.spark_client.requests.get")
-    def test_cache_info(self, mock_get):
+    @patch("requests.Session.request")
+    def test_cache_info(self, mock_request):
         """Test that cache_info returns correct statistics."""
         # Setup mock response
         mock_response = MagicMock()
@@ -354,7 +354,7 @@ class TestSparkClient(unittest.TestCase):
             ],
         }
         mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Clear cache
         self.client.clear_cache()

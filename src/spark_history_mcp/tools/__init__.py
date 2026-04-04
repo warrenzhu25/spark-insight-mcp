@@ -2,7 +2,8 @@
 
 # Import all tools to ensure MCP registration
 # Application-level tools
-# Analysis tools
+from ..core.app import mcp
+from .common import get_client_or_default, get_config
 from .analysis import (
     analyze_auto_scaling,
     analyze_failed_tasks,
@@ -58,8 +59,16 @@ from .jobs_stages import (
     list_stages,
 )
 
+from .comparison_modules.utils import (
+    _compare_environments,
+    _compare_sql_execution_plans,
+)
+
 # Make tools available at package level
 __all__ = [
+    # Core utilities
+    "get_client_or_default",
+    "get_config",
     # Application tools
     "get_application",
     "list_applications",

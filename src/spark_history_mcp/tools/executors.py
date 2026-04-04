@@ -10,12 +10,12 @@ from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from ..core.app import mcp
+from . import common
 from .common import (
     DEFAULT_INTERVAL_MINUTES,
     MAX_INTERVALS,
     compact_dict,
     compact_output,
-    get_client_or_default,
 )
 from .fetchers import fetch_app, fetch_executors, fetch_stages
 from .timelines import build_app_executor_timeline
@@ -48,7 +48,7 @@ def list_executors(
         return compact_output(executors, compact)
     # Fallback to client active-only API if needed; otherwise reuse full list and filter
     ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = common.get_client_or_default(ctx, server)
     try:
         executors = client.list_executors(app_id=app_id)
         return compact_output(executors, compact)

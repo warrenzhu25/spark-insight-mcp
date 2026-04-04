@@ -1,5 +1,5 @@
 """
-Minimal unit tests for spark_history_mcp.tools.tools to raise coverage.
+Minimal unit tests for spark_history_mcp.tools to raise coverage.
 
 These tests focus on argument plumbing, validation branches, and simple
 aggregation logic with fully mocked clients and MCP context.
@@ -26,9 +26,9 @@ def make_ctx(client):
     return SimpleNamespace(request_context=Req(client))
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_get_client_or_default_variants(mock_get_context):
-    from spark_history_mcp.tools.tools import get_client_or_default
+    from spark_history_mcp.tools import get_client_or_default
 
     c = MagicMock()
     mock_get_context.return_value = make_ctx(c)
@@ -46,9 +46,9 @@ def test_get_client_or_default_variants(mock_get_context):
         get_client_or_default(bad_ctx)
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_list_applications_filters_and_search_types(mock_get_context):
-    from spark_history_mcp.tools.tools import list_applications
+    from spark_history_mcp.tools import list_applications
 
     c = MagicMock()
     # Two apps with names
@@ -78,9 +78,9 @@ def test_list_applications_filters_and_search_types(mock_get_context):
         list_applications(app_name="x", search_type="unknown")
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_list_jobs_status_conversion(mock_get_context):
-    from spark_history_mcp.tools.tools import list_jobs
+    from spark_history_mcp.tools import list_jobs
 
     c = MagicMock()
     c.list_jobs.return_value = []
@@ -163,7 +163,7 @@ def test_find_slowest_stages_respects_include_running_default(
 
 @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
 def test_list_stages_uses_fetch_stages(mock_fetch_stages):
-    from spark_history_mcp.tools.tools import list_stages
+    from spark_history_mcp.tools import list_stages
 
     mock_fetch_stages.return_value = []
     list_stages(app_id="a", status=["COMPLETE"], with_summaries=True)
@@ -194,9 +194,9 @@ def test_find_slowest_stages_filters_correctly(mock_fetch_stages):
     assert slow == [s1]
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_get_executor_and_summary(mock_get_context):
-    from spark_history_mcp.tools.tools import get_executor, get_executor_summary
+    from spark_history_mcp.tools import get_executor, get_executor_summary
 
     c = MagicMock()
     # executor list
@@ -252,9 +252,9 @@ def test_get_executor_and_summary(mock_get_context):
     assert summary["total_shuffle_write"] == 6144
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_get_executor_summary_with_utilization(mock_get_context):
-    from spark_history_mcp.tools.tools import get_executor_summary
+    from spark_history_mcp.tools import get_executor_summary
 
     c = MagicMock()
     now = datetime.now()
@@ -328,9 +328,9 @@ def test_get_executor_summary_with_utilization(mock_get_context):
     assert summary["executor_utilization_percent"] == 20.0
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
+@patch("spark_history_mcp.tools.mcp.get_context")
 def test_analyze_failed_tasks(mock_get_context):
-    from spark_history_mcp.tools.tools import analyze_failed_tasks
+    from spark_history_mcp.tools import analyze_failed_tasks
 
     c = MagicMock()
     # stages with failures

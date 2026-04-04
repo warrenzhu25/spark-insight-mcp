@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ..core.app import mcp
-from .common import get_client_or_default  # noqa: F401 – re-exported for tests
 from .executors import get_executor_summary
 from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
 from .jobs_stages import _find_slowest_jobs, _find_slowest_stages

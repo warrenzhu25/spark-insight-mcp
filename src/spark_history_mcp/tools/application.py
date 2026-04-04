@@ -15,7 +15,8 @@ from .analysis import (
     analyze_failed_tasks,
     analyze_shuffle_skew,
 )
-from .common import compact_output, get_client_or_default, get_config
+from . import common
+from .common import compact_output
 from .fetchers import fetch_app, fetch_env, fetch_executors, fetch_stages
 from .recommendations import compact_recommendation
 
@@ -90,7 +91,7 @@ def list_applications(
         )
 
     ctx = mcp.get_context()
-    client = get_client_or_default(ctx, server)
+    client = common.get_client_or_default(ctx, server)
 
     # When name filtering is requested, fetch all apps first so the name
     # filter runs over the full set, then apply the limit afterwards.
@@ -279,7 +280,7 @@ def get_application_insights(
         else "needs_attention",
     }
 
-    cfg = get_config()
+    cfg = common.get_config()
     if cfg.compact_tool_output:
         # Compact: summarize each sub-analysis instead of full results
         compact_analyses = {}

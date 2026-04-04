@@ -89,7 +89,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import delete_event_logs
 
             with patch_tool_context(client, tools_module):

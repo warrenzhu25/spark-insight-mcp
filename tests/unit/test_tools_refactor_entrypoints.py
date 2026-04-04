@@ -28,7 +28,7 @@ def make_stage(stage_id: int, name: str, seconds: int):
 def test_find_top_stage_differences_matches(
     mock_ctx, mock_get_client, mock_fetch_app, mock_fetch_stages
 ):
-    from spark_history_mcp.tools.tools import find_top_stage_differences
+    from spark_history_mcp.tools import find_top_stage_differences
 
     mock_ctx.return_value = SimpleNamespace()
 

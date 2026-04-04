@@ -53,13 +53,13 @@ class TestEMRIntegration(unittest.TestCase):
         mock_response = MagicMock()
         mock_response.json.return_value = []
         mock_response.raise_for_status.return_value = None
-        mock_session.get.return_value = mock_response
+        mock_session.request.return_value = mock_response
 
         # Call a method on the SparkRestClient
         apps = spark_client.list_applications()
 
         # Verify the session was used for the request
-        mock_session.get.assert_called_once()
+        mock_session.request.assert_called_once()
         self.assertEqual(apps, [])
 
     @patch("spark_history_mcp.core.app.EMRPersistentUIClient")

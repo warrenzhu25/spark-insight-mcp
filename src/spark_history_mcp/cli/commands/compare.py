@@ -106,7 +106,7 @@ def resolve_app_name_to_recent_apps(
     Returns:
         Tuple of (app_id1, app_id2, app_list) where app_list contains the full app objects
     """
-    import spark_history_mcp.tools.tools as tools_module
+    import spark_history_mcp.tools as tools_module
     from spark_history_mcp.tools import list_applications
 
     original_get_context = getattr(tools_module.mcp, "get_context", None)
@@ -370,7 +370,7 @@ def execute_app_comparison(
     config_path = ctx.obj["config_path"]
     client = get_spark_client(config_path, server)
 
-    import spark_history_mcp.tools.tools as tools_module
+    import spark_history_mcp.tools as tools_module
     from spark_history_mcp.tools import (
         compare_app_executor_timeline,
         compare_app_performance,
@@ -541,7 +541,7 @@ def execute_stage_comparison(stage_id1, stage_id2, server, formatter, ctx):
         app_id1, app_id2, _ = context
 
         # Import and execute stage comparison
-        import spark_history_mcp.tools.tools as tools_module
+        import spark_history_mcp.tools as tools_module
         from spark_history_mcp.tools import compare_stages
 
         client = get_spark_client(ctx.obj["config_path"], server)
@@ -577,7 +577,7 @@ def execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx):
         click.echo("Analyzing application timeline...")
 
         # Import and execute timeline comparison
-        import spark_history_mcp.tools.tools as tools_module
+        import spark_history_mcp.tools as tools_module
         from spark_history_mcp.tools import compare_app_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
@@ -609,7 +609,7 @@ def execute_stage_timeline_comparison(stage_id1, stage_id2, server, formatter, c
         app_id1, app_id2, _ = context
 
         # Import and execute stage timeline comparison
-        import spark_history_mcp.tools.tools as tools_module
+        import spark_history_mcp.tools as tools_module
         from spark_history_mcp.tools import compare_stage_executor_timeline
 
         client = get_spark_client(ctx.obj["config_path"], server)
@@ -637,7 +637,7 @@ def execute_env_comparison(app_id1, app_id2, server, formatter, ctx):
     try:
         click.echo("Comparing environment configurations...")
 
-        import spark_history_mcp.tools.tools as tools_module
+        import spark_history_mcp.tools as tools_module
         from spark_history_mcp.tools import compare_app_environments
 
         client = get_spark_client(ctx.obj["config_path"], server)
@@ -658,7 +658,7 @@ def execute_summary_comparison(app_id1, app_id2, server, formatter, ctx):
     try:
         click.echo("Comparing application summaries...")
 
-        import spark_history_mcp.tools.tools as tools_module
+        import spark_history_mcp.tools as tools_module
         from spark_history_mcp.tools import compare_app_summaries
 
         client = get_spark_client(ctx.obj["config_path"], server)
@@ -1090,7 +1090,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_stages
 
             with patch_tool_context(client, tools_module):
@@ -1168,7 +1168,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_executor_timeline
 
             with patch_tool_context(client, tools_module):
@@ -1238,7 +1238,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_stage_executor_timeline
 
             with patch_tool_context(client, tools_module):
@@ -1299,7 +1299,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_resources
 
             with patch_tool_context(client, tools_module):
@@ -1355,7 +1355,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_environments
 
             with patch_tool_context(client, tools_module):
@@ -1410,7 +1410,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_summaries
 
             with patch_tool_context(client, tools_module):
@@ -1479,7 +1479,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_executors
 
             with patch_tool_context(client, tools_module):
@@ -1539,7 +1539,7 @@ if CLI_AVAILABLE:
 
             client = get_spark_client(config_path, final_server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_jobs
 
             with patch_tool_context(client, tools_module):

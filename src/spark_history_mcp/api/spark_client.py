@@ -27,10 +27,12 @@ from spark_history_mcp.models.spark_types import (
     VersionInfo,
 )
 
+from .base_client import BaseApiClient
+
 T = TypeVar("T", bound=BaseModel)
 
 
-class SparkRestClient:
+class SparkRestClient(BaseApiClient):
     """
     Python client for the Spark REST API.
     """
@@ -42,23 +44,12 @@ class SparkRestClient:
         Args:
             server_config: Configuration object
         """
-        self.config = server_config
-        self.base_url = self.config.url.rstrip("/") + "/api/v1"
+        super().__init__(server_config)
+        self.base_url = self.config.url.rstrip("/") + "/api/v1" if self.config.url else ""
         self.auth = None
-        self.session = None
-        self.use_proxy = self.config.use_proxy
-        proxy_url = self.config.proxy_url
-        self.proxies = (
-            {"http": proxy_url, "https": proxy_url} if self.use_proxy else None
-        )
         self.pattern = re.compile(r"(.*?/applications/[^/]+/)(.+)")
 
-        # Determine whether to verify SSL certificates and timeout
-        # Default to True for verify_ssl and 30 seconds for timeout if not specified
-        self.verify_ssl = self.config.verify_ssl
-        self.timeout = self.config.timeout
-
-        # Set up authentication if provided
+        # Set up basic auth if provided
         if self.config.auth:
             if self.config.auth.username and self.config.auth.password:
                 self.auth = (self.config.auth.username, self.config.auth.password)
@@ -80,40 +71,9 @@ class SparkRestClient:
         Returns:
             The response from the API
         """
-        if headers is None:
-            headers = {"Accept": "application/json"}
-
-        # Add token to headers if provided
-        if self.config.auth and self.config.auth.token:
-            headers["Authorization"] = f"Bearer {self.config.auth.token}"
-
-        # Use the verify_ssl setting for HTTPS requests
-        verify = self.verify_ssl
-
-        # Use the session if available, otherwise use requests directly
-        if self.session:
-            # Add headers to the session
-            for key, value in headers.items():
-                self.session.headers[key] = value
-
-            response = self.session.get(
-                request_url,
-                params=params,
-                timeout=self.timeout,
-                verify=verify,
-                proxies=self.proxies,
-            )
-        else:
-            response = requests.get(
-                request_url,
-                params=params,
-                headers=headers,
-                auth=self.auth,
-                timeout=self.timeout,
-                verify=verify,
-                proxies=self.proxies,
-            )
-        return response
+        return super()._make_request(
+            "GET", request_url, params=params, headers=headers, auth=self.auth
+        )
 
     def _modify_url(self, url):
         match = self.pattern.search(url)
@@ -634,10 +594,7 @@ class SparkRestClient:
             self.base_url.replace("/api/v1", "/metrics/executors"), "prometheus"
         )
 
-        if self.session:
-            response = self.session.get(url, timeout=self.timeout, proxies=self.proxies)
-        else:
-            response = requests.get(url, timeout=self.timeout, proxies=self.proxies)
+        response = self.session.get(url, timeout=self.timeout)
 
         response.raise_for_status()
         return response.text

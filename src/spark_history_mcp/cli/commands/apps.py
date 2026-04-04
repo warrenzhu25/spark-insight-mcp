@@ -197,7 +197,7 @@ if CLI_AVAILABLE:
                 params["app_name"] = name_exact
                 params["search_type"] = "exact"
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_applications
 
             with patch_tool_context(client, tools_module):
@@ -295,7 +295,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_application
 
             with patch_tool_context(client, tools_module):
@@ -332,7 +332,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_jobs as mcp_list_jobs
 
             params = {"app_id": app_id, "server": server}
@@ -373,7 +373,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_stages as mcp_list_stages
 
             params = {"app_id": app_id, "server": server}
@@ -414,39 +414,10 @@ if CLI_AVAILABLE:
         config_path = ctx.obj["config_path"]
         formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
 
-        # Field labels for human-readable output
-        field_labels = {
-            # Remove redundant fields (already in title)
-            "application_id": None,  # Skip - in title
-            "application_name": None,  # Skip - in title
-            "analysis_timestamp": None,  # Skip - not needed in display
-            # Time metrics
-            "application_duration_minutes": "Duration (Min)",
-            "total_executor_runtime_minutes": "Executor Runtime (Min)",
-            "executor_cpu_time_minutes": "CPU Time (Min)",
-            "jvm_gc_time_minutes": "GC Time (Min)",
-            "executor_utilization_percent": "Executor Utilization (%)",
-            # Data processing metrics
-            "input_data_size_gb": "Input Data (GB)",
-            "output_data_size_gb": "Output Data (GB)",
-            "shuffle_read_size_gb": "Shuffle Read (GB)",
-            "shuffle_write_size_gb": "Shuffle Write (GB)",
-            "memory_spilled_gb": "Memory Spilled (GB)",
-            "disk_spilled_gb": "Disk Spilled (GB)",
-            # Performance metrics
-            "shuffle_read_wait_time_minutes": "Shuffle Read Wait (Min)",
-            "shuffle_write_time_minutes": "Shuffle Write Time (Min)",
-            "failed_tasks": "Failed Tasks",
-            # Stage metrics
-            "total_stages": "Total Stages",
-            "completed_stages": "Completed Stages",
-            "failed_stages": "Failed Stages",
-        }
-
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_app_summary, list_applications
 
             with patch_tool_context(client, tools_module):
@@ -476,18 +447,7 @@ if CLI_AVAILABLE:
                 app_name = summary_data.get("application_name", "Unknown Application")
                 title = f"Application Summary - {app_name} ({app_id})"
 
-                # Transform for human/table formats, keep original for JSON
-                if output_format != "json":
-                    display_data = {}
-                    for key, value in summary_data.items():
-                        readable_label = field_labels.get(key, key)
-                        if (
-                            readable_label is not None
-                        ):  # Skip None values (redundant fields)
-                            display_data[readable_label] = value
-                    formatter.output(display_data, title)
-                else:
-                    formatter.output(summary_data, title)
+                formatter.output(summary_data, title)
         except Exception as err:
             raise click.ClickException(
                 f"Error getting summary for application {app_identifier}: {err}"

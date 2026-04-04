@@ -271,9 +271,68 @@ def add_dict_to_tree(
         parent.add(str(data))
 
 
+def is_app_summary(data: Any) -> bool:
+    """Detect if dictionary is an application summary."""
+    if not isinstance(data, dict):
+        return False
+    # Look for unique keys in get_app_summary output
+    summary_keys = {
+        "application_duration_minutes",
+        "total_executor_runtime_minutes",
+        "executor_utilization_percent",
+    }
+    return summary_keys.issubset(data.keys())
+
+
+def format_app_summary(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+    """Format application performance summary."""
+    if not RICH_AVAILABLE:
+        return
+
+    # Field labels for human-readable output
+    field_labels = {
+        # Time metrics
+        "application_duration_minutes": "Duration (Min)",
+        "total_executor_runtime_minutes": "Executor Runtime (Min)",
+        "executor_cpu_time_minutes": "CPU Time (Min)",
+        "jvm_gc_time_minutes": "GC Time (Min)",
+        "executor_utilization_percent": "Executor Utilization (%)",
+        # Data processing metrics
+        "input_data_size_gb": "Input Data (GB)",
+        "output_data_size_gb": "Output Data (GB)",
+        "shuffle_read_size_gb": "Shuffle Read (GB)",
+        "shuffle_write_size_gb": "Shuffle Write (GB)",
+        "memory_spilled_gb": "Memory Spilled (GB)",
+        "disk_spilled_gb": "Disk Spilled (GB)",
+        # Performance metrics
+        "shuffle_read_wait_time_minutes": "Shuffle Read Wait (Min)",
+        "shuffle_write_time_minutes": "Shuffle Write Time (Min)",
+        "failed_tasks": "Failed Tasks",
+        # Stage metrics
+        "total_stages": "Total Stages",
+        "completed_stages": "Completed Stages",
+        "failed_stages": "Failed Stages",
+    }
+
+    display_data = {}
+    for key, label in field_labels.items():
+        if key in data:
+            val = data[key]
+            # Format numbers nicely
+            if isinstance(val, float):
+                display_data[label] = f"{val:.2f}"
+            else:
+                display_data[label] = str(val)
+
+    # Use the existing format_dict to show as key-values
+    for key, value in display_data.items():
+        console.print(f"[bold]{key}:[/bold] {value}")
+
+
 # Register basic types
 registry.register_type(list, format_list)
 registry.register_type(ApplicationInfo, format_application)
 registry.register_type(JobData, format_job)
 registry.register_type(StageData, format_stage)
+registry.register_pattern(is_app_summary, format_app_summary)
 registry.register_type(dict, format_dict)

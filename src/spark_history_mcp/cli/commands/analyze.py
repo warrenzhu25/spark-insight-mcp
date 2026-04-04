@@ -79,7 +79,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_application_insights
 
             with patch_tool_context(client, tools_module):
@@ -125,7 +125,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_job_bottlenecks
 
             with patch_tool_context(client, tools_module):
@@ -175,7 +175,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import analyze_auto_scaling
 
             with patch_tool_context(client, tools_module):
@@ -232,7 +232,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import analyze_shuffle_skew
 
             with patch_tool_context(client, tools_module):
@@ -292,7 +292,7 @@ if CLI_AVAILABLE:
 
             title = f"Slowest {analysis_type.title()} for {app_id}"
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
 
             with patch_tool_context(client, tools_module):
                 slowest_data = find_slowest(
@@ -363,7 +363,7 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            import spark_history_mcp.tools.tools as tools_module
+            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import compare_app_performance
 
             with patch_tool_context(client, tools_module):

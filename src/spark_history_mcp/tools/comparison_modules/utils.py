@@ -9,7 +9,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ...core.app import mcp
-from .. import analysis as analysis_tools
+from .. import common as common_tools
 
 
 def get_mcp_context() -> Optional[object]:
@@ -22,17 +22,15 @@ def get_mcp_context() -> Optional[object]:
 
 
 def resolve_client(server: Optional[str]) -> Any:
-    """Return a Spark client using the legacy analysis accessor.
+    """Return a Spark client.
 
-    The tests patch ``spark_history_mcp.tools.analysis.get_client_or_default`` to
-    inject mock clients, so we delegate through that module instead of importing
-    the helper directly. When no MCP request context is available we surface a
+    When no MCP request context is available we surface a
     clear error unless the patched helper returns a client (as in unit tests).
     """
     ctx = get_mcp_context()
     try:
-        return analysis_tools.get_client_or_default(ctx, server)
-    except AttributeError as exc:
+        return common_tools.get_client_or_default(ctx, server)
+    except Exception as exc:
         if ctx is None:
             raise ValueError(
                 "Spark MCP context is not available outside of a request."

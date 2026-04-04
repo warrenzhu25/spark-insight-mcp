@@ -23,7 +23,7 @@ from ..models.spark_types import (
     StageData,
     StageStatus,
 )
-from . import analysis as analysis_tools
+from . import common
 from .common import get_active_mcp_context, get_client, get_server_key
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ _CACHE: Dict[Tuple[Any, ...], Any] = {}
 def _resolve_client(server: Optional[str]):
     ctx = get_active_mcp_context()
     try:
-        client = analysis_tools.get_client_or_default(ctx, server)
+        client = common.get_client_or_default(ctx, server)
     except Exception as err:
         if ctx is None:
             raise ValueError(
