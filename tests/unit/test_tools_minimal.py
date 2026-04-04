@@ -93,11 +93,10 @@ def test_list_jobs_status_conversion(mock_get_context):
     assert len(kwargs["status"]) == 2
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_list_slowest_jobs_and_empty(mock_get_context):
-    from spark_history_mcp.tools.tools import list_slowest_jobs
+@patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
+def test_find_slowest_jobs_and_empty(mock_fetch_jobs):
+    from spark_history_mcp.tools.jobs_stages import _find_slowest_jobs
 
-    c = MagicMock()
     now = datetime.now()
     j1 = SimpleNamespace(
         status="SUCCEEDED",
@@ -109,26 +108,24 @@ def test_list_slowest_jobs_and_empty(mock_get_context):
         submission_time=now,
         completion_time=None,
     )
-    c.list_jobs.return_value = [j1, j2]
-    mock_get_context.return_value = make_ctx(c)
+    mock_fetch_jobs.return_value = [j1, j2]
 
     # exclude running by default → only j1 considered
-    slow = list_slowest_jobs(app_id="a", n=1)
+    slow = _find_slowest_jobs(app_id="a", n=1)
     assert slow == [j1]
 
     # No jobs case
-    c.list_jobs.return_value = []
-    assert list_slowest_jobs(app_id="a") == []
+    mock_fetch_jobs.return_value = []
+    assert _find_slowest_jobs(app_id="a") == []
 
 
 @patch("spark_history_mcp.tools.jobs_stages.get_config")
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_list_slowest_jobs_respects_include_running_default(
-    mock_get_context, mock_get_config
+@patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
+def test_find_slowest_jobs_respects_include_running_default(
+    mock_fetch_jobs, mock_get_config
 ):
-    from spark_history_mcp.tools.tools import list_slowest_jobs
+    from spark_history_mcp.tools.jobs_stages import _find_slowest_jobs
 
-    c = MagicMock()
     now = datetime.now()
     running_job = SimpleNamespace(
         status="RUNNING",
@@ -136,22 +133,20 @@ def test_list_slowest_jobs_respects_include_running_default(
         completion_time=None,
     )
 
-    c.list_jobs.return_value = [running_job]
-    mock_get_context.return_value = make_ctx(c)
+    mock_fetch_jobs.return_value = [running_job]
     mock_get_config.return_value = SimpleNamespace(include_running_defaults=True)
 
-    result = list_slowest_jobs(app_id="app", n=1)
+    result = _find_slowest_jobs(app_id="app", n=1)
     assert result == [running_job]
 
 
 @patch("spark_history_mcp.tools.jobs_stages.get_config")
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_list_slowest_stages_respects_include_running_default(
-    mock_get_context, mock_get_config
+@patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+def test_find_slowest_stages_respects_include_running_default(
+    mock_fetch_stages, mock_get_config
 ):
-    from spark_history_mcp.tools.tools import list_slowest_stages
+    from spark_history_mcp.tools.jobs_stages import _find_slowest_stages
 
-    c = MagicMock()
     now = datetime.now()
     running_stage = SimpleNamespace(
         status="RUNNING",
@@ -159,26 +154,30 @@ def test_list_slowest_stages_respects_include_running_default(
         first_task_launched_time=now,
     )
 
-    c.list_stages.return_value = [running_stage]
-    mock_get_context.return_value = make_ctx(c)
+    mock_fetch_stages.return_value = [running_stage]
     mock_get_config.return_value = SimpleNamespace(include_running_defaults=True)
 
-    result = list_slowest_stages(app_id="app", n=1)
+    result = _find_slowest_stages(app_id="app", n=1)
     assert result == [running_stage]
 
 
-@patch("spark_history_mcp.tools.tools.mcp.get_context")
-def test_list_stages_and_slowest_stages(mock_get_context):
-    from spark_history_mcp.tools.tools import list_slowest_stages, list_stages
+@patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+def test_list_stages_uses_fetch_stages(mock_fetch_stages):
+    from spark_history_mcp.tools.tools import list_stages
 
-    c = MagicMock()
-    mock_get_context.return_value = make_ctx(c)
+    mock_fetch_stages.return_value = []
     list_stages(app_id="a", status=["COMPLETE"], with_summaries=True)
-    # ensure enums converted and param names passed through
-    args, kwargs = c.list_stages.call_args
-    assert kwargs["with_summaries"] is True
+    # ensure fetch_stages was called with the correct parameters
+    mock_fetch_stages.assert_called_once_with(
+        app_id="a", server=None, status=["COMPLETE"], with_summaries=True
+    )
 
-    # Slowest stages
+
+@patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+def test_find_slowest_stages_filters_correctly(mock_fetch_stages):
+    from spark_history_mcp.tools.jobs_stages import _find_slowest_stages
+
+    # Slowest stages using internal helper
     now = datetime.now()
     s1 = SimpleNamespace(
         status="COMPLETE",
@@ -190,8 +189,8 @@ def test_list_stages_and_slowest_stages(mock_get_context):
         completion_time=None,
         first_task_launched_time=None,
     )
-    c.list_stages.return_value = [s1, s2]
-    slow = list_slowest_stages(app_id="a", n=1)
+    mock_fetch_stages.return_value = [s1, s2]
+    slow = _find_slowest_stages(app_id="a", n=1)
     assert slow == [s1]
 
 

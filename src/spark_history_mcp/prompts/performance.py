@@ -57,7 +57,7 @@ get_application_insights("{app_id}"{server_param})
 
 # Specific Bottleneck Investigation
 get_job_bottlenecks("{app_id}"{server_param})
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 
 # Resource and Data Analysis
 analyze_shuffle_skew("{app_id}"{server_param})
@@ -127,14 +127,14 @@ def investigate_stage_bottlenecks(
 
 ```
 # Stage Performance Analysis
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 {stage_call}
 
 # Task-Level Metrics
 {task_summary_call}
 
 # Resource and Data Analysis
-get_resource_usage_timeline("{app_id}"{server_param})
+get_timeline("{app_id}"{server_param})
 analyze_shuffle_skew("{app_id}"{server_param})
 
 # Executor Performance
@@ -213,7 +213,7 @@ list_executors("{app_id}"{server_param}, include_inactive=true)
 get_executor_summary("{app_id}"{server_param})
 
 # Resource Timeline and Utilization
-get_resource_usage_timeline("{app_id}"{server_param})
+get_timeline("{app_id}"{server_param})
 
 # Performance and Configuration Context
 get_job_bottlenecks("{app_id}"{server_param})

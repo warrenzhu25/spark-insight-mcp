@@ -67,7 +67,7 @@ analyze_auto_scaling("{app_id}"{server_param}, target_stage_duration_minutes={ta
 get_executor_summary("{app_id}"{server_param})
 
 # Resource Timeline Analysis
-get_resource_usage_timeline("{app_id}"{server_param})
+get_timeline("{app_id}"{server_param})
 
 # Configuration Review
 get_environment("{app_id}"{server_param})
@@ -197,7 +197,7 @@ get_application("{app_id}"{server_param})
 get_executor_summary("{app_id}"{server_param})
 
 # Resource Utilization Analysis
-get_resource_usage_timeline("{app_id}"{server_param})
+get_timeline("{app_id}"{server_param})
 
 # Performance Context
 get_job_bottlenecks("{app_id}"{server_param})
@@ -355,14 +355,14 @@ def improve_query_performance(
 
 ```
 # SQL Query Analysis
-list_slowest_sql_queries("{app_id}"{server_param}, top_n=5)
+find_slowest("{app_id}"{server_param}, top_n=5)
 
 # Application and Performance Context
 get_application("{app_id}"{server_param})
 get_job_bottlenecks("{app_id}"{server_param})
 
 # Stage and Task Performance
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 get_stage_task_summary("{app_id}", stage_id{server_param})
 
 # Data Processing Issues
@@ -521,7 +521,7 @@ def reduce_data_skew(
 analyze_shuffle_skew("{app_id}"{server_param})
 
 # Stage and Task Performance Context
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 get_stage_task_summary("{app_id}", stage_id{server_param})
 
 # Application Performance Context

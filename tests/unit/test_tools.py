@@ -23,12 +23,12 @@ from spark_history_mcp.tools import (
 from spark_history_mcp.tools.analysis import get_client_or_default
 from spark_history_mcp.tools.application import list_applications
 from spark_history_mcp.tools.jobs_stages import (
+    _find_slowest_jobs,
+    _find_slowest_sql,
+    _find_slowest_stages,
     get_stage,
     get_stage_task_summary,
     list_jobs,
-    list_slowest_jobs,
-    list_slowest_sql_queries,
-    list_slowest_stages,
     list_stages,
 )
 
@@ -46,17 +46,6 @@ try:
     from spark_history_mcp.tools import compare_stages
 except ImportError:
     compare_stages = None
-
-# Import timeline comparison functions from the refactored location
-try:
-    from spark_history_mcp.tools import compare_stage_executor_timeline
-except ImportError:
-    compare_stage_executor_timeline = None
-
-try:
-    from spark_history_mcp.tools import compare_app_executor_timeline
-except ImportError:
-    compare_app_executor_timeline = None
 
 
 class TestTools(unittest.TestCase):
@@ -126,27 +115,22 @@ class TestTools(unittest.TestCase):
 
         self.assertIn("No Spark client found", str(context.exception))
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_slowest_jobs_empty(self, mock_get_client):
-        """Test list_slowest_jobs when no jobs are found"""
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.list_jobs.return_value = []
-        mock_get_client.return_value = mock_client
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
+    def test_get_slowest_jobs_empty(self, mock_fetch_jobs):
+        """Test _find_slowest_jobs when no jobs are found"""
+        # Setup mock
+        mock_fetch_jobs.return_value = []
 
         # Call the function
-        result = list_slowest_jobs("app-123", n=3)
+        result = _find_slowest_jobs("app-123", n=3)
 
         # Verify results
         self.assertEqual(result, [])
-        mock_client.list_jobs.assert_called_once_with(app_id="app-123", status=None)
+        mock_fetch_jobs.assert_called_once_with(app_id="app-123", server=None)
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_slowest_jobs_exclude_running(self, mock_get_client):
-        """Test list_slowest_jobs excluding running jobs"""
-        # Setup mock client and jobs
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
+    def test_get_slowest_jobs_exclude_running(self, mock_fetch_jobs):
+        """Test _find_slowest_jobs excluding running jobs"""
         # Create mock jobs with different durations and statuses
         job1 = MagicMock(spec=JobData)
         job1.status = "RUNNING"
@@ -168,11 +152,10 @@ class TestTools(unittest.TestCase):
         job4.submission_time = datetime.now() - timedelta(minutes=8)
         job4.completion_time = datetime.now() - timedelta(minutes=7)  # 1 min duration
 
-        mock_client.list_jobs.return_value = [job1, job2, job3, job4]
-        mock_get_client.return_value = mock_client
+        mock_fetch_jobs.return_value = [job1, job2, job3, job4]
 
         # Call the function with include_running=False (default)
-        result = list_slowest_jobs("app-123", n=2)
+        result = _find_slowest_jobs("app-123", n=2)
 
         # Verify results - should return job3 and job2 (in that order)
         self.assertEqual(len(result), 2)
@@ -182,12 +165,9 @@ class TestTools(unittest.TestCase):
         # Running job (job1) should be excluded
         self.assertNotIn(job1, result)
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_slowest_jobs_include_running(self, mock_get_client):
-        """Test list_slowest_jobs including running jobs"""
-        # Setup mock client and jobs
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
+    def test_get_slowest_jobs_include_running(self, mock_fetch_jobs):
+        """Test _find_slowest_jobs including running jobs"""
         # Create mock jobs with different durations and statuses
         job1 = MagicMock(spec=JobData)
         job1.status = "RUNNING"
@@ -206,11 +186,10 @@ class TestTools(unittest.TestCase):
         job3.submission_time = datetime.now() - timedelta(minutes=10)
         job3.completion_time = datetime.now() - timedelta(minutes=5)  # 5 min duration
 
-        mock_client.list_jobs.return_value = [job1, job2, job3]
-        mock_get_client.return_value = mock_client
+        mock_fetch_jobs.return_value = [job1, job2, job3]
 
         # Call the function with include_running=True
-        result = list_slowest_jobs("app-123", include_running=True, n=2)
+        result = _find_slowest_jobs("app-123", include_running=True, n=2)
 
         # Verify results - should include the running job
         self.assertEqual(len(result), 2)
@@ -219,12 +198,9 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], job3)
         self.assertEqual(result[1], job2)
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_get_slowest_jobs_limit_results(self, mock_get_client):
-        """Test list_slowest_jobs limits results to n"""
-        # Setup mock client and jobs
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_jobs")
+    def test_get_slowest_jobs_limit_results(self, mock_fetch_jobs):
+        """Test _find_slowest_jobs limits results to n"""
         # Create 5 mock jobs with different durations
         jobs = []
         for i in range(5):
@@ -235,11 +211,10 @@ class TestTools(unittest.TestCase):
             job.completion_time = datetime.now() - timedelta(minutes=10 - i)
             jobs.append(job)
 
-        mock_client.list_jobs.return_value = jobs
-        mock_get_client.return_value = mock_client
+        mock_fetch_jobs.return_value = jobs
 
         # Call the function with n=3
-        result = list_slowest_jobs("app-123", n=3)
+        result = _find_slowest_jobs("app-123", n=3)
 
         # Verify results - should return only 3 jobs
         self.assertEqual(len(result), 3)
@@ -626,12 +601,10 @@ class TestTools(unittest.TestCase):
 
         self.assertIn("Stage not found", str(context.exception))
 
-    # Tests for list_slowest_stages tool
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_list_slowest_stages_execution_time_vs_total_time(self, mock_get_client):
-        """Test that list_slowest_stages prioritizes execution time over total stage duration"""
-        mock_client = MagicMock()
-
+    # Tests for _find_slowest_stages internal helper
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+    def test_list_slowest_stages_execution_time_vs_total_time(self, mock_fetch_stages):
+        """Test that _find_slowest_stages prioritizes execution time over total stage duration"""
         # Create Stage A: Longer total duration but shorter execution time
         stage_a = MagicMock(spec=StageData)
         stage_a.stage_id = 1
@@ -660,11 +633,10 @@ class TestTools(unittest.TestCase):
         stage_b.completion_time = datetime.now()
         # Execution time: 7 minutes (first_task_launched to completion)
 
-        mock_client.list_stages.return_value = [stage_a, stage_b]
-        mock_get_client.return_value = mock_client
+        mock_fetch_stages.return_value = [stage_a, stage_b]
 
         # Call the function
-        result = list_slowest_stages("app-123", n=2)
+        result = _find_slowest_stages("app-123", n=2)
 
         # Verify results - Stage B should be first (longer execution time: 7 min vs 5 min)
         # even though Stage A has longer total duration (10 min vs 8 min)
@@ -672,11 +644,9 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], stage_b)  # Stage B first (7 min execution)
         self.assertEqual(result[1], stage_a)  # Stage A second (5 min execution)
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_list_slowest_stages_exclude_running(self, mock_get_client):
-        """Test that list_slowest_stages excludes running stages by default"""
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+    def test_list_slowest_stages_exclude_running(self, mock_fetch_stages):
+        """Test that _find_slowest_stages excludes running stages by default"""
         # Create running stage with long execution time
         running_stage = MagicMock(spec=StageData)
         running_stage.stage_id = 1
@@ -697,22 +667,19 @@ class TestTools(unittest.TestCase):
         completed_stage.first_task_launched_time = datetime.now() - timedelta(minutes=4)
         completed_stage.completion_time = datetime.now()
 
-        mock_client.list_stages.return_value = [running_stage, completed_stage]
-        mock_get_client.return_value = mock_client
+        mock_fetch_stages.return_value = [running_stage, completed_stage]
 
         # Call the function with include_running=False (default)
-        result = list_slowest_stages("app-123", include_running=False, n=2)
+        result = _find_slowest_stages("app-123", include_running=False, n=2)
 
         # Should only return the completed stage
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], completed_stage)
         self.assertNotIn(running_stage, result)
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_list_slowest_stages_include_running(self, mock_get_client):
-        """Test that list_slowest_stages includes running stages when requested"""
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+    def test_list_slowest_stages_include_running(self, mock_fetch_stages):
+        """Test that _find_slowest_stages includes running stages when requested"""
         # Create running stage
         running_stage = MagicMock(spec=StageData)
         running_stage.stage_id = 1
@@ -733,11 +700,10 @@ class TestTools(unittest.TestCase):
         completed_stage.first_task_launched_time = datetime.now() - timedelta(minutes=4)
         completed_stage.completion_time = datetime.now()
 
-        mock_client.list_stages.return_value = [running_stage, completed_stage]
-        mock_get_client.return_value = mock_client
+        mock_fetch_stages.return_value = [running_stage, completed_stage]
 
         # Call the function with include_running=True
-        result = list_slowest_stages("app-123", include_running=True, n=2)
+        result = _find_slowest_stages("app-123", include_running=True, n=2)
 
         # Should include both stages, but running stage will have duration 0
         # so completed stage should be first
@@ -745,12 +711,9 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[0], completed_stage)  # Has actual duration
         self.assertEqual(result[1], running_stage)  # Duration 0
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_list_slowest_stages_missing_timestamps(self, mock_get_client):
-        """Test list_slowest_stages handles stages with missing timestamps"""
-        # Setup mock client
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+    def test_list_slowest_stages_missing_timestamps(self, mock_fetch_stages):
+        """Test _find_slowest_stages handles stages with missing timestamps"""
         # Create stage with missing first_task_launched_time
         stage_missing_launch = MagicMock(spec=StageData)
         stage_missing_launch.stage_id = 1
@@ -783,40 +746,33 @@ class TestTools(unittest.TestCase):
         valid_stage.first_task_launched_time = datetime.now() - timedelta(minutes=2)
         valid_stage.completion_time = datetime.now()
 
-        mock_client.list_stages.return_value = [
+        mock_fetch_stages.return_value = [
             stage_missing_launch,
             stage_missing_completion,
             valid_stage,
         ]
-        mock_get_client.return_value = mock_client
 
         # Call the function
-        result = list_slowest_stages("app-123", n=3)
+        result = _find_slowest_stages("app-123", n=3)
 
         # Should return valid stage first, others should have duration 0
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0], valid_stage)  # Only one with valid duration
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_list_slowest_stages_empty_result(self, mock_get_client):
-        """Test list_slowest_stages with no stages"""
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.list_stages.return_value = []
-        mock_get_client.return_value = mock_client
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+    def test_list_slowest_stages_empty_result(self, mock_fetch_stages):
+        """Test _find_slowest_stages with no stages"""
+        mock_fetch_stages.return_value = []
 
         # Call the function
-        result = list_slowest_stages("app-123", n=5)
+        result = _find_slowest_stages("app-123", n=5)
 
         # Should return empty list
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
-    def test_list_slowest_stages_limit_results(self, mock_get_client):
-        """Test list_slowest_stages limits results to n"""
-        # Setup mock client
-        mock_client = MagicMock()
-
+    @patch("spark_history_mcp.tools.jobs_stages.fetch_stages")
+    def test_list_slowest_stages_limit_results(self, mock_fetch_stages):
+        """Test _find_slowest_stages limits results to n"""
         # Create 5 stages with different execution times
         stages = []
         for i in range(5):
@@ -831,11 +787,10 @@ class TestTools(unittest.TestCase):
             stage.completion_time = datetime.now()
             stages.append(stage)
 
-        mock_client.list_stages.return_value = stages
-        mock_get_client.return_value = mock_client
+        mock_fetch_stages.return_value = stages
 
         # Call the function with n=3
-        result = list_slowest_stages("app-123", n=3)
+        result = _find_slowest_stages("app-123", n=3)
 
         # Should return only 3 stages (the ones with longest execution times)
         self.assertEqual(len(result), 3)
@@ -844,8 +799,8 @@ class TestTools(unittest.TestCase):
         self.assertEqual(result[1].stage_id, 3)  # 4 minutes
         self.assertEqual(result[2].stage_id, 2)  # 3 minutes
 
-    # Tests for list_slowest_sql_queries tool
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
+    # Tests for _find_slowest_sql internal helper
+    @patch("spark_history_mcp.tools.jobs_stages.get_client_or_default")
     def test_get_slowest_sql_queries_success(self, mock_get_client):
         """Test successful SQL query retrieval and sorting"""
         # Setup mock client
@@ -889,14 +844,14 @@ class TestTools(unittest.TestCase):
         mock_get_client.return_value = mock_client
 
         # Call the function
-        result = list_slowest_sql_queries("spark-app-123", top_n=2)
+        result = _find_slowest_sql("spark-app-123", n=2)
 
         # Verify results are sorted by duration (descending)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].duration, 10000)  # Slowest first
         self.assertEqual(result[1].duration, 5000)  # Second slowest
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
+    @patch("spark_history_mcp.tools.jobs_stages.get_client_or_default")
     def test_get_slowest_sql_queries_exclude_running(self, mock_get_client):
         """Test SQL query retrieval excluding running queries"""
         # Setup mock client
@@ -929,13 +884,13 @@ class TestTools(unittest.TestCase):
         mock_get_client.return_value = mock_client
 
         # Call the function (include_running=False by default)
-        result = list_slowest_sql_queries("spark-app-123")
+        result = _find_slowest_sql("spark-app-123")
 
         # Should exclude running query
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].status, "COMPLETED")
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
+    @patch("spark_history_mcp.tools.jobs_stages.get_client_or_default")
     def test_get_slowest_sql_queries_include_running(self, mock_get_client):
         """Test SQL query retrieval including running queries"""
         # Setup mock client
@@ -967,15 +922,13 @@ class TestTools(unittest.TestCase):
         mock_client.get_sql_list.return_value = [sql1, sql2]
         mock_get_client.return_value = mock_client
 
-        # Call the function with include_running=True and top_n=2
-        result = list_slowest_sql_queries(
-            "spark-app-123", include_running=True, top_n=2
-        )
+        # Call the function with include_running=True and n=2
+        result = _find_slowest_sql("spark-app-123", include_running=True, n=2)
 
         # Should include both queries
         self.assertEqual(len(result), 2)
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
+    @patch("spark_history_mcp.tools.jobs_stages.get_client_or_default")
     def test_get_slowest_sql_queries_empty_result(self, mock_get_client):
         """Test SQL query retrieval with empty result"""
         # Setup mock client
@@ -984,12 +937,12 @@ class TestTools(unittest.TestCase):
         mock_get_client.return_value = mock_client
 
         # Call the function
-        result = list_slowest_sql_queries("spark-app-123")
+        result = _find_slowest_sql("spark-app-123")
 
         # Verify results
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.analysis.get_client_or_default")
+    @patch("spark_history_mcp.tools.jobs_stages.get_client_or_default")
     def test_get_slowest_sql_queries_limit(self, mock_get_client):
         """Test SQL query retrieval with limit"""
         # Setup mock client
@@ -1013,8 +966,8 @@ class TestTools(unittest.TestCase):
         mock_client.get_sql_list.return_value = sql_execs
         mock_get_client.return_value = mock_client
 
-        # Call the function with top_n=3
-        result = list_slowest_sql_queries("spark-app-123", top_n=3)
+        # Call the function with n=3
+        result = _find_slowest_sql("spark-app-123", n=3)
 
         # Verify results - should return only 3 queries
         self.assertEqual(len(result), 3)

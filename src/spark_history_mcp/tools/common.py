@@ -96,13 +96,17 @@ class ToolConfig(BaseSettings):
         default=50, description="Max items to include in compact list outputs"
     )
     compact_property_sample_limit: int = Field(
-        default=25, description="Max property entries to sample in compact outputs"
+        default=15, description="Max property entries to sample in compact outputs"
     )
     compact_recommendations_limit: int = Field(
-        default=5, description="Max recommendations to include in compact outputs"
+        default=3, description="Max recommendations to include in compact outputs"
     )
     compact_timeline_limit: int = Field(
-        default=100, description="Max timeline entries to include in compact outputs"
+        default=50, description="Max timeline entries to include in compact outputs"
+    )
+    strip_nested_duplicates: bool = Field(
+        default=True,
+        description="Remove redundant keys in nested comparison structures",
     )
 
     # Thresholds used in recommendations

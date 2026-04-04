@@ -203,36 +203,14 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
     return summary
 
 
-@mcp.tool()
-def get_resource_usage_timeline(
-    app_id: str, server: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Get resource usage timeline for a Spark application.
-
-    Provides a chronological view of resource allocation and usage patterns
-    including executor additions/removals and stage execution overlap.
-
-    Args:
-        app_id: The Spark application ID
-        server: Optional server name to use (uses default if not specified)
-
-    Returns:
-        Dictionary containing timeline of resource usage
-    """
-    # Get application info
+def _get_events_timeline(app_id: str, server: Optional[str] = None) -> Dict[str, Any]:
+    """Internal helper: Get event-based resource usage timeline."""
     app = fetch_app(app_id=app_id, server=server)
-
-    # Get all executors
     executors = fetch_executors(app_id=app_id, server=server)
-
-    # Get stages
     stages = fetch_stages(app_id=app_id, server=server)
 
-    # Create timeline events
     timeline_events = []
 
-    # Add executor events
     for executor in executors:
         if executor.add_time:
             timeline_events.append(
@@ -257,7 +235,6 @@ def get_resource_usage_timeline(
                 }
             )
 
-    # Add stage events
     for stage in stages:
         if stage.submission_time:
             timeline_events.append(
@@ -287,14 +264,11 @@ def get_resource_usage_timeline(
                 }
             )
 
-    # Sort events by timestamp
     timeline_events.sort(key=lambda x: x["timestamp"])
 
-    # Calculate resource utilization over time
     active_executors = 0
     total_cores = 0
     total_memory = 0
-
     resource_timeline = []
 
     for event in timeline_events:
@@ -304,7 +278,6 @@ def get_resource_usage_timeline(
             total_memory += event["memory_mb"]
         elif event["type"] == "executor_remove":
             active_executors -= 1
-            # Note: We don't have cores/memory info in remove events
 
         resource_timeline.append(
             {
@@ -341,40 +314,17 @@ def get_resource_usage_timeline(
     )
 
 
-@mcp.tool()
-def get_app_executor_timeline(
+def _get_intervals_timeline(
     app_id: str,
     server: Optional[str] = None,
     interval_minutes: int = DEFAULT_INTERVAL_MINUTES,
     max_intervals: int = MAX_INTERVALS,
 ) -> Dict[str, Any]:
-    """
-    Get interval-based executor timeline for a Spark application.
-
-    Provides a timeline of active executor counts at regular intervals throughout
-    the application lifecycle. This is useful for analyzing resource allocation
-    patterns and comparing applications.
-
-    Args:
-        app_id: The Spark application ID
-        server: Optional server name to use (uses default if not specified)
-        interval_minutes: Time interval in minutes for timeline sampling (default: 1)
-        max_intervals: Maximum number of intervals to return (default: 10000)
-
-    Returns:
-        Dictionary containing app info, simplified timeline with active executor counts,
-        and summary statistics
-    """
-    # Get application info
+    """Internal helper: Get interval-based executor timeline."""
     app = fetch_app(app_id=app_id, server=server)
-
-    # Get all executors
     executors = fetch_executors(app_id=app_id, server=server)
-
-    # Get stages
     stages = fetch_stages(app_id=app_id, server=server)
 
-    # Build full timeline using helper
     result = build_app_executor_timeline(
         app=app,
         executors=executors,
@@ -389,7 +339,6 @@ def get_app_executor_timeline(
             "application_id": app_id,
         }
 
-    # Simplify timeline to only include active executor count
     simplified_timeline = [
         {
             "interval_start": entry["interval_start"],
@@ -406,3 +355,43 @@ def get_app_executor_timeline(
             "summary": result["summary"],
         }
     )
+
+
+@mcp.tool()
+def get_timeline(
+    app_id: str,
+    mode: str = "intervals",
+    server: Optional[str] = None,
+    interval_minutes: int = DEFAULT_INTERVAL_MINUTES,
+    max_intervals: int = MAX_INTERVALS,
+) -> Dict[str, Any]:
+    """
+    Get resource usage timeline for a Spark application.
+
+    A unified tool that provides timeline data in two modes:
+    - "intervals": Regular interval-based timeline of executor counts (for comparisons)
+    - "events": Chronological event-based timeline (executor add/remove, stage start/end)
+
+    Args:
+        app_id: The Spark application ID
+        mode: Timeline mode - "intervals" or "events" (default: "intervals")
+        server: Optional server name to use (uses default if not specified)
+        interval_minutes: Time interval in minutes for interval mode (default: 1)
+        max_intervals: Maximum number of intervals for interval mode (default: 10000)
+
+    Returns:
+        Dictionary containing timeline data based on the selected mode
+    """
+    timeline_mode = mode.lower()
+
+    if timeline_mode == "intervals":
+        return _get_intervals_timeline(
+            app_id=app_id,
+            server=server,
+            interval_minutes=interval_minutes,
+            max_intervals=max_intervals,
+        )
+    elif timeline_mode == "events":
+        return _get_events_timeline(app_id=app_id, server=server)
+    else:
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: intervals, events")

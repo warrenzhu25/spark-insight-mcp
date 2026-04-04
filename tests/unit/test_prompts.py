@@ -57,7 +57,7 @@ class TestPerformancePrompts(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertIn("app-789", result)
         self.assertIn("stage-level performance", result.lower())
-        self.assertIn("list_slowest_stages", result)
+        self.assertIn("find_slowest", result)
 
     def test_investigate_stage_bottlenecks_with_stage_id(self):
         """Test stage bottleneck investigation with specific stage"""

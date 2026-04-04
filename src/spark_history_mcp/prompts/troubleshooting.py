@@ -72,7 +72,7 @@ get_executor_summary("{app_id}"{server_param})
 
 # Performance Context
 get_job_bottlenecks("{app_id}"{server_param})
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 
 # Configuration Review
 get_environment("{app_id}"{server_param})
@@ -179,7 +179,7 @@ get_executor_summary("{app_id}"{server_param})
 
 # Performance and Bottleneck Context
 get_job_bottlenecks("{app_id}"{server_param})
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 
 # Stage-Level Memory Analysis
 # (Focus on stages with high memory usage or spill)
@@ -290,7 +290,7 @@ list_stages("{app_id}"{server_param})
 analyze_shuffle_skew("{app_id}"{server_param})
 
 # Stage Performance Deep Dive
-list_slowest_stages("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 # For stages with significant shuffle, get detailed task summaries
 get_stage_task_summary("{app_id}", stage_id{server_param})
 

@@ -133,10 +133,10 @@ class TestAnalyzeShuffleSkew:
 
 class TestAnalyzeSlowest:
     @patch("spark_history_mcp.cli.commands.analyze.get_spark_client")
-    @patch("spark_history_mcp.tools.list_slowest_jobs")
-    def test_slowest_jobs(self, mock_list_jobs, mock_get_client, cli_runner):
+    @patch("spark_history_mcp.tools.find_slowest")
+    def test_slowest_jobs(self, mock_find_slowest, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
-        mock_list_jobs.return_value = []
+        mock_find_slowest.return_value = []
 
         result = cli_runner.invoke(
             analyze,
@@ -144,15 +144,15 @@ class TestAnalyzeSlowest:
             obj={"config_path": CONFIG_PATH},
         )
         assert result.exit_code == 0
-        mock_list_jobs.assert_called_once_with(
-            app_id="app-1", server=None, n=2, compact=False
+        mock_find_slowest.assert_called_once_with(
+            app_id="app-1", type="jobs", server=None, n=2, compact=False
         )
 
     @patch("spark_history_mcp.cli.commands.analyze.get_spark_client")
-    @patch("spark_history_mcp.tools.list_slowest_stages")
-    def test_slowest_stages(self, mock_list_stages, mock_get_client, cli_runner):
+    @patch("spark_history_mcp.tools.find_slowest")
+    def test_slowest_stages(self, mock_find_slowest, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
-        mock_list_stages.return_value = []
+        mock_find_slowest.return_value = []
 
         result = cli_runner.invoke(
             analyze,
@@ -169,15 +169,15 @@ class TestAnalyzeSlowest:
             obj={"config_path": CONFIG_PATH},
         )
         assert result.exit_code == 0
-        mock_list_stages.assert_called_once_with(
-            app_id="app-1", server=None, n=4, compact=False
+        mock_find_slowest.assert_called_once_with(
+            app_id="app-1", type="stages", server=None, n=4, compact=False
         )
 
     @patch("spark_history_mcp.cli.commands.analyze.get_spark_client")
-    @patch("spark_history_mcp.tools.list_slowest_sql_queries")
-    def test_slowest_sql(self, mock_list_sql, mock_get_client, cli_runner):
+    @patch("spark_history_mcp.tools.find_slowest")
+    def test_slowest_sql(self, mock_find_slowest, mock_get_client, cli_runner):
         mock_get_client.return_value = MagicMock()
-        mock_list_sql.return_value = []
+        mock_find_slowest.return_value = []
 
         result = cli_runner.invoke(
             analyze,
@@ -185,7 +185,9 @@ class TestAnalyzeSlowest:
             obj={"config_path": CONFIG_PATH},
         )
         assert result.exit_code == 0
-        mock_list_sql.assert_called_once_with(app_id="app-1", server=None, top_n=5)
+        mock_find_slowest.assert_called_once_with(
+            app_id="app-1", type="sql", server=None, n=5, compact=False
+        )
 
 
 class TestAnalyzeCompareDeprecated:

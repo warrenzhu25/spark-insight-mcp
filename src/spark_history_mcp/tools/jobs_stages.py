@@ -76,37 +76,20 @@ def list_jobs(
     return compact_output(jobs, compact)
 
 
-@mcp.tool()
-def list_slowest_jobs(
+def _find_slowest_jobs(
     app_id: str,
     server: Optional[str] = None,
     include_running: bool = False,
     n: int = 5,
     compact: Optional[bool] = None,
 ) -> Any:
-    """
-    Get the N slowest jobs for a Spark application.
-
-    Retrieves all jobs for the application and returns the ones with the longest duration.
-
-    Args:
-        app_id: The Spark application ID
-        server: Optional server name to use (uses default if not specified)
-        include_running: Whether to include running jobs in the search
-        n: Number of slowest jobs to return (default: 5)
-        compact: Whether to return a compact summary (default: True)
-
-    Returns:
-        List of JobData objects for the slowest jobs (or compact summary list)
-    """
+    """Internal helper: Get the N slowest jobs for a Spark application."""
     cfg = get_config()
-    # Get all jobs
     jobs = fetch_jobs(app_id=app_id, server=server)
 
     if not jobs:
         return []
 
-    # Filter out running jobs if not included
     if not include_running and not cfg.include_running_defaults:
         jobs = [job for job in jobs if job.status != JobExecutionStatus.RUNNING.value]
 
@@ -153,33 +136,17 @@ def list_stages(
     return compact_output(stages, compact)
 
 
-@mcp.tool()
-def list_slowest_stages(
+def _find_slowest_stages(
     app_id: str,
     server: Optional[str] = None,
     include_running: bool = False,
     n: int = 5,
     compact: Optional[bool] = None,
 ) -> Any:
-    """
-    Get the N slowest stages for a Spark application.
-
-    Retrieves all stages for the application and returns the ones with the longest duration.
-
-    Args:
-        app_id: The Spark application ID
-        server: Optional server name to use (uses default if not specified)
-        include_running: Whether to include running stages in the search
-        n: Number of slowest stages to return (default: 5)
-        compact: Whether to return a compact summary (default: True)
-
-    Returns:
-        List of StageData objects for the slowest stages (or compact summary list)
-    """
+    """Internal helper: Get the N slowest stages for a Spark application."""
     cfg = get_config()
     stages = fetch_stages(app_id=app_id, server=server)
 
-    # Filter out running stages if not included. This avoids using the `details` param which can significantly slow down the execution time
     if not include_running and not cfg.include_running_defaults:
         stages = [stage for stage in stages if stage.status != "RUNNING"]
 
@@ -292,40 +259,23 @@ def get_stage_task_summary(
     )
 
 
-@mcp.tool()
-def list_slowest_sql_queries(
+def _find_slowest_sql(
     app_id: str,
     server: Optional[str] = None,
     attempt_id: Optional[str] = None,
-    top_n: int = 1,
+    n: int = 5,
     page_size: int = 100,
     include_running: bool = False,
     include_plan_description: bool = True,
     plan_description_max_length: int = 2000,
 ) -> List[SqlQuerySummary]:
-    """
-    Get the N slowest SQL queries for a Spark application.
-
-    Args:
-        app_id: The Spark application ID
-        server: Optional server name to use (uses default if not specified)
-        attempt_id: Optional attempt ID
-        top_n: Number of slowest queries to return (default: 1)
-        page_size: Number of executions to fetch per page (default: 100)
-        include_running: Whether to include running queries (default: False)
-        include_plan_description: Whether to include execution plans (default: True)
-        plan_description_max_length: Max characters for plan description (default: 1500)
-
-    Returns:
-        List of SqlQuerySummary objects for the slowest queries
-    """
+    """Internal helper: Get the N slowest SQL queries for a Spark application."""
     ctx = mcp.get_context()
     client = get_client_or_default(ctx, server)
 
     all_executions: List[ExecutionData] = []
     offset = 0
 
-    # Fetch all pages of SQL executions
     while True:
         executions: List[ExecutionData] = client.get_sql_list(
             app_id=app_id,
@@ -342,20 +292,16 @@ def list_slowest_sql_queries(
         all_executions.extend(executions)
         offset += page_size
 
-        # If we got fewer executions than the page size, we've reached the end
         if len(executions) < page_size:
             break
 
-    # Filter out running queries if not included
     if not include_running:
         all_executions = [
             e for e in all_executions if e.status != SQLExecutionStatus.RUNNING.value
         ]
 
-    # Get the top N slowest executions
-    slowest_executions = heapq.nlargest(top_n, all_executions, key=lambda e: e.duration)
+    slowest_executions = heapq.nlargest(n, all_executions, key=lambda e: e.duration)
 
-    # Create simplified results without additional API calls. Raw object is too verbose.
     simplified_results = []
     for execution in slowest_executions:
         job_summary = JobSummary(
@@ -364,7 +310,6 @@ def list_slowest_sql_queries(
             running_job_ids=execution.running_job_ids,
         )
 
-        # Handle plan description based on include_plan_description flag
         plan_description = ""
         if include_plan_description and execution.plan_description:
             plan_description = truncate_plan_description(
@@ -386,3 +331,57 @@ def list_slowest_sql_queries(
         simplified_results.append(query_summary)
 
     return simplified_results
+
+
+@mcp.tool()
+def find_slowest(
+    app_id: str,
+    type: str = "stages",  # noqa: A002
+    server: Optional[str] = None,
+    n: int = 5,
+    include_running: bool = False,
+    compact: Optional[bool] = None,
+) -> Any:
+    """
+    Find the N slowest jobs, stages, or SQL queries for a Spark application.
+
+    A unified tool that consolidates slowest-N queries across different entity types.
+
+    Args:
+        app_id: The Spark application ID
+        type: Type of entity to find - "jobs", "stages", or "sql" (default: "stages")
+        server: Optional server name to use (uses default if not specified)
+        n: Number of slowest items to return (default: 5)
+        include_running: Whether to include running items in the search (default: False)
+        compact: Whether to return a compact summary (default: True)
+
+    Returns:
+        List of the slowest items (jobs, stages, or SQL queries) based on type
+    """
+    entity_type = type.lower()
+
+    if entity_type == "jobs":
+        return _find_slowest_jobs(
+            app_id=app_id,
+            server=server,
+            include_running=include_running,
+            n=n,
+            compact=compact,
+        )
+    elif entity_type == "stages":
+        return _find_slowest_stages(
+            app_id=app_id,
+            server=server,
+            include_running=include_running,
+            n=n,
+            compact=compact,
+        )
+    elif entity_type == "sql":
+        return _find_slowest_sql(
+            app_id=app_id,
+            server=server,
+            n=n,
+            include_running=include_running,
+        )
+    else:
+        raise ValueError(f"Invalid type '{type}'. Must be one of: jobs, stages, sql")

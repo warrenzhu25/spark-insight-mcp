@@ -15,8 +15,8 @@ class CompareAppPerformanceOutput(BaseModel):
     performance_comparison: Dict[str, Any]
     environment_comparison: Dict[str, Any]
     key_recommendations: List[Dict[str, Any]]
-    # These fields are omitted in compact mode
-    stage_deep_dive: Optional[Dict[str, Any]] = None
+    aggregated_overview: Optional[Dict[str, Any]] = None
+    # recommendations is omitted in compact mode
     recommendations: Optional[List[Dict[str, Any]]] = None
 
 

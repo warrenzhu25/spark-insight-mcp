@@ -84,12 +84,12 @@ get_application("{app_id}"{server_param})
 
 # Performance Bottleneck Analysis
 get_job_bottlenecks("{app_id}"{server_param})
-list_slowest_stages("{app_id}"{server_param})
-list_slowest_jobs("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
+find_slowest("{app_id}"{server_param})
 
 # Resource and Efficiency Analysis
 get_executor_summary("{app_id}"{server_param})
-get_resource_usage_timeline("{app_id}"{server_param})
+get_timeline("{app_id}"{server_param})
 
 # Specific Issue Analysis
 analyze_shuffle_skew("{app_id}"{server_param})
@@ -100,7 +100,7 @@ analyze_auto_scaling("{app_id}"{server_param})
 get_environment("{app_id}"{server_param})
 
 # SQL Performance (if applicable)
-list_slowest_sql_queries("{app_id}"{server_param}, top_n=3)
+find_slowest("{app_id}"{server_param}, top_n=3)
 ```
 
 **Report Content Guidelines:**

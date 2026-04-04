@@ -314,36 +314,20 @@ if CLI_AVAILABLE:
         try:
             client = get_spark_client(config_path, server)
 
-            if analysis_type == "jobs":
-                from spark_history_mcp.tools import (
-                    list_slowest_jobs as analysis_func,
-                )
+            from spark_history_mcp.tools import find_slowest
 
-                title = f"Slowest Jobs for {app_id}"
-            elif analysis_type == "stages":
-                from spark_history_mcp.tools import (
-                    list_slowest_stages as analysis_func,
-                )
-
-                title = f"Slowest Stages for {app_id}"
-            elif analysis_type == "sql":
-                from spark_history_mcp.tools import (
-                    list_slowest_sql_queries as analysis_func,
-                )
-
-                title = f"Slowest SQL Queries for {app_id}"
+            title = f"Slowest {analysis_type.title()} for {app_id}"
 
             import spark_history_mcp.tools.tools as tools_module
 
             with patch_tool_context(client, tools_module):
-                if analysis_type in ["jobs", "stages"]:
-                    slowest_data = analysis_func(
-                        app_id=app_id, server=server, n=top_n, compact=False
-                    )
-                else:  # sql
-                    slowest_data = analysis_func(
-                        app_id=app_id, server=server, top_n=top_n
-                    )
+                slowest_data = find_slowest(
+                    app_id=app_id,
+                    type=analysis_type,
+                    server=server,
+                    n=top_n,
+                    compact=False,
+                )
                 formatter.output(slowest_data, title)
         except Exception as err:
             raise click.ClickException(

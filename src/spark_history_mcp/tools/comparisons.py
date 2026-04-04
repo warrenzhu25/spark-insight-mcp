@@ -345,8 +345,7 @@ def compare_app_performance(
             compact_recommendation(r) for r in filtered_recommendations
         ]
     else:
-        # Full: include both duplicate structures for backward compat
-        result["stage_deep_dive"] = stage_analysis
+        # Full: include recommendations (stage_deep_dive removed - duplicates stages)
         result["recommendations"] = sorted_recommendations
         result["key_recommendations"] = filtered_recommendations
 
@@ -358,7 +357,6 @@ def compare_app_performance(
     return sort_comparison_data(result, sort_key="mixed")
 
 
-@mcp.tool()
 def compare_app_summaries(
     app_id1: str,
     app_id2: str,
@@ -483,7 +481,6 @@ def compare_app_summaries(
     return sort_comparison_data(result, sort_key="change")
 
 
-@mcp.tool()
 def find_top_stage_differences(
     app_id1: str,
     app_id2: str,
@@ -1225,7 +1222,6 @@ def compare_stages(
     return result
 
 
-@mcp.tool()
 def compare_app_executor_timeline(
     app_id1: str, app_id2: str, server: Optional[str] = None, interval_minutes: int = 1
 ) -> Dict[str, Any]:
@@ -1620,7 +1616,6 @@ def compare_app_executor_timeline(
         }
 
 
-@mcp.tool()
 def compare_stage_executor_timeline(
     app_id1: str,
     app_id2: str,
@@ -1852,7 +1847,6 @@ def compare_stage_executor_timeline(
         }
 
 
-@mcp.tool()
 def compare_app_resources(
     app_id1: str, app_id2: str, server: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -1961,7 +1955,6 @@ def compare_app_resources(
         }
 
 
-@mcp.tool()
 def compare_app_executors(
     app_id1: str,
     app_id2: str,
@@ -2196,7 +2189,6 @@ def compare_app_executors(
         }
 
 
-@mcp.tool()
 def compare_app_jobs(
     app_id1: str, app_id2: str, server: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -2339,7 +2331,6 @@ def compare_app_jobs(
         }
 
 
-@mcp.tool()
 def compare_app_stages_aggregated(
     app_id1: str,
     app_id2: str,

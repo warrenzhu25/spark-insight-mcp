@@ -15,7 +15,7 @@ from ..core.app import mcp
 from .common import get_client_or_default  # noqa: F401 – re-exported for tests
 from .executors import get_executor_summary
 from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
-from .jobs_stages import list_slowest_jobs, list_slowest_stages
+from .jobs_stages import _find_slowest_jobs, _find_slowest_stages
 
 
 @mcp.tool()
@@ -37,10 +37,10 @@ def get_job_bottlenecks(
         Dictionary containing identified bottlenecks and recommendations
     """
     # Get slowest stages
-    slowest_stages = list_slowest_stages(app_id, server, False, top_n, compact=False)
+    slowest_stages = _find_slowest_stages(app_id, server, False, top_n, compact=False)
 
     # Get slowest jobs
-    slowest_jobs = list_slowest_jobs(app_id, server, False, top_n, compact=False)
+    slowest_jobs = _find_slowest_jobs(app_id, server, False, top_n, compact=False)
 
     # Get executor summary
     exec_summary = get_executor_summary(app_id, server)
