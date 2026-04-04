@@ -1,4 +1,9 @@
-from spark_history_mcp.cli import formatters as formatters_module
+from spark_history_mcp.cli.formatter_modules import comparison as comparison_module
+from spark_history_mcp.cli.formatter_modules.comparison import (
+    format_environment_comparison_result,
+    format_performance_metrics,
+    format_top_metrics_differences,
+)
 from spark_history_mcp.cli.formatter_modules import OutputFormatter
 
 
@@ -6,8 +11,9 @@ class DummyConsole:
     def __init__(self) -> None:
         self.printed = []
 
-    def print(self, obj) -> None:
-        self.printed.append(obj)
+    def print(self, obj=None) -> None:
+        if obj is not None:
+            self.printed.append(obj)
 
 
 def _build_overview():
@@ -42,10 +48,10 @@ def _get_metric_cells(table):
 
 def test_performance_metrics_default_shows_key_metrics_only(monkeypatch):
     dummy_console = DummyConsole()
-    monkeypatch.setattr(formatters_module, "console", dummy_console)
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
 
     formatter = OutputFormatter(show_all_metrics=False)
-    formatter._format_performance_metrics(_build_overview())
+    format_performance_metrics(formatter, _build_overview())
 
     assert dummy_console.printed
     table = dummy_console.printed[-1]
@@ -57,10 +63,10 @@ def test_performance_metrics_default_shows_key_metrics_only(monkeypatch):
 
 def test_performance_metrics_show_all_includes_extra_metrics(monkeypatch):
     dummy_console = DummyConsole()
-    monkeypatch.setattr(formatters_module, "console", dummy_console)
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
 
     formatter = OutputFormatter(show_all_metrics=True)
-    formatter._format_performance_metrics(_build_overview())
+    format_performance_metrics(formatter, _build_overview())
 
     assert dummy_console.printed
     table = dummy_console.printed[-1]
@@ -74,10 +80,11 @@ def test_performance_metrics_show_all_includes_extra_metrics(monkeypatch):
 
 def test_top_metric_differences_table(monkeypatch):
     dummy_console = DummyConsole()
-    monkeypatch.setattr(formatters_module, "console", dummy_console)
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
 
     formatter = OutputFormatter()
-    formatter._format_top_metrics_differences(
+    format_top_metrics_differences(
+        formatter,
         [
             {
                 "metric": "duration_ms",
@@ -91,7 +98,7 @@ def test_top_metric_differences_table(monkeypatch):
                 "right": 2048,
                 "percent_change": 100.0,
             },
-        ]
+        ],
     )
 
     table = dummy_console.printed[-1]
@@ -102,10 +109,11 @@ def test_top_metric_differences_table(monkeypatch):
 
 def test_environment_comparison_table(monkeypatch):
     dummy_console = DummyConsole()
-    monkeypatch.setattr(formatters_module, "console", dummy_console)
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
 
     formatter = OutputFormatter()
-    formatter._format_environment_comparison(
+    format_environment_comparison_result(
+        formatter,
         {
             "spark_properties": {
                 "different": {"spark.executor.memory": {"app1": "2g", "app2": "4g"}},
@@ -115,8 +123,8 @@ def test_environment_comparison_table(monkeypatch):
             },
             "runtime_environment": {"differences": []},
             "system_properties": {"key_differences": {}},
-        }
+        },
     )
 
     table = dummy_console.printed[0]
-    assert "Environment Differences" in str(table.title)
+    assert "Spark Properties Differences" in str(table.title)

@@ -199,21 +199,3 @@ class OutputFormatter(FormatterUtilsMixin):
                 self._write_line(f"{k}: {v}")
         else:
             self._write_line(str(data))
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate missing methods to monolithic formatter for backward compatibility."""
-        if name.startswith("_format_"):
-            from ..formatters import OutputFormatter as MonolithicFormatter
-
-            def proxy_method(*args, **kwargs):
-                proxy = MonolithicFormatter(
-                    self.format_type, self.quiet, self.show_all_metrics
-                )
-                proxy.last_app_mapping = self.last_app_mapping
-                method = getattr(proxy, name)
-                result = method(*args, **kwargs)
-                self.last_app_mapping = proxy.last_app_mapping
-                return result
-
-            return proxy_method
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
