@@ -103,6 +103,12 @@ uv run spark-mcp --cli apps executors app-20240315-123456 --include-inactive
 uv run spark-mcp --cli apps executor-summary app-20240315-123456
 ```
 
+### Application Performance Summary
+```bash
+# Get high-level performance summary
+uv run spark-mcp --cli apps summary app-20240315-123456
+```
+
 ## 🔢 Numbered App References
 
 After running `apps list`, you can use **numbers** instead of full app IDs in subsequent commands. This makes workflows much faster and easier.
@@ -292,6 +298,23 @@ Top-level:
 
 `cache` subcommands:
 - `cache clear`
+
+## 🧹 Cleanup (`cleanup`)
+
+### Delete Event Logs
+```bash
+# Delete event logs from GCS older than 30 days
+uv run spark-mcp --cli cleanup event-logs --gcs-dir gs://my-bucket/event-logs --max-duration 30d
+
+# Dry run (list what would be deleted)
+uv run spark-mcp --cli cleanup event-logs --gcs-dir gs://my-bucket/event-logs --max-duration 7d --dry-run
+
+# Filter by application name pattern
+uv run spark-mcp --cli cleanup event-logs --gcs-dir gs://my-bucket/event-logs --name-pattern "Test.*"
+```
+
+`cleanup` subcommands:
+- `cleanup event-logs`
 
 ### Sample Output
 

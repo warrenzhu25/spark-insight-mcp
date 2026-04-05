@@ -17,6 +17,7 @@ except ImportError:
     RICH_AVAILABLE = False
 
 from spark_history_mcp.models.spark_types import ApplicationInfo, JobData, StageData
+
 from .base import registry
 
 

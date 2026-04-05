@@ -16,11 +16,10 @@ For Phase 2 of refactoring, the modules provide a cleaner structure while delega
 complex operations to the original implementation to avoid circular imports.
 """
 
+# Import modules to trigger registration
+from . import basic, comparison
 from .base import OutputFormatter
 from .utils import create_progress
-# Import modules to trigger registration
-from . import basic
-from . import comparison
 
 # Export main classes for use
 __all__ = ["OutputFormatter", "create_progress"]
