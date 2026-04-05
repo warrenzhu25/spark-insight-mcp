@@ -6,6 +6,7 @@ Handles mapping number references, app names, and app IDs to a canonical app ID.
 
 import re
 from typing import Any, Optional, Sequence
+
 from spark_history_mcp.cli._compat import CLI_AVAILABLE, click
 
 if CLI_AVAILABLE:

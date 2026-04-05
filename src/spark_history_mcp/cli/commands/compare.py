@@ -16,10 +16,8 @@ from spark_history_mcp.cli._compat import (
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.apps import (
-        _is_interactive,
-        create_mock_context,
-    )
+    from spark_history_mcp.cli._compat import create_tool_context as create_mock_context  # noqa: F401 re-exported for tests
+    from spark_history_mcp.cli.commands.apps import _is_interactive
     from spark_history_mcp.cli.formatter_modules import OutputFormatter
     from spark_history_mcp.cli.session import (
         get_session_dir,
@@ -27,10 +25,7 @@ if CLI_AVAILABLE:
         resolve_number_ref,
     )
     from spark_history_mcp.cli.utils.context import get_spark_client
-    from spark_history_mcp.cli.utils.resolution import (
-        is_app_id,
-        resolve_app_identifier,
-    )
+    from spark_history_mcp.cli.utils.resolution import is_app_id
 
 
 def get_session_file() -> Path:
@@ -107,27 +102,10 @@ def resolve_app_name_to_recent_apps(
         Tuple of (app_id1, app_id2, app_list) where app_list contains the full app objects
     """
     import spark_history_mcp.tools as tools_module
+    from spark_history_mcp.cli._compat import patch_tool_context
     from spark_history_mcp.tools import list_applications
 
-    original_get_context = getattr(tools_module.mcp, "get_context", None)
-
-    class MockContext:
-        def __init__(self, client):
-            self.request_context = MockRequestContext(client)
-
-    class MockRequestContext:
-        def __init__(self, client):
-            self.lifespan_context = MockLifespanContext(client)
-
-    class MockLifespanContext:
-        def __init__(self, client):
-            self.default_client = client
-            self.clients = {"default": client}
-
-    tools_module.mcp.get_context = lambda: MockContext(client)
-
-    try:
-        # Search for applications by name
+    with patch_tool_context(client, tools_module):
         apps = list_applications(
             server=server,
             app_name=app_name,
@@ -136,41 +114,35 @@ def resolve_app_name_to_recent_apps(
             compact=False,
         )
 
-        if len(apps) < 2:
-            if len(apps) == 0:
-                raise click.ClickException(
-                    f"No applications found matching '{app_name}'.\n\n"
-                    f"Tips:\n"
-                    f"  • Try a partial name: 'ETL' instead of 'ETL Pipeline Job'\n"
-                    f"  • Check spelling and capitalization\n"
-                    f"  • Use exact app IDs if known: apps compare app1 app2\n"
-                    f"  • List available apps: apps list --name '{app_name}'"
-                )
-            else:
-                raise click.ClickException(
-                    f"Only found 1 application matching '{app_name}'. "
-                    f"Need at least 2 applications to compare.\n\n"
-                    f"Found: {apps[0].id} - {apps[0].name}\n\n"
-                    f"Tips:\n"
-                    f"  • Try a broader search term\n"
-                    f"  • Use specific app IDs: apps compare {apps[0].id} <other-app-id>"
-                )
-
-        if len(apps) > limit:
-            # Show available options
-            app_list = "\n".join([f"  {app.id} - {app.name}" for app in apps[:10]])
+    if len(apps) < 2:
+        if len(apps) == 0:
             raise click.ClickException(
-                f"Found {len(apps)} applications matching '{app_name}'. "
-                f"Please be more specific or use exact app IDs.\n"
-                f"Recent matches:\n{app_list}"
+                f"No applications found matching '{app_name}'.\n\n"
+                f"Tips:\n"
+                f"  • Try a partial name: 'ETL' instead of 'ETL Pipeline Job'\n"
+                f"  • Check spelling and capitalization\n"
+                f"  • Use exact app IDs if known: apps compare app1 app2\n"
+                f"  • List available apps: apps list --name '{app_name}'"
+            )
+        else:
+            raise click.ClickException(
+                f"Only found 1 application matching '{app_name}'. "
+                f"Need at least 2 applications to compare.\n\n"
+                f"Found: {apps[0].id} - {apps[0].name}\n\n"
+                f"Tips:\n"
+                f"  • Try a broader search term\n"
+                f"  • Use specific app IDs: apps compare {apps[0].id} <other-app-id>"
             )
 
-        # Return the two most recent (first two in the list)
-        return apps[0].id, apps[1].id, apps
+    if len(apps) > limit:
+        app_list = "\n".join([f"  {app.id} - {app.name}" for app in apps[:10]])
+        raise click.ClickException(
+            f"Found {len(apps)} applications matching '{app_name}'. "
+            f"Please be more specific or use exact app IDs.\n"
+            f"Recent matches:\n{app_list}"
+        )
 
-    finally:
-        if original_get_context:
-            tools_module.mcp.get_context = original_get_context
+    return apps[0].id, apps[1].id, apps
 
 
 def resolve_single_number_ref(identifier: str) -> Tuple[Optional[str], Optional[str]]:
@@ -371,15 +343,13 @@ def execute_app_comparison(
     client = get_spark_client(config_path, server)
 
     import spark_history_mcp.tools as tools_module
+    from spark_history_mcp.cli._compat import patch_tool_context
     from spark_history_mcp.tools import (
         compare_app_executor_timeline,
         compare_app_performance,
     )
 
-    original_get_context = getattr(tools_module.mcp, "get_context", None)
-    tools_module.mcp.get_context = lambda: create_mock_context(client)
-
-    try:
+    with patch_tool_context(client, tools_module):
         comparison_data = compare_app_performance(
             app_id1=app_id1,
             app_id2=app_id2,
@@ -411,9 +381,6 @@ def execute_app_comparison(
 
         formatter.output(comparison_data)
         return comparison_data
-    finally:
-        if original_get_context:
-            tools_module.mcp.get_context = original_get_context
 
 
 def extract_stage_menu_options(comparison_data):

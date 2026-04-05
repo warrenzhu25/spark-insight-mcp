@@ -8,6 +8,7 @@ applications, including resource allocation, auto-scaling, and performance tunin
 from typing import Optional
 
 from spark_history_mcp.core.app import mcp
+from spark_history_mcp.prompts.utils import server_kwarg
 
 
 @mcp.prompt()
@@ -25,7 +26,7 @@ def suggest_autoscaling_config(
         cost_optimization: Whether to include cost optimization considerations
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
     cost_note = " with cost optimization considerations" if cost_optimization else ""
 
     return f"""Generate auto-scaling configuration recommendations for Spark application {app_id}.
@@ -149,7 +150,7 @@ def optimize_resource_allocation(
         resource_constraints: Any specific resource constraints to consider
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     goal_guidance = {
         "performance": "Optimize for maximum performance with efficient resource utilization",
@@ -306,7 +307,7 @@ def improve_query_performance(
         optimization_priority: Priority ('execution_time', 'resource_efficiency', 'throughput')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_guidance = {
         "sql": "Focus specifically on SQL query optimization and Catalyst optimizer effectiveness",
@@ -472,7 +473,7 @@ def reduce_data_skew(
         mitigation_strategy: Strategy approach ('preprocessing', 'runtime', 'adaptive')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     skew_focus = {
         "shuffle": "Focus on shuffle operation skew and partition imbalance",

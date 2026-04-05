@@ -10,12 +10,12 @@ from typing import Any, Dict, Optional
 
 from ..core.app import mcp
 from ..models.spark_types import StageStatus
+from . import common
 from .analysis import (
     analyze_auto_scaling,
     analyze_failed_tasks,
     analyze_shuffle_skew,
 )
-from . import common
 from .common import compact_output
 from .fetchers import fetch_app, fetch_env, fetch_executors, fetch_stages
 from .recommendations import compact_recommendation
@@ -389,32 +389,32 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
         total_input_bytes = sum(
             getattr(stage, "input_bytes", 0) or 0 for stage in stages
         )
-        total_input_gb = total_input_bytes / (1024 * 1024 * 1024)
+        total_input_gb = common.bytes_to_gb(total_input_bytes)
 
         total_output_bytes = sum(
             getattr(stage, "output_bytes", 0) or 0 for stage in stages
         )
-        total_output_gb = total_output_bytes / (1024 * 1024 * 1024)
+        total_output_gb = common.bytes_to_gb(total_output_bytes)
 
         total_shuffle_read_bytes = sum(
             getattr(stage, "shuffle_read_bytes", 0) or 0 for stage in stages
         )
-        total_shuffle_read_gb = total_shuffle_read_bytes / (1024 * 1024 * 1024)
+        total_shuffle_read_gb = common.bytes_to_gb(total_shuffle_read_bytes)
 
         total_shuffle_write_bytes = sum(
             getattr(stage, "shuffle_write_bytes", 0) or 0 for stage in stages
         )
-        total_shuffle_write_gb = total_shuffle_write_bytes / (1024 * 1024 * 1024)
+        total_shuffle_write_gb = common.bytes_to_gb(total_shuffle_write_bytes)
 
         total_memory_spilled_bytes = sum(
             getattr(stage, "memory_bytes_spilled", 0) or 0 for stage in stages
         )
-        total_memory_spilled_gb = total_memory_spilled_bytes / (1024 * 1024 * 1024)
+        total_memory_spilled_gb = common.bytes_to_gb(total_memory_spilled_bytes)
 
         total_disk_spilled_bytes = sum(
             getattr(stage, "disk_bytes_spilled", 0) or 0 for stage in stages
         )
-        total_disk_spilled_gb = total_disk_spilled_bytes / (1024 * 1024 * 1024)
+        total_disk_spilled_gb = common.bytes_to_gb(total_disk_spilled_bytes)
 
         # Calculate performance metrics (values are in nanoseconds from Spark)
         total_shuffle_fetch_wait_time_ns = 0

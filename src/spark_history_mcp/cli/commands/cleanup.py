@@ -10,12 +10,10 @@ from spark_history_mcp.cli._compat import (
     CLI_AVAILABLE,
     cli_unavailable_stub,
     click,
-    patch_tool_context,
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.apps import get_spark_client
-    from spark_history_mcp.cli.formatter_modules import OutputFormatter
+    from spark_history_mcp.cli.utils.context import get_spark_client, tool_runner
 
 
 if CLI_AVAILABLE:
@@ -83,16 +81,11 @@ if CLI_AVAILABLE:
             # Filter by name pattern
             spark-mcp --cli cleanup event-logs gs://bucket/spark-events --name-pattern 'test_*'
         """
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import delete_event_logs
 
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format) as (formatter, _):
                 result = delete_event_logs(
                     gcs_dir=gcs_dir,
                     server=server,
@@ -101,9 +94,7 @@ if CLI_AVAILABLE:
                     limit=limit,
                     dry_run=dry_run,
                 )
-                title = (
-                    "Event Log Cleanup (DRY RUN)" if dry_run else "Event Log Cleanup"
-                )
+                title = "Event Log Cleanup (DRY RUN)" if dry_run else "Event Log Cleanup"
                 formatter.output(result, title)
         except Exception as err:
             raise click.ClickException(f"Error cleaning up event logs: {err}") from err

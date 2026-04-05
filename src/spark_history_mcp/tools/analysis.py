@@ -11,21 +11,24 @@ import statistics
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from ..core.app import mcp
 from ..config.config import (
-    DEFAULT_SPILL_THRESHOLD_BYTES,
-    DEFAULT_GC_PRESSURE_THRESHOLD,
     DEFAULT_AUTO_SCALING_TARGET_MINUTES,
-    DEFAULT_SHUFFLE_SKEW_THRESHOLD_GB,
-    DEFAULT_SHUFFLE_SKEW_RATIO,
-    DEFAULT_SHUFFLE_SKEW_EXTREME_RATIO,
     DEFAULT_FAILURE_RATE_HIGH_THRESHOLD,
+    DEFAULT_GC_PRESSURE_THRESHOLD,
     DEFAULT_HOST_CONCENTRATION_THRESHOLD,
+    DEFAULT_SHUFFLE_SKEW_EXTREME_RATIO,
+    DEFAULT_SHUFFLE_SKEW_RATIO,
+    DEFAULT_SHUFFLE_SKEW_THRESHOLD_GB,
+    DEFAULT_SPILL_THRESHOLD_BYTES,
 )
+from ..core.app import mcp
 from . import common
 from .executors import get_executor_summary
 from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
 from .jobs_stages import _find_slowest_jobs, _find_slowest_stages
+
+# Conservative scaling factor: assume 1/4 of ideal parallelism to avoid over-provisioning
+_AUTO_SCALING_CONSERVATIVE_FACTOR = 4
 
 
 @mcp.tool()
@@ -202,8 +205,9 @@ def analyze_auto_scaling(
         if stage.executor_run_time and stage.num_tasks:
             # Estimate executors needed to complete stage in target duration
             executors_needed = (
-                min(stage.executor_run_time / target_duration_ms, stage.num_tasks) / 4
-            )  # Conservative scaling factor
+                min(stage.executor_run_time / target_duration_ms, stage.num_tasks)
+                / _AUTO_SCALING_CONSERVATIVE_FACTOR
+            )
             initial_executor_demand += executors_needed
 
     recommended_initial = max(2, int(initial_executor_demand))
@@ -219,7 +223,8 @@ def analyze_auto_scaling(
             and stage.num_tasks
         ):
             executors_needed = int(
-                min(stage.executor_run_time / target_duration_ms, stage.num_tasks) / 4
+                min(stage.executor_run_time / target_duration_ms, stage.num_tasks)
+                / _AUTO_SCALING_CONSERVATIVE_FACTOR
             )
             stage_events.append((stage.submission_time, executors_needed))
             stage_events.append((stage.completion_time, -executors_needed))

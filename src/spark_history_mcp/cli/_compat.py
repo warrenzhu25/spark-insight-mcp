@@ -2,6 +2,7 @@
 
 import sys
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 CLI_DEPENDENCY_HINT = (
     "CLI dependencies not installed. Install with: uv add click rich tabulate"
@@ -25,28 +26,6 @@ __all__ = [
 ]
 
 
-class _ToolLifespanContext:
-    __slots__ = ("default_client", "clients")
-
-    def __init__(self, client):
-        self.default_client = client
-        self.clients = {"default": client}
-
-
-class _ToolRequestContext:
-    __slots__ = ("lifespan_context",)
-
-    def __init__(self, client):
-        self.lifespan_context = _ToolLifespanContext(client)
-
-
-class _ToolContext:
-    __slots__ = ("request_context",)
-
-    def __init__(self, client):
-        self.request_context = _ToolRequestContext(client)
-
-
 def cli_unavailable_stub(command_name: str):
     """Return a stub callable for missing CLI dependencies."""
 
@@ -60,8 +39,14 @@ def cli_unavailable_stub(command_name: str):
 
 def create_tool_context(client):
     """Build an MCP tool context wrapper for a Spark client."""
-
-    return _ToolContext(client)
+    return SimpleNamespace(
+        request_context=SimpleNamespace(
+            lifespan_context=SimpleNamespace(
+                default_client=client,
+                clients={"default": client},
+            )
+        )
+    )
 
 
 @contextmanager

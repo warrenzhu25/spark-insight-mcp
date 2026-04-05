@@ -10,14 +10,10 @@ from spark_history_mcp.cli._compat import (
     CLI_AVAILABLE,
     cli_unavailable_stub,
     click,
-    patch_tool_context,
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.utils.context import get_spark_client
-    from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
-
-    from spark_history_mcp.cli.formatter_modules import OutputFormatter
+    from spark_history_mcp.cli.utils.context import get_spark_client, tool_runner
 
 
 if CLI_AVAILABLE:
@@ -70,28 +66,20 @@ if CLI_AVAILABLE:
         include_executor_utilization: bool,
     ):
         """Get comprehensive application insights."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_application_insights
 
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
                 insights_data = get_application_insights(
-                    app_id=app_id,
+                    app_id=resolved_id,
                     server=server,
                     include_auto_scaling=include_auto_scaling,
                     include_shuffle_skew=include_shuffle_skew,
                     include_failed_tasks=include_failed_tasks,
                     include_executor_utilization=include_executor_utilization,
                 )
-                formatter.output(insights_data, f"Application Insights for {app_id}")
+                formatter.output(insights_data, f"Application Insights for {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing application {app_id}: {err}"
@@ -116,25 +104,15 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], top_n: int, output_format: str
     ):
         """Identify performance bottlenecks in the application."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_job_bottlenecks
 
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
                 bottlenecks_data = get_job_bottlenecks(
-                    app_id=app_id, server=server, top_n=top_n
+                    app_id=resolved_id, server=server, top_n=top_n
                 )
-                formatter.output(
-                    bottlenecks_data, f"Performance Bottlenecks for {app_id}"
-                )
+                formatter.output(bottlenecks_data, f"Performance Bottlenecks for {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing bottlenecks for {app_id}: {err}"
@@ -166,25 +144,17 @@ if CLI_AVAILABLE:
         output_format: str,
     ):
         """Analyze auto-scaling recommendations."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import analyze_auto_scaling
 
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
                 scaling_data = analyze_auto_scaling(
-                    app_id=app_id,
+                    app_id=resolved_id,
                     server=server,
                     target_stage_duration_minutes=target_duration,
                 )
-                formatter.output(scaling_data, f"Auto-Scaling Analysis for {app_id}")
+                formatter.output(scaling_data, f"Auto-Scaling Analysis for {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing auto-scaling for {app_id}: {err}"
@@ -223,26 +193,18 @@ if CLI_AVAILABLE:
         output_format: str,
     ):
         """Analyze shuffle data skew issues."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import analyze_shuffle_skew
 
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
                 skew_data = analyze_shuffle_skew(
-                    app_id=app_id,
+                    app_id=resolved_id,
                     server=server,
                     shuffle_threshold_gb=shuffle_threshold,
                     skew_ratio_threshold=skew_ratio,
                 )
-                formatter.output(skew_data, f"Shuffle Skew Analysis for {app_id}")
+                formatter.output(skew_data, f"Shuffle Skew Analysis for {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing shuffle skew for {app_id}: {err}"
@@ -279,30 +241,19 @@ if CLI_AVAILABLE:
         output_format: str,
     ):
         """Find slowest jobs, stages, or SQL queries."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
             from spark_history_mcp.tools import find_slowest
 
-            title = f"Slowest {analysis_type.title()} for {app_id}"
-
-            import spark_history_mcp.tools as tools_module
-
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
                 slowest_data = find_slowest(
-                    app_id=app_id,
+                    app_id=resolved_id,
                     type=analysis_type,
                     server=server,
                     n=top_n,
                     compact=False,
                 )
-                formatter.output(slowest_data, title)
+                formatter.output(slowest_data, f"Slowest {analysis_type.title()} for {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing slowest {analysis_type} for {app_id}: {err}"
@@ -342,25 +293,22 @@ if CLI_AVAILABLE:
         ⚠️  DEPRECATED: Use 'apps compare' instead.
         This command will be removed in a future version.
         """
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
+        click.echo(
+            "⚠️  WARNING: 'analyze compare' is deprecated. Use 'apps compare' instead.",
+            err=True,
+        )
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app IDs (handles #1, name, or ID)
-            app_id1 = canonicalize_app_id(app_id1, client, server)
-            app_id2 = canonicalize_app_id(app_id2, client, server)
-
-            # Show deprecation warning
-            click.echo(
-                f"⚠️  WARNING: 'analyze compare' is deprecated. Use 'apps compare' instead.",
-                err=True,
-            )
-
             import spark_history_mcp.tools as tools_module
+            from spark_history_mcp.cli._compat import patch_tool_context
+            from spark_history_mcp.cli.formatter_modules import OutputFormatter
+            from spark_history_mcp.cli.utils.context import get_spark_client
+            from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
             from spark_history_mcp.tools import compare_app_performance
 
+            formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
+            client = get_spark_client(ctx.obj["config_path"], server)
+            app_id1 = canonicalize_app_id(app_id1, client, server)
+            app_id2 = canonicalize_app_id(app_id2, client, server)
             with patch_tool_context(client, tools_module):
                 comparison_data = compare_app_performance(
                     app_id1=app_id1, app_id2=app_id2, server=server, top_n=top_n

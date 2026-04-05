@@ -4,12 +4,13 @@ Shared context utilities for the Spark History MCP CLI.
 Handles loading configuration and initializing the Spark REST client.
 """
 
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional, Tuple
 
 from spark_history_mcp.api.factory import create_spark_client
 from spark_history_mcp.api.spark_client import SparkRestClient
-from spark_history_mcp.cli._compat import CLI_AVAILABLE, click
+from spark_history_mcp.cli._compat import CLI_AVAILABLE, click, patch_tool_context
 from spark_history_mcp.config.config import Config
 
 
@@ -59,3 +60,30 @@ def get_spark_client(
             server_config = config.servers[default_servers[0]]
 
     return create_spark_client(server_config)
+
+
+@contextmanager
+def tool_runner(
+    ctx,
+    client: SparkRestClient,
+    server: Optional[str],
+    output_format: str,
+    app_id: Optional[str] = None,
+) -> Generator[Tuple, None, None]:
+    """Set up the standard CLI tool execution environment.
+
+    The caller is responsible for creating the client (enabling test patching).
+
+    Yields:
+        (formatter, resolved_app_id) where resolved_app_id is None if no app_id given.
+    """
+    from spark_history_mcp.cli.formatter_modules import OutputFormatter
+    from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
+
+    formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
+    resolved_id = canonicalize_app_id(app_id, client, server) if app_id is not None else None
+
+    import spark_history_mcp.tools as tools_module
+
+    with patch_tool_context(client, tools_module):
+        yield formatter, resolved_id

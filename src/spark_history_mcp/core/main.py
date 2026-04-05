@@ -14,47 +14,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def detect_cli_command():
-    """Detect if CLI command is being used."""
-    cli_commands = [
-        "apps",
-        "analyze",
-        "server",
-        "config",
-        "list",
-        "show",
-        "jobs",
-        "stages",
-        "summary",
-        "insights",
-        "bottlenecks",
-        "auto-scaling",
-        "shuffle-skew",
-        "slowest",
-        "compare",
-        "start",
-        "test",
-        "status",
-        "init",
-        "validate",
-        "edit",
-    ]
-    return any(cmd in sys.argv for cmd in cli_commands)
-
-
 def main():
-    """Main entry point with CLI/MCP detection."""
+    """Main entry point - use --cli flag for CLI mode, otherwise starts MCP server."""
 
-    # CLI mode detection
-    if "--cli" in sys.argv or detect_cli_command():
+    if "--cli" in sys.argv:
+        sys.argv.remove("--cli")
         try:
             from spark_history_mcp.cli.main import cli
 
-            # Remove --cli flag if present
-            if "--cli" in sys.argv:
-                sys.argv.remove("--cli")
-
-            # Run CLI
             cli()
             return
 

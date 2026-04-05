@@ -8,6 +8,7 @@ of Spark applications, identifying bottlenecks, and suggesting optimizations.
 from typing import Optional
 
 from spark_history_mcp.core.app import mcp
+from spark_history_mcp.prompts.utils import server_kwarg
 
 
 @mcp.prompt()
@@ -21,7 +22,7 @@ def analyze_slow_application(
         baseline_duration_minutes: Expected duration to compare against
         server: Optional server name to use for analysis
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     return f"""Please perform a comprehensive performance analysis of Spark application {app_id}.
 
@@ -87,7 +88,7 @@ def investigate_stage_bottlenecks(
         stage_id: Optional specific stage ID to focus on
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
     stage_focus = f" focusing on stage {stage_id}" if stage_id else ""
 
     if stage_id is not None:
@@ -168,7 +169,7 @@ def diagnose_resource_issues(
         focus_area: Resource area to focus on ('memory', 'cpu', 'disk', 'network', 'all')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_guidance = {
         "memory": "Pay special attention to memory usage patterns, GC pressure, and spill metrics",
@@ -268,7 +269,7 @@ def compare_job_performance(
         comparison_focus: Focus area ('performance', 'resources', 'configuration', 'comprehensive')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_guidance = {
         "performance": "Focus primarily on execution times, throughput, and performance metrics",

@@ -6,27 +6,22 @@ Commands for listing and inspecting Spark applications.
 
 import os
 import sys
-from pathlib import Path
 from typing import Optional
 
-from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.cli._compat import (
     CLI_AVAILABLE,
     cli_unavailable_stub,
     click,
     create_tool_context,
-    patch_tool_context,
 )
-from spark_history_mcp.config.config import Config
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.formatter_modules import OutputFormatter
     from spark_history_mcp.cli.session import (
         format_session_hint,
         save_app_refs,
     )
-    from spark_history_mcp.cli.utils.context import get_spark_client, load_config
-    from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
+    from spark_history_mcp.cli.utils.context import get_spark_client, tool_runner
+    from spark_history_mcp.cli.utils.resolution import resolve_app_identifier
 
 
 def create_mock_context(client):
@@ -170,35 +165,28 @@ if CLI_AVAILABLE:
         interactive: bool,
     ):
         """List Spark applications."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         if limit is not None and limit < 1:
             raise click.BadParameter("limit must be >= 1", param_hint="--limit")
 
+        params = {}
+        if status:
+            params["status"] = list(status)
+        if limit:
+            params["limit"] = limit
+        if name:
+            params["app_name"] = name
+            params["search_type"] = "contains"
+        elif name_exact:
+            params["app_name"] = name_exact
+            params["search_type"] = "exact"
+
         try:
-            client = get_spark_client(config_path, server)
-
-            # Build parameters
-            params = {}
-            if status:
-                params["status"] = list(status)
-            if limit:
-                params["limit"] = limit
-            if name:
-                params["app_name"] = name
-                params["search_type"] = "contains"
-            elif name_exact:
-                params["app_name"] = name_exact
-                params["search_type"] = "exact"
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_applications
 
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format) as (formatter, _):
                 apps = list_applications(server=server, **params, compact=False)
                 formatter.output(apps, "Spark Applications")
-                # Save app references for number shorthand
                 if formatter.last_app_mapping and output_format == "human":
                     save_app_refs(formatter.last_app_mapping, server)
                     click.echo(format_session_hint(len(formatter.last_app_mapping)))
@@ -281,21 +269,13 @@ if CLI_AVAILABLE:
     @click.pass_context
     def show_app(ctx, app_id: str, server: Optional[str], output_format: str):
         """Show detailed information about a specific application."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_application
 
-            with patch_tool_context(client, tools_module):
-                app = get_application(app_id, server=server, compact=False)
-                formatter.output(app, f"Application {app_id}")
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+                app = get_application(resolved_id, server=server, compact=False)
+                formatter.output(app, f"Application {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error getting application {app_id}: {err}"
@@ -318,25 +298,16 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], status: tuple, output_format: str
     ):
         """List jobs for a specific application."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_jobs as mcp_list_jobs
 
-            params = {"app_id": app_id, "server": server}
-            if status:
-                params["status"] = list(status)
-
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+                params = {"app_id": resolved_id, "server": server}
+                if status:
+                    params["status"] = list(status)
                 jobs = mcp_list_jobs(**params, compact=False)
-                formatter.output(jobs, f"Jobs for Application {app_id}")
+                formatter.output(jobs, f"Jobs for Application {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error listing jobs for {app_id}: {err}"
@@ -359,25 +330,16 @@ if CLI_AVAILABLE:
         ctx, app_id: str, server: Optional[str], status: tuple, output_format: str
     ):
         """List stages for a specific application."""
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_id, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import list_stages as mcp_list_stages
 
-            params = {"app_id": app_id, "server": server}
-            if status:
-                params["status"] = list(status)
-
-            with patch_tool_context(client, tools_module):
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+                params = {"app_id": resolved_id, "server": server}
+                if status:
+                    params["status"] = list(status)
                 stages = mcp_list_stages(**params, compact=False)
-                formatter.output(stages, f"Stages for Application {app_id}")
+                formatter.output(stages, f"Stages for Application {resolved_id}")
         except Exception as err:
             raise click.ClickException(
                 f"Error listing stages for {app_id}: {err}"
@@ -406,26 +368,14 @@ if CLI_AVAILABLE:
 
         When using names, returns summary for the latest matching application.
         """
-        config_path = ctx.obj["config_path"]
-        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-
         try:
-            client = get_spark_client(config_path, server)
-            
-            # Resolve app ID (handles #1, name, or ID)
-            app_id = canonicalize_app_id(app_identifier, client, server)
-
-            import spark_history_mcp.tools as tools_module
             from spark_history_mcp.tools import get_app_summary
 
-            with patch_tool_context(client, tools_module):
-                summary_data = get_app_summary(app_id, server=server)
-
-                # Extract application name for title
+            client = get_spark_client(ctx.obj["config_path"], server)
+            with tool_runner(ctx, client, server, output_format, app_identifier) as (formatter, resolved_id):
+                summary_data = get_app_summary(resolved_id, server=server)
                 app_name = summary_data.get("application_name", "Unknown Application")
-                title = f"Application Summary - {app_name} ({app_id})"
-
-                formatter.output(summary_data, title)
+                formatter.output(summary_data, f"Application Summary - {app_name} ({resolved_id})")
         except Exception as err:
             raise click.ClickException(
                 f"Error getting summary for application {app_identifier}: {err}"

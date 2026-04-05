@@ -8,6 +8,7 @@ issues, failures, and configuration problems.
 from typing import Optional
 
 from spark_history_mcp.core.app import mcp
+from spark_history_mcp.prompts.utils import server_kwarg
 
 
 @mcp.prompt()
@@ -21,7 +22,7 @@ def investigate_failures(
         failure_type: Type of failure to focus on ('task', 'job', 'stage', 'executor', 'all')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_area = {
         "task": "Focus specifically on task-level failures, retry patterns, and task error analysis",
@@ -133,7 +134,7 @@ def examine_memory_issues(
         memory_focus: Memory area to focus on ('heap', 'offheap', 'spill', 'gc', 'comprehensive')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_guidance = {
         "heap": "Focus on heap memory usage patterns, allocation, and OutOfMemory errors",
@@ -244,7 +245,7 @@ def diagnose_shuffle_problems(
         shuffle_aspect: Shuffle aspect to focus on ('skew', 'performance', 'size', 'comprehensive')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_guidance = {
         "skew": "Focus specifically on data skew detection and mitigation strategies",
@@ -356,7 +357,7 @@ def identify_configuration_issues(
         config_category: Configuration category to focus on ('resources', 'performance', 'reliability', 'all')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     focus_guidance = {
         "resources": "Focus on resource allocation configuration issues (memory, cores, executors)",

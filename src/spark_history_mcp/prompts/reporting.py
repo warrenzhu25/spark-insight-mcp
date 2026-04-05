@@ -8,6 +8,7 @@ summaries, and trend analysis for Spark applications and infrastructure.
 from typing import Optional
 
 from spark_history_mcp.core.app import mcp
+from spark_history_mcp.prompts.utils import server_kwarg
 
 
 @mcp.prompt()
@@ -25,7 +26,7 @@ def generate_performance_report(
         audience: Target audience ('executive', 'technical', 'mixed')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     report_guidance = {
         "executive": "Focus on high-level metrics, business impact, and strategic recommendations",
@@ -176,7 +177,7 @@ def create_executive_summary(
         time_context: Time context for analysis ('current', 'trend', 'comparative')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     metric_focus = {
         "performance": "Emphasize execution time, throughput, and performance optimization opportunities",
@@ -329,7 +330,7 @@ def summarize_trends(
         trend_focus: Primary trend focus ('performance', 'resources', 'reliability', 'all')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
     app_list = ", ".join([f'"{app_id}"' for app_id in app_ids])
 
     trend_guidance = {
@@ -489,7 +490,7 @@ def benchmark_comparison(
         comparison_dimension: Dimension to focus on ('performance', 'cost', 'efficiency', 'comprehensive')
         server: Optional server name to use
     """
-    server_param = f', server="{server}"' if server else ""
+    server_param = server_kwarg(server)
 
     benchmark_guidance = {
         "internal": "Compare against other applications in your environment and historical performance",
