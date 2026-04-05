@@ -200,6 +200,7 @@ Include:
 
 ### 📝 Types of Documentation
 - **README.md**: Main project overview and quick start
+- **CONTRIBUTING_TECHNICAL.md**: Deep dive into architecture and internal logic
 - **TESTING.md**: Comprehensive testing guide
 - **examples/integrations/**: AI agent integration examples
 - **Code comments**: Inline documentation for complex logic
