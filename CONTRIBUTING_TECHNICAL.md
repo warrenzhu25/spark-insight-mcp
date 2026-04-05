@@ -1,134 +1,182 @@
-# 🛠️ Technical Contribution Guide
+# 🛠️ Technical Contribution Guide (Deep Dive)
 
-This guide provides a deep dive into the technical architecture, file structure, and internal logic of the Spark History Server MCP project. It is intended for developers who want to understand how the system works and how to extend it.
+This guide provides an exhaustive technical overview of the Spark History Server MCP project, including low-level architecture, implementation patterns, and code examples.
 
-## 🏗️ Architecture Overview
+---
 
-The project is built as a **Model Context Protocol (MCP)** server that provides tools for analyzing and comparing Apache Spark applications. It also includes a **CLI** for direct human interaction.
+## 🏗️ Architecture Deep Dive
 
-### 🧩 High-Level Components
+The project follows a layered architecture to separate concerns and ensure maintainability.
 
-```mermaid
-graph TD
-    User([User / AI Agent]) <--> Transport[MCP Transport / CLI]
-    Transport <--> Core[Core Server / CLI Entry]
-    Core <--> Tools[MCP Tools]
-    Tools <--> API[Spark API Clients]
-    API <--> SHS[Spark History Server]
+### 🧩 Layered Structure
+
+1.  **`api/` (Data Acquisition)**: Low-level REST clients. No business logic, only HTTP communication and Pydantic model instantiation.
+2.  **`fetchers.py` (Caching & Orchestration)**: A middle layer that handles data fetching, two-tier caching (in-process and disk), and client resolution.
+3.  **`tools/` (Business Logic)**: Implements MCP tools. Uses fetchers to get data, processes it, and returns results.
+4.  **`comparison_modules/` (Complex Analysis)**: Specialized sub-modules for comparing applications, environments, and stages.
+5.  **`models/` (Type Safety)**: Pydantic models mapping Spark's complex JSON responses to Python objects.
+
+---
+
+## 📡 API Client Implementation (`api/`)
+
+The `SparkRestClient` maps Python methods to Spark REST API endpoints.
+
+### Adding a New Endpoint
+When adding a new endpoint, follow this pattern:
+
+```python
+# src/spark_history_mcp/api/spark_client.py
+
+def get_executor_threads(self, app_id: str, executor_id: str) -> List[ThreadStackTrace]:
+    """Fetch thread stack traces for a specific executor."""
+    endpoint = f"applications/{app_id}/executors/{executor_id}/threads"
+    # _get() automatically prepends /api/v1 and handles auth
+    data = self._get(endpoint)
+    # Validate and return as Pydantic models
+    return [ThreadStackTrace.model_validate(item) for item in data]
+```
+
+### URL Normalization
+Spark UI often needs attempt IDs. `SparkRestClient` uses a regex pattern to inject `1/` if an attempt ID is missing from YARN-based URLs.
+
+---
+
+## 💾 Caching & Fetching (`fetchers.py`)
+
+Tools should **never** call the API client directly. Use `fetchers.py` instead.
+
+### Two-Tier Caching
+1.  **In-Process Cache (`_CACHE`)**: A simple dictionary for the duration of the process.
+2.  **Disk Cache (`cache.py`)**: Persistent storage (default: `~/.cache/spark-mcp/`) to avoid re-fetching large datasets across sessions.
+
+### Using Fetchers
+```python
+# src/spark_history_mcp/tools/your_tool.py
+from .fetchers import fetch_stages, fetch_app
+
+def your_logic(app_id: str):
+    # This will check in-process cache, then disk, then call the API
+    app = fetch_app(app_id)
+    stages = fetch_stages(app_id)
+    ...
+```
+
+---
+
+## 🛠️ Tool Development
+
+All MCP tools are registered using the `@mcp.tool()` decorator.
+
+### Implementation Pattern
+```python
+@mcp.tool()
+def analyze_data(app_id: str, server: Optional[str] = None) -> Dict[str, Any]:
+    """Description for AI agents."""
+    # 1. Resolve client/context
+    client = get_client_or_default(server_name=server)
     
-    Config[(config.yaml)] -.-> Core
-    Models[(Pydantic Models)] -.-> API
-    Models -.-> Tools
-```
-
-1.  **Transport Layer**: Handles communication via MCP (stdio/SSE) or CLI.
-2.  **Core Layer**: Manages server lifecycle, configuration loading, and tool registration.
-3.  **Tools Layer**: Implements the actual logic for analysis, comparison, and data retrieval.
-4.  **API Layer**: Provides a clean Python interface to the Spark History Server REST API.
-5.  **Models Layer**: Defines the data structures used throughout the application.
-
----
-
-## 📁 File Structure
-
-```text
-src/spark_history_mcp/
-├── api/                # Spark History Server API abstraction
-│   ├── base_client.py  # Abstract base for API clients
-│   ├── factory.py      # Factory to create appropriate clients (REST, EMR, etc.)
-│   ├── spark_client.py # Main REST API client implementation
-│   └── ...
-├── cli/                # Command-Line Interface
-│   ├── commands/       # Click command definitions
-│   ├── formatters.py   # Rich-based output formatting
-│   ├── main.py         # CLI entry point
-│   └── ...
-├── config/             # Configuration management
-│   └── config.py       # Pydantic-based configuration models
-├── core/               # Core server logic
-│   ├── app.py          # FastMCP server definition & lifecycle
-│   └── main.py         # Unified entry point (MCP or CLI)
-├── models/             # Data models
-│   ├── spark_types.py  # Pydantic models for Spark REST API (40KB+)
-│   └── mcp_types.py    # MCP-specific type definitions
-├── prompts/            # MCP Prompts
-│   ├── optimization.py # Optimization suggestion prompts
-│   └── ...
-├── tools/              # MCP Tool implementations
-│   ├── analysis.py     # Performance & bottleneck analysis
-│   ├── application.py  # App-level data tools
-│   ├── executors.py    # Executor-level tools
-│   ├── jobs_stages.py  # Job & Stage tools
-│   ├── comparison_modules/ # Complex comparison logic
-│   └── ...
-└── utils/              # Shared helper functions
+    # 2. Fetch data via fetchers
+    data = fetch_some_data(app_id, server=server)
+    
+    # 3. Process logic
+    results = complex_calculation(data)
+    
+    # 4. Return as Dict (for MCP compatibility)
+    return {"status": "success", "results": results}
 ```
 
 ---
 
-## 🧠 Main Logic Flow
+## 📊 Comparison Logic & Return Types
 
-### 1. Bootstrapping (Entry Point)
-The entry point is `src/spark_history_mcp/core/main.py`. It checks for the `--cli` flag:
-- **CLI Mode**: Calls `cli()`, which uses `Click` to route to subcommands in `cli/commands/`.
-- **MCP Mode**: Calls `app.run()`, starting the `FastMCP` server.
+Comparison tools (`compare_app_performance`, etc.) are located in `tools/comparison_modules/`.
 
-### 2. Lifecycle Management
-In `core/app.py`, the `app_lifespan` context manager:
-1.  Loads `config.yaml`.
-2.  Initializes `SparkRestClient` (or specialized clients like `EMRPersistentUIClient`) for each configured server.
-3.  Makes these clients available to tools via the `AppContext`.
+### How Comparison Works
+1.  **Baseline vs. Target**: `app_id1` is treated as the baseline, `app_id2` as the comparison target.
+2.  **Significance Filtering**: Metrics are filtered using a `significance_threshold` (default 0.1 or 10%).
+3.  **Normalization**: Values like paths, IDs, and IPs are normalized to `<auto>` tokens in `utils._compare_environments` to reduce noise.
 
-### 3. Tool Execution
-All tools (in `tools/`) follow a similar pattern:
-1.  Retrieve the appropriate client using `get_client_or_default()`.
-2.  Fetch raw data using `client.get_stage()`, `client.get_executor_summary()`, etc.
-3.  Process the data using `models/spark_types.py` for type-safe manipulation.
-4.  Perform analysis (e.g., calculating skew, identifying bottlenecks).
-5.  Return the result (usually as a Pydantic model or a formatted string).
+### Return Structure & Validation
+Most comparison tools return a `Dict[str, Any]`. For complex outputs, we use `schema.py` to define the expected structure.
 
----
+```python
+# src/spark_history_mcp/tools/schema.py
+class CompareAppPerformanceOutput(BaseModel):
+    applications: Dict[str, Any]
+    performance_comparison: Dict[str, Any]
+    environment_comparison: Dict[str, Any]
+    key_recommendations: List[Dict[str, Any]]
+```
 
-## 🔍 Logic Details by Module
-
-### 📡 API Clients (`api/`)
-- **`BaseApiClient`**: Handles HTTP communication, retries, and error handling using `requests`.
-- **`SparkRestClient`**: Maps Python methods to Spark REST API endpoints (e.g., `/api/v1/applications/{app_id}/stages`). It handles URL prefixing and attempt ID injection.
-- **`EMRPersistentUIClient`**: Specialized client for AWS EMR, handling its specific authentication and URL structure.
-
-### 🛠️ Tools (`tools/`)
-- **`analysis.py`**:
-    - `get_job_bottlenecks`: Identifies stages with high "duration per task" or large skew.
-    - `analyze_shuffle_skew`: Compares median vs. max shuffle read/write across tasks in a stage.
-- **`comparison_modules/`**:
-    - Implements logic to compare two Spark applications or stages.
-    - Logic focuses on identifying differences in configuration, task durations, and resource utilization.
-- **`application.py`**:
-    - Provides high-level summaries and insights by aggregating data from jobs, stages, and executors.
-
-### 📊 Models (`models/`)
-- **`spark_types.py`**: A very detailed set of Pydantic models. Every Spark REST API response is mapped to a model, ensuring that the rest of the codebase has full IDE support and runtime validation for Spark data.
-
-### 💻 CLI (`cli/`)
-- The CLI uses `Rich` to render tables and formatted text.
-- It shares the same logic as the MCP tools but includes additional "formatting" layers to make the output human-readable.
+Validation can be enabled in `config.yaml` via `debug_validate_schema: true`.
 
 ---
 
-## 💡 Guidelines for Extension
+## 🧬 Data Modeling (`spark_types.py`)
 
-### Adding a New API Endpoint
-1.  Check if the model already exists in `models/spark_types.py`. If not, add it.
-2.  Add a method to `SparkRestClient` in `api/spark_client.py`.
-3.  Test the new method directly in the client.
+We use Pydantic extensively for data validation and transformation.
 
-### Adding a New MCP Tool
-1.  Implement the logic in a new or existing file in `tools/`.
-2.  Use the `@mcp.tool()` decorator.
-3.  Ensure the tool is imported in `tools/__init__.py`.
-4.  If it's useful for humans, add a corresponding command in `cli/commands/`.
+### Advanced Pydantic Patterns
+```python
+class StageData(BaseModel):
+    stage_id: int = Field(alias="stageId")
+    status: StageStatus
+    
+    # Computed fields for calculated metrics
+    @computed_field
+    @property
+    def duration_ms(self) -> int:
+        if self.completion_time and self.submission_time:
+            return int((self.completion_time - self.submission_time).total_seconds() * 1000)
+        return 0
 
-### Modifying Comparison Logic
-1.  Focus on `tools/comparison_modules/`.
-2.  Update the relevant module (e.g., `executors.py` for executor comparisons).
-3.  Ensure that both the MCP tool and the CLI command (which usually calls these modules) still work correctly.
+    # Custom compaction logic for CLI/MCP output
+    def to_compact_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.stage_id,
+            "duration": self.duration_ms,
+            ...
+        }
+```
+
+---
+
+## 💡 Prompt Engineering
+
+Prompts guide AI agents on how to use tools effectively.
+
+```python
+@mcp.prompt()
+def investigate_skew(app_id: str) -> str:
+    return f"""Analyze shuffle skew for {app_id}.
+    1. Run analyze_shuffle_skew("{app_id}")
+    2. Check the stages with extreme ratios (> 2.0)
+    3. Investigate the partitioning strategy...
+    """
+```
+
+---
+
+## 🧪 Testing Strategy
+
+We use `unittest` with `patch` to mock Spark History Server responses.
+
+### Mocking Example
+```python
+@patch("requests.Session.request")
+def test_your_tool(self, mock_request):
+    # 1. Setup mock response
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "app-123", "name": "test"}
+    mock_request.return_value = mock_response
+
+    # 2. Call tool
+    result = get_application("app-123")
+
+    # 3. Assert
+    self.assertEqual(result["id"], "app-123")
+    mock_request.assert_called_once()
+```
+
+Refer to `tests/unit/test_tools.py` for comprehensive examples.
