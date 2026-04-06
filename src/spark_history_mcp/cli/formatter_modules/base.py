@@ -6,7 +6,7 @@ Contains the core OutputFormatter class and basic output methods.
 
 import json
 import sys
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type
 
 try:
     from rich.console import Console

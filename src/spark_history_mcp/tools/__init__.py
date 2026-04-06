@@ -2,8 +2,7 @@
 
 # Import all tools to ensure MCP registration
 # Application-level tools
-from ..core.app import mcp
-from .common import get_client_or_default, get_config
+from ..core.app import mcp  # noqa: F401
 from .analysis import (
     analyze_auto_scaling,
     analyze_failed_tasks,
@@ -20,6 +19,7 @@ from .application import (
 
 # Cleanup tools
 from .cleanup import delete_event_logs
+from .common import get_client_or_default, get_config
 
 # Comparison tools (MCP-exposed and internal helpers)
 from .comparison_modules.core import (
@@ -41,6 +41,10 @@ from .comparison_modules.stages import (
     compare_stages,
     find_top_stage_differences,
 )
+from .comparison_modules.utils import (  # noqa: F401
+    _compare_environments,
+    _compare_sql_execution_plans,
+)
 
 # Executor and resource tools
 from .executors import (
@@ -57,11 +61,6 @@ from .jobs_stages import (
     get_stage_task_summary,
     list_jobs,
     list_stages,
-)
-
-from .comparison_modules.utils import (
-    _compare_environments,
-    _compare_sql_execution_plans,
 )
 
 # Make tools available at package level

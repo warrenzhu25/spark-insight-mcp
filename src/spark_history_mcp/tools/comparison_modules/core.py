@@ -25,13 +25,13 @@ from ..recommendations import (
     prioritize as prioritize_recs,
 )
 from ..schema import CompareAppPerformanceOutput, validate_output
-from .environment import compare_app_stages_aggregated
 from .constants import (
     RECOMMENDATION_CORE_RATIO_THRESHOLD,
     RECOMMENDATION_MEMORY_RATIO_THRESHOLD,
     SIGNIFICANCE_THRESHOLD,
     SIMILARITY_THRESHOLD,
 )
+from .environment import compare_app_stages_aggregated
 from .utils import (
     resolve_client,
     sort_comparison_data,

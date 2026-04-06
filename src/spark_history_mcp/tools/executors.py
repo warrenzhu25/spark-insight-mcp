@@ -5,7 +5,6 @@ This module contains tools for retrieving and analyzing Spark executor
 information, resource allocation, and utilization patterns.
 """
 
-import statistics
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
@@ -153,7 +152,7 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
     if timeline_result:
         summary["peak_executors"] = timeline_result["summary"]["peak_executor_count"]
         summary["average_executors"] = round(timeline_result["summary"]["avg_executor_count"], 1)
-        
+
         peak = summary["peak_executors"]
         avg = summary["average_executors"]
         utilization_efficiency = (avg / peak * 100) if peak > 0 else 0
@@ -164,7 +163,7 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
         app_attempt = app.attempts[0]
         start_time = app_attempt.start_time
         end_time = app_attempt.end_time or (start_time + timedelta(hours=24))
-        
+
         app_end_time_ms = end_time.timestamp() * 1000
         total_executor_time_ms = 0
         executor_cores = app.cores_per_executor or 1

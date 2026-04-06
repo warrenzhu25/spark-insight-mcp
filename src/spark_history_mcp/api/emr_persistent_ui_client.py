@@ -16,6 +16,7 @@ import requests
 from botocore.exceptions import ClientError
 
 from spark_history_mcp.config.config import ServerConfig
+
 from .base_client import BaseApiClient
 
 # Configure logging

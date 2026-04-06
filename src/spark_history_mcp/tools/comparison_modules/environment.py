@@ -10,13 +10,13 @@ from typing import Any, Dict, Optional
 
 from ...core.app import mcp
 from .. import fetchers as fetcher_tools
+from .constants import SIGNIFICANCE_THRESHOLD
 from .utils import (
     _compare_environments,
     calculate_safe_ratio,
     filter_significant_metrics,
     sort_comparison_data,
 )
-from .constants import SIGNIFICANCE_THRESHOLD
 
 logger = logging.getLogger(__name__)
 

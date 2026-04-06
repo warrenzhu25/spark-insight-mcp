@@ -4,7 +4,7 @@ Comparison result formatting methods for Spark History Server MCP CLI.
 Contains detection methods and standalone functions for formatting comparison results.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
     from rich.console import Console
@@ -1583,8 +1583,8 @@ def format_standardized_comparison_result(formatter, data: Dict[str, Any], title
 def output_table_metrics(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
     """Format standardized metrics result as a simple table using tabulate."""
     if title:
-        print(f"\n{title}")
-        print("-" * len(title))
+        console.print(f"\n{title}")
+        console.print("-" * len(title))
 
     rows = []
     for key, value in data.items():
@@ -1603,14 +1603,14 @@ def output_table_metrics(formatter, data: Dict[str, Any], title: Optional[str] =
 
         rows.append([key, formatted_value])
 
-    print(tabulate(rows, headers=["Metric", "Value"], tablefmt="grid"))
+    console.print(tabulate(rows, headers=["Metric", "Value"], tablefmt="grid"))
 
 
 def output_table_comparison(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
     """Format standardized comparison result as a comparison table using tabulate."""
     if title:
-        print(f"\n{title}")
-        print("-" * len(title))
+        console.print(f"\n{title}")
+        console.print("-" * len(title))
 
     rows = []
     for key, value in data.items():
@@ -1647,9 +1647,9 @@ def output_table_comparison(formatter, data: Dict[str, Any], title: Optional[str
             # Fallback for non-tuple values
             rows.append([key, str(value), "N/A", "N/A"])
 
-    print(
+    console.print(
         tabulate(
-            rows, headers=["Metric", "Left", "Right", "Change %"], tablefmt="grid"
+            rows, headers=["Metric", "App 1", "App 2", "Change"], tablefmt="grid"
         )
     )
 

@@ -22,7 +22,6 @@ from ..config.config import (
     DEFAULT_SPILL_THRESHOLD_BYTES,
 )
 from ..core.app import mcp
-from . import common
 from .executors import get_executor_summary
 from .fetchers import fetch_executors, fetch_stage_task_summary, fetch_stages
 from .jobs_stages import _find_slowest_jobs, _find_slowest_stages
@@ -49,8 +48,6 @@ def get_job_bottlenecks(
     Returns:
         Dictionary containing identified bottlenecks and recommendations
     """
-    cfg = common.get_config()
-
     # Get slowest stages (non-compact to get full objects)
     slowest_stages = _find_slowest_stages(app_id, server, False, top_n, compact=False)
 

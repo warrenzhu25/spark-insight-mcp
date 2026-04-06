@@ -20,8 +20,8 @@ from spark_history_mcp.tools import (
     compare_stages,
     get_application,
 )
-from spark_history_mcp.tools.common import get_client_or_default
 from spark_history_mcp.tools.application import list_applications
+from spark_history_mcp.tools.common import get_client_or_default
 from spark_history_mcp.tools.jobs_stages import (
     _find_slowest_jobs,
     _find_slowest_sql,

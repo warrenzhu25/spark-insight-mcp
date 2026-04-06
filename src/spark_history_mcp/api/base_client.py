@@ -2,19 +2,22 @@
 Base client for Spark History Server API.
 """
 
-import requests
 from typing import Any, Dict, Optional
+
+import requests
+
 from spark_history_mcp.config.config import ServerConfig
+
 
 class BaseApiClient:
     """Base class for API clients handling sessions and requests."""
-    
+
     def __init__(self, server_config: ServerConfig):
         self.config = server_config
         self.timeout = server_config.timeout
         self.verify_ssl = server_config.verify_ssl
         self.session = requests.Session()
-        
+
         # Configure proxies if available
         if hasattr(server_config, "use_proxy") and server_config.use_proxy:
             proxy_url = server_config.proxy_url
@@ -31,7 +34,7 @@ class BaseApiClient:
         """Make an HTTP request using the session."""
         if headers is None:
             headers = {}
-        
+
         # Default JSON accept header
         if "Accept" not in headers:
             headers["Accept"] = "application/json"

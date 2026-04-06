@@ -74,7 +74,7 @@ if CLI_AVAILABLE:
                 "Install it with: uv add prompt_toolkit",
                 err=True,
             )
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
         # Lazy import to avoid circular import at module load time
         from spark_history_mcp.cli.main import cli as root_cli

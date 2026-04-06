@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, Optional, Sequence, Set
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
@@ -947,7 +947,7 @@ class ApplicationEnvironmentInfo(BaseModel):
 
     def to_compact_dict(self) -> Dict[str, Any]:
         """Return a compact dictionary representation."""
-        from ..tools.common import _summarize_kv, get_config, _SPARK_PROPERTY_KEYS
+        from ..tools.common import _SPARK_PROPERTY_KEYS, _summarize_kv, get_config
 
         cfg = get_config()
         return {

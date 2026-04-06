@@ -6,14 +6,12 @@ including performance metrics, SQL queries, and stage dependencies.
 """
 
 import heapq
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from ..core.app import mcp
 from ..models.spark_types import (
-    ExecutionData,
     JobExecutionStatus,
     SQLExecutionStatus,
-    StageData,
     TaskMetricDistributions,
 )
 from . import common
@@ -233,7 +231,7 @@ def _find_slowest_sql(
 ) -> Any:
     """Internal helper: Get the N slowest SQL queries for a Spark application."""
     cfg = common.get_config()
-    
+
     all_executions = fetch_sql_pages(
         app_id=app_id,
         server=server,

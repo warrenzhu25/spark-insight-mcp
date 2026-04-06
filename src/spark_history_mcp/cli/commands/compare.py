@@ -16,7 +16,9 @@ from spark_history_mcp.cli._compat import (
 )
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli._compat import create_tool_context as create_mock_context  # noqa: F401 re-exported for tests
+    from spark_history_mcp.cli._compat import (
+        create_tool_context as create_mock_context,  # noqa: F401 re-exported for tests
+    )
     from spark_history_mcp.cli.commands.apps import _is_interactive
     from spark_history_mcp.cli.formatter_modules import OutputFormatter
     from spark_history_mcp.cli.session import (

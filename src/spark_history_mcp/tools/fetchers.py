@@ -24,7 +24,7 @@ from ..models.spark_types import (
     StageStatus,
 )
 from . import common
-from .common import get_active_mcp_context, get_client, get_server_key
+from .common import get_active_mcp_context, get_server_key
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ _CACHE: Dict[Tuple[Any, ...], Any] = {}
 def _resolve_client(server: Optional[str]):
     ctx = get_active_mcp_context()
     client = common.get_client_or_default(ctx, server)
-    
+
     is_mock = isinstance(client, mock.Mock)
     use_cache = ctx is not None and not is_mock
     use_disk = not is_mock

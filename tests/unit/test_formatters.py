@@ -1,10 +1,10 @@
+from spark_history_mcp.cli.formatter_modules import OutputFormatter
 from spark_history_mcp.cli.formatter_modules import comparison as comparison_module
 from spark_history_mcp.cli.formatter_modules.comparison import (
     format_environment_comparison_result,
     format_performance_metrics,
     format_top_metrics_differences,
 )
-from spark_history_mcp.cli.formatter_modules import OutputFormatter
 
 
 class DummyConsole:

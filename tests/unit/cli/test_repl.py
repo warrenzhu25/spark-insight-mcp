@@ -15,7 +15,7 @@ except ImportError:
     CLI_AVAILABLE = False
 
 if CLI_AVAILABLE:
-    from spark_history_mcp.cli.commands.repl import ALIASES, _build_completions, repl
+    from spark_history_mcp.cli.commands.repl import ALIASES, _build_completions
     from spark_history_mcp.cli.main import cli
 
 
@@ -36,8 +36,8 @@ def _invoke_repl(runner, inputs, extra_args=None, obj=None):
     extra_args = extra_args or []
     with patch("prompt_toolkit.history.FileHistory"), patch(
         "prompt_toolkit.PromptSession"
-    ) as MockSession:
-        MockSession.return_value = _make_session(inputs)
+    ) as mock_prompt_session:
+        mock_prompt_session.return_value = _make_session(inputs)
         return runner.invoke(cli, ["repl"] + extra_args, obj=obj or {})
 
 
@@ -165,10 +165,10 @@ class TestReplExit:
         runner = CliRunner()
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession:
+        ) as mock_prompt_session:
             mock_session = MagicMock()
             mock_session.prompt.side_effect = EOFError()
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             result = runner.invoke(cli, ["repl"], obj={})
         assert result.exit_code == 0
         assert "Bye!" in result.output
@@ -178,11 +178,11 @@ class TestReplExit:
         runner = CliRunner()
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession:
+        ) as mock_prompt_session:
             mock_session = MagicMock()
             # First call raises Ctrl+C, second call exits
             mock_session.prompt.side_effect = [KeyboardInterrupt(), "exit"]
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             result = runner.invoke(cli, ["repl"], obj={})
         assert result.exit_code == 0
         assert "Bye!" in result.output
@@ -231,10 +231,10 @@ class TestReplBuiltins:
         runner = CliRunner()
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession:
+        ) as mock_prompt_session:
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["exit"]
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             runner.invoke(cli, ["repl"], obj={})
         # Verify prompt() was called with "spark> "
         mock_session.prompt.assert_called_with("spark> ")
@@ -258,13 +258,13 @@ class TestAliasExpansion:
 
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession, patch(
+        ) as mock_prompt_session, patch(
             "spark_history_mcp.cli.main.cli"
         ) as mock_root:
             mock_root.main.side_effect = fake_main
             mock_session = MagicMock()
             mock_session.prompt.side_effect = [alias_input, EOFError()]
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             runner.invoke(cli, ["repl"], obj={})
 
         return captured.get("args", [])
@@ -349,11 +349,11 @@ class TestReplErrorHandling:
         runner = CliRunner()
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession, patch("spark_history_mcp.cli.main.cli") as mock_root:
+        ) as mock_prompt_session, patch("spark_history_mcp.cli.main.cli") as mock_root:
             mock_root.main.side_effect = click.exceptions.UsageError("bad args")
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["apps list", "exit"]
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             result = runner.invoke(cli, ["repl"], obj={})
         assert result.exit_code == 0
         assert "Usage error" in result.output
@@ -363,11 +363,11 @@ class TestReplErrorHandling:
         runner = CliRunner()
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession, patch("spark_history_mcp.cli.main.cli") as mock_root:
+        ) as mock_prompt_session, patch("spark_history_mcp.cli.main.cli") as mock_root:
             mock_root.main.side_effect = [RuntimeError("something went wrong"), None]
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["apps list", "exit"]
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             result = runner.invoke(cli, ["repl"], obj={})
         assert result.exit_code == 0
         assert "Error" in result.output
@@ -377,11 +377,11 @@ class TestReplErrorHandling:
         runner = CliRunner()
         with patch("prompt_toolkit.history.FileHistory"), patch(
             "prompt_toolkit.PromptSession"
-        ) as MockSession, patch("spark_history_mcp.cli.main.cli") as mock_root:
+        ) as mock_prompt_session, patch("spark_history_mcp.cli.main.cli") as mock_root:
             mock_root.main.side_effect = [SystemExit(0), None]
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["apps --help", "exit"]
-            MockSession.return_value = mock_session
+            mock_prompt_session.return_value = mock_session
             result = runner.invoke(cli, ["repl"], obj={})
         assert result.exit_code == 0
 

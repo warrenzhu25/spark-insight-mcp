@@ -14,7 +14,6 @@ from .. import matching as matching_tools
 from .constants import SIGNIFICANCE_THRESHOLD, SIMILARITY_THRESHOLD
 from .utils import calculate_stage_duration
 
-
 logger = logging.getLogger(__name__)
 
 
