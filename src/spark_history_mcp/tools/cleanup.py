@@ -8,7 +8,7 @@ for short-running or name-matched Spark applications.
 import fnmatch
 import logging
 import re
-import subprocess
+import subprocess  # nosec B404
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.app import mcp
@@ -66,7 +66,7 @@ def _gcs_list_files(gcs_dir: str) -> List[str]:
     """
     gcs_dir = gcs_dir.rstrip("/")
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(  # nosec B603, B607  # noqa: S603
             ["gcloud", "storage", "ls", f"{gcs_dir}/"],  # noqa: S607
             capture_output=True,
             text=True,
@@ -102,7 +102,7 @@ def _gcs_delete_files(file_paths: List[str]) -> Tuple[int, List[str]]:
     for i in range(0, len(file_paths), _GCS_DELETE_BATCH_SIZE):
         batch = file_paths[i : i + _GCS_DELETE_BATCH_SIZE]
         try:
-            result = subprocess.run(  # noqa: S603, S607
+            result = subprocess.run(  # nosec B603, B607  # noqa: S603, S607
                 ["gcloud", "storage", "rm"] + batch,
                 capture_output=True,
                 text=True,

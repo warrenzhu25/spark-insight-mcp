@@ -151,7 +151,9 @@ def get_executor_summary(app_id: str, server: Optional[str] = None):
 
     if timeline_result:
         summary["peak_executors"] = timeline_result["summary"]["peak_executor_count"]
-        summary["average_executors"] = round(timeline_result["summary"]["avg_executor_count"], 1)
+        summary["average_executors"] = round(
+            timeline_result["summary"]["avg_executor_count"], 1
+        )
 
         peak = summary["peak_executors"]
         avg = summary["average_executors"]

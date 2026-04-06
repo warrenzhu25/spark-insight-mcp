@@ -127,9 +127,13 @@ class ApplicationInfo(BaseModel):
             "attempts": len(self.attempts),
             "latest_attempt": {
                 "attempt_id": latest.attempt_id,
-                "start_time": latest.start_time.isoformat() if latest.start_time else None,
+                "start_time": latest.start_time.isoformat()
+                if latest.start_time
+                else None,
                 "end_time": latest.end_time.isoformat() if latest.end_time else None,
-                "last_updated": latest.last_updated.isoformat() if latest.last_updated else None,
+                "last_updated": latest.last_updated.isoformat()
+                if latest.last_updated
+                else None,
                 "duration_ms": latest.duration,
                 "spark_user": latest.spark_user,
                 "spark_version": latest.app_spark_version,
@@ -345,7 +349,9 @@ class JobData(BaseModel):
     @property
     def duration_ms(self) -> Optional[int]:
         if self.submission_time and self.completion_time:
-            return int((self.completion_time - self.submission_time).total_seconds() * 1000)
+            return int(
+                (self.completion_time - self.submission_time).total_seconds() * 1000
+            )
         return None
 
     def to_compact_dict(self) -> Dict[str, Any]:
@@ -354,8 +360,12 @@ class JobData(BaseModel):
             "job_id": self.job_id,
             "name": self.name,
             "status": self.status,
-            "submission_time": self.submission_time.isoformat() if self.submission_time else None,
-            "completion_time": self.completion_time.isoformat() if self.completion_time else None,
+            "submission_time": self.submission_time.isoformat()
+            if self.submission_time
+            else None,
+            "completion_time": self.completion_time.isoformat()
+            if self.completion_time
+            else None,
             "duration_ms": self.duration_ms,
             "num_tasks": self.num_tasks,
             "num_active_tasks": self.num_active_tasks,
@@ -553,7 +563,10 @@ class StageData(BaseModel):
     @property
     def duration_ms(self) -> Optional[int]:
         if self.first_task_launched_time and self.completion_time:
-            return int((self.completion_time - self.first_task_launched_time).total_seconds() * 1000)
+            return int(
+                (self.completion_time - self.first_task_launched_time).total_seconds()
+                * 1000
+            )
         return None
 
     def to_compact_dict(self) -> Dict[str, Any]:
@@ -563,9 +576,15 @@ class StageData(BaseModel):
             "attempt_id": self.attempt_id,
             "name": self.name,
             "status": self.status,
-            "submission_time": self.submission_time.isoformat() if self.submission_time else None,
-            "first_task_launched_time": self.first_task_launched_time.isoformat() if self.first_task_launched_time else None,
-            "completion_time": self.completion_time.isoformat() if self.completion_time else None,
+            "submission_time": self.submission_time.isoformat()
+            if self.submission_time
+            else None,
+            "first_task_launched_time": self.first_task_launched_time.isoformat()
+            if self.first_task_launched_time
+            else None,
+            "completion_time": self.completion_time.isoformat()
+            if self.completion_time
+            else None,
             "duration_ms": self.duration_ms,
             "num_tasks": self.num_tasks,
             "num_complete_tasks": self.num_complete_tasks,

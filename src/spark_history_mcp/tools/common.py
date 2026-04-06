@@ -271,6 +271,7 @@ _SPARK_PROPERTY_KEYS = [
     "spark.serializer",
 ]
 
+
 def bytes_to_gb(value: float | int) -> float:
     if not value:
         return 0.0

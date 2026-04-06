@@ -96,7 +96,9 @@ if CLI_AVAILABLE:
             complete_while_typing=True,
         )
 
-        click.echo("Spark REPL — type 'help' for commands, 'exit' to quit, Tab to autocomplete\n")
+        click.echo(
+            "Spark REPL — type 'help' for commands, 'exit' to quit, Tab to autocomplete\n"
+        )
 
         # Preserve the parent context object so commands inherit config/debug/quiet
         obj = dict(ctx.obj) if ctx.obj else {}

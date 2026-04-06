@@ -47,7 +47,9 @@ def compare_app_environments(
         env1 = fetcher_tools.fetch_env(app_id=app_id1, server=server)
         env2 = fetcher_tools.fetch_env(app_id=app_id2, server=server)
 
-        result = _compare_environments(env1, env2, filter_auto_generated=filter_auto_generated)
+        result = _compare_environments(
+            env1, env2, filter_auto_generated=filter_auto_generated
+        )
         result["applications"] = {
             "app1": {"id": app_id1},
             "app2": {"id": app_id2},

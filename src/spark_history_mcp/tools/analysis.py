@@ -63,10 +63,7 @@ def get_job_bottlenecks(
     high_spill_stages = []
     spill_threshold = DEFAULT_SPILL_THRESHOLD_BYTES
     for stage in all_stages:
-        if (
-            stage.memory_bytes_spilled
-            and stage.memory_bytes_spilled > spill_threshold
-        ):
+        if stage.memory_bytes_spilled and stage.memory_bytes_spilled > spill_threshold:
             high_spill_stages.append(
                 {
                     "stage_id": stage.stage_id,
@@ -94,13 +91,9 @@ def get_job_bottlenecks(
         "application_id": app_id,
         "performance_bottlenecks": {
             "slowest_stages": [
-                stage.to_compact_dict()
-                for stage in slowest_stages[:top_n]
+                stage.to_compact_dict() for stage in slowest_stages[:top_n]
             ],
-            "slowest_jobs": [
-                job.to_compact_dict()
-                for job in slowest_jobs[:top_n]
-            ],
+            "slowest_jobs": [job.to_compact_dict() for job in slowest_jobs[:top_n]],
         },
         "resource_bottlenecks": {
             "memory_spill_stages": high_spill_stages[:top_n],
@@ -513,7 +506,9 @@ def analyze_failed_tasks(
         recommendations.append(
             {
                 "type": "reliability",
-                "priority": "high" if avg_failure_rate > DEFAULT_FAILURE_RATE_HIGH_THRESHOLD else "medium",
+                "priority": "high"
+                if avg_failure_rate > DEFAULT_FAILURE_RATE_HIGH_THRESHOLD
+                else "medium",
                 "issue": f"Task failures detected in {len(failed_stages)} stages (avg failure rate: {avg_failure_rate:.1f}%)",
                 "suggestion": "Investigate task failure logs and consider increasing task retry settings",
             }
@@ -527,7 +522,10 @@ def analyze_failed_tasks(
             host_failures[host] = host_failures.get(host, 0) + executor["failed_tasks"]
 
         max_host_failures = max(host_failures.values()) if host_failures else 0
-        if max_host_failures > total_failed_tasks * DEFAULT_HOST_CONCENTRATION_THRESHOLD:
+        if (
+            max_host_failures
+            > total_failed_tasks * DEFAULT_HOST_CONCENTRATION_THRESHOLD
+        ):
             recommendations.append(
                 {
                     "type": "infrastructure",

@@ -65,9 +65,7 @@ def resolve_app_identifier(identifier: str) -> str:
     return identifier
 
 
-def resolve_app_by_name(
-    client, identifier: str, server: Optional[str] = None
-) -> str:
+def resolve_app_by_name(client, identifier: str, server: Optional[str] = None) -> str:
     """
     Resolve application name to ID if needed, return ID.
 

@@ -75,13 +75,13 @@ def analyze_data(app_id: str, server: Optional[str] = None) -> Dict[str, Any]:
     """Description for AI agents."""
     # 1. Resolve client/context
     client = get_client_or_default(server_name=server)
-    
+
     # 2. Fetch data via fetchers
     data = fetch_some_data(app_id, server=server)
-    
+
     # 3. Process logic
     results = complex_calculation(data)
-    
+
     # 4. Return as Dict (for MCP compatibility)
     return {"status": "success", "results": results}
 ```
@@ -122,7 +122,7 @@ We use Pydantic extensively for data validation and transformation.
 class StageData(BaseModel):
     stage_id: int = Field(alias="stageId")
     status: StageStatus
-    
+
     # Computed fields for calculated metrics
     @computed_field
     @property

@@ -35,7 +35,9 @@ class FormatterRegistry:
         """Register a formatter for a specific data type."""
         self.type_formatters[data_type] = formatter_func
 
-    def register_pattern(self, predicate: Callable[[Any], bool], formatter_func: Callable):
+    def register_pattern(
+        self, predicate: Callable[[Any], bool], formatter_func: Callable
+    ):
         """Register a formatter for data matching a predicate."""
         self.pattern_formatters.append((predicate, formatter_func))
 
@@ -174,9 +176,7 @@ class OutputFormatter(FormatterUtilsMixin):
 
         # Create a proxy for the monolithic formatter to handle the request
         # We need to copy state over
-        proxy = MonolithicFormatter(
-            self.format_type, self.quiet, self.show_all_metrics
-        )
+        proxy = MonolithicFormatter(self.format_type, self.quiet, self.show_all_metrics)
         proxy.last_app_mapping = self.last_app_mapping
         proxy._output_human(data, None)  # title already printed
         self.last_app_mapping = proxy.last_app_mapping

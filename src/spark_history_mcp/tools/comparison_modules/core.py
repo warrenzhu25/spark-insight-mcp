@@ -433,9 +433,15 @@ def _generate_basic_recommendations(app1, app2) -> list:
     # Resource allocation differences
     if app1.cores_granted and app2.cores_granted:
         core_ratio = app2.cores_granted / app1.cores_granted
-        if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD or core_ratio < (1 / RECOMMENDATION_CORE_RATIO_THRESHOLD):
-            slower_app = "app1" if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD else "app2"
-            faster_app = "app2" if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD else "app1"
+        if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD or core_ratio < (
+            1 / RECOMMENDATION_CORE_RATIO_THRESHOLD
+        ):
+            slower_app = (
+                "app1" if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD else "app2"
+            )
+            faster_app = (
+                "app2" if core_ratio > RECOMMENDATION_CORE_RATIO_THRESHOLD else "app1"
+            )
             basic_recommendations.append(
                 {
                     "type": "resource_allocation",
@@ -448,7 +454,9 @@ def _generate_basic_recommendations(app1, app2) -> list:
     # Memory allocation differences
     if app1.memory_per_executor_mb and app2.memory_per_executor_mb:
         memory_ratio = app2.memory_per_executor_mb / app1.memory_per_executor_mb
-        if memory_ratio > RECOMMENDATION_MEMORY_RATIO_THRESHOLD or memory_ratio < (1 / RECOMMENDATION_MEMORY_RATIO_THRESHOLD):
+        if memory_ratio > RECOMMENDATION_MEMORY_RATIO_THRESHOLD or memory_ratio < (
+            1 / RECOMMENDATION_MEMORY_RATIO_THRESHOLD
+        ):
             basic_recommendations.append(
                 {
                     "type": "resource_allocation",

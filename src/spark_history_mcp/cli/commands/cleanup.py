@@ -94,7 +94,9 @@ if CLI_AVAILABLE:
                     limit=limit,
                     dry_run=dry_run,
                 )
-                title = "Event Log Cleanup (DRY RUN)" if dry_run else "Event Log Cleanup"
+                title = (
+                    "Event Log Cleanup (DRY RUN)" if dry_run else "Event Log Cleanup"
+                )
                 formatter.output(result, title)
         except Exception as err:
             raise click.ClickException(f"Error cleaning up event logs: {err}") from err

@@ -70,7 +70,10 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import get_application_insights
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 insights_data = get_application_insights(
                     app_id=resolved_id,
                     server=server,
@@ -79,7 +82,9 @@ if CLI_AVAILABLE:
                     include_failed_tasks=include_failed_tasks,
                     include_executor_utilization=include_executor_utilization,
                 )
-                formatter.output(insights_data, f"Application Insights for {resolved_id}")
+                formatter.output(
+                    insights_data, f"Application Insights for {resolved_id}"
+                )
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing application {app_id}: {err}"
@@ -108,11 +113,16 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import get_job_bottlenecks
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 bottlenecks_data = get_job_bottlenecks(
                     app_id=resolved_id, server=server, top_n=top_n
                 )
-                formatter.output(bottlenecks_data, f"Performance Bottlenecks for {resolved_id}")
+                formatter.output(
+                    bottlenecks_data, f"Performance Bottlenecks for {resolved_id}"
+                )
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing bottlenecks for {app_id}: {err}"
@@ -148,13 +158,18 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import analyze_auto_scaling
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 scaling_data = analyze_auto_scaling(
                     app_id=resolved_id,
                     server=server,
                     target_stage_duration_minutes=target_duration,
                 )
-                formatter.output(scaling_data, f"Auto-Scaling Analysis for {resolved_id}")
+                formatter.output(
+                    scaling_data, f"Auto-Scaling Analysis for {resolved_id}"
+                )
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing auto-scaling for {app_id}: {err}"
@@ -197,7 +212,10 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import analyze_shuffle_skew
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 skew_data = analyze_shuffle_skew(
                     app_id=resolved_id,
                     server=server,
@@ -245,7 +263,10 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import find_slowest
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 slowest_data = find_slowest(
                     app_id=resolved_id,
                     type=analysis_type,
@@ -253,7 +274,9 @@ if CLI_AVAILABLE:
                     n=top_n,
                     compact=False,
                 )
-                formatter.output(slowest_data, f"Slowest {analysis_type.title()} for {resolved_id}")
+                formatter.output(
+                    slowest_data, f"Slowest {analysis_type.title()} for {resolved_id}"
+                )
         except Exception as err:
             raise click.ClickException(
                 f"Error analyzing slowest {analysis_type} for {app_id}: {err}"

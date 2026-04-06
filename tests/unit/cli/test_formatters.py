@@ -391,15 +391,24 @@ class TestMakeComparisonTable:
         from spark_history_mcp.cli.formatter_modules.comparison import (
             format_stage_differences,
         )
+
         fmt = OutputFormatter(format_type="human")
-        format_stage_differences(fmt, {
-            "top_stage_differences": [{
-                "stage_name": "some stage",
-                "time_difference": {"percentage": 10, "slower_application": "app2"},
-                "app1_stage": {"stage_id": 1, "duration_seconds": 5.0},
-                "app2_stage": {"stage_id": 2, "duration_seconds": 6.0},
-            }]
-        })
+        format_stage_differences(
+            fmt,
+            {
+                "top_stage_differences": [
+                    {
+                        "stage_name": "some stage",
+                        "time_difference": {
+                            "percentage": 10,
+                            "slower_application": "app2",
+                        },
+                        "app1_stage": {"stage_id": 1, "duration_seconds": 5.0},
+                        "app2_stage": {"stage_id": 2, "duration_seconds": 6.0},
+                    }
+                ]
+            },
+        )
         out = capsys.readouterr().out
         assert "App 1" in out
         assert "App 2" in out

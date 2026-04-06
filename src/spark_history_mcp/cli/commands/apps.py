@@ -273,7 +273,10 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import get_application
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 app = get_application(resolved_id, server=server, compact=False)
                 formatter.output(app, f"Application {resolved_id}")
         except Exception as err:
@@ -302,7 +305,10 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import list_jobs as mcp_list_jobs
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 params = {"app_id": resolved_id, "server": server}
                 if status:
                     params["status"] = list(status)
@@ -334,7 +340,10 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import list_stages as mcp_list_stages
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_id) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_id) as (
+                formatter,
+                resolved_id,
+            ):
                 params = {"app_id": resolved_id, "server": server}
                 if status:
                     params["status"] = list(status)
@@ -372,10 +381,15 @@ if CLI_AVAILABLE:
             from spark_history_mcp.tools import get_app_summary
 
             client = get_spark_client(ctx.obj["config_path"], server)
-            with tool_runner(ctx, client, server, output_format, app_identifier) as (formatter, resolved_id):
+            with tool_runner(ctx, client, server, output_format, app_identifier) as (
+                formatter,
+                resolved_id,
+            ):
                 summary_data = get_app_summary(resolved_id, server=server)
                 app_name = summary_data.get("application_name", "Unknown Application")
-                formatter.output(summary_data, f"Application Summary - {app_name} ({resolved_id})")
+                formatter.output(
+                    summary_data, f"Application Summary - {app_name} ({resolved_id})"
+                )
         except Exception as err:
             raise click.ClickException(
                 f"Error getting summary for application {app_identifier}: {err}"

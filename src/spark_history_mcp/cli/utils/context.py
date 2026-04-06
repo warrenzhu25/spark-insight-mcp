@@ -81,7 +81,9 @@ def tool_runner(
     from spark_history_mcp.cli.utils.resolution import canonicalize_app_id
 
     formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
-    resolved_id = canonicalize_app_id(app_id, client, server) if app_id is not None else None
+    resolved_id = (
+        canonicalize_app_id(app_id, client, server) if app_id is not None else None
+    )
 
     import spark_history_mcp.tools as tools_module
 

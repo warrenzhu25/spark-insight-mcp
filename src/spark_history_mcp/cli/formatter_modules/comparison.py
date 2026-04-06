@@ -177,12 +177,8 @@ def format_comparison_header(formatter, applications: Dict[str, Any]) -> None:
         app1 = applications["app1"]
         app2 = applications["app2"]
 
-        content = (
-            f"[bold]App1:[/bold] {app1.get('name', app1.get('id', 'Unknown'))}\n"
-        )
-        content += (
-            f"[bold]App2:[/bold] {app2.get('name', app2.get('id', 'Unknown'))}"
-        )
+        content = f"[bold]App1:[/bold] {app1.get('name', app1.get('id', 'Unknown'))}\n"
+        content += f"[bold]App2:[/bold] {app2.get('name', app2.get('id', 'Unknown'))}"
 
         console.print(
             Panel(content, title="Performance Comparison", border_style="blue")
@@ -219,8 +215,7 @@ def format_executive_summary(formatter, data: Dict[str, Any]) -> None:
     if "stage_deep_dive" in data:
         stage_dive = data["stage_deep_dive"]
     elif (
-        "performance_comparison" in data
-        and "stages" in data["performance_comparison"]
+        "performance_comparison" in data and "stages" in data["performance_comparison"]
     ):
         stage_dive = data["performance_comparison"]["stages"]
 
@@ -238,17 +233,14 @@ def format_executive_summary(formatter, data: Dict[str, Any]) -> None:
                 count = sum(
                     1
                     for diff in differences
-                    if diff.get("time_difference", {}).get("absolute_seconds", 0)
-                    > 60
+                    if diff.get("time_difference", {}).get("absolute_seconds", 0) > 60
                 )
                 summary_items.append(
                     f"• Found {count} stages with >60s time difference"
                 )
 
     # Add recommendations summary - handle both old and new structure
-    recommendations = data.get("recommendations") or data.get(
-        "key_recommendations", []
-    )
+    recommendations = data.get("recommendations") or data.get("key_recommendations", [])
     if recommendations:
         rec_count = len(recommendations)
         if rec_count > 0:
@@ -258,9 +250,7 @@ def format_executive_summary(formatter, data: Dict[str, Any]) -> None:
 
     if summary_items:
         content = "\n".join(summary_items)
-        console.print(
-            Panel(content, title="Executive Summary", border_style="green")
-        )
+        console.print(Panel(content, title="Executive Summary", border_style="green"))
 
 
 def format_performance_metrics(formatter, overview: Dict[str, Any]) -> None:
@@ -284,9 +274,7 @@ def format_performance_metrics(formatter, overview: Dict[str, Any]) -> None:
             # Dynamically show key executor metrics for overview
             if formatter.show_all_metrics:
                 # Show all available metrics
-                all_metric_keys = set(app1_metrics.keys()) | set(
-                    app2_metrics.keys()
-                )
+                all_metric_keys = set(app1_metrics.keys()) | set(app2_metrics.keys())
                 key_executor_metrics = sorted(all_metric_keys)
             else:
                 # Show only key metrics
@@ -304,16 +292,16 @@ def format_performance_metrics(formatter, overview: Dict[str, Any]) -> None:
                     display_name = formatter._get_executor_metric_display_name(
                         metric_key
                     )
-                    formatter_func = formatter._get_executor_metric_formatter(metric_key)
+                    formatter_func = formatter._get_executor_metric_formatter(
+                        metric_key
+                    )
 
                     app1_display = formatter_func(app1_val)
                     app2_display = formatter_func(app2_val)
 
                     # Get change from executor comparison analysis
                     if metric_key == "completed_tasks":
-                        change = exec_data.get(
-                            "task_completion_ratio_change", "N/A"
-                        )
+                        change = exec_data.get("task_completion_ratio_change", "N/A")
                     else:
                         # Calculate change percentage for other metrics
                         if app1_val > 0:
@@ -368,9 +356,7 @@ def format_top_metrics_differences(formatter, metrics: List[Dict[str, Any]]) -> 
         right_val = item.get("right")
         percent_change = item.get("percent_change", 0)
 
-        if isinstance(left_val, (int, float)) and isinstance(
-            right_val, (int, float)
-        ):
+        if isinstance(left_val, (int, float)) and isinstance(right_val, (int, float)):
             if "bytes" in str(metric_key).lower():
                 left_formatted = formatter._format_bytes(left_val)
                 right_formatted = formatter._format_bytes(right_val)
@@ -479,16 +465,16 @@ def format_recommendations(formatter, recommendations: List[Dict[str, Any]]) -> 
 
     if content:
         console.print(
-            Panel(
-                "\n".join(content[:-1]), title="Recommendations", border_style="red"
-            )
+            Panel("\n".join(content[:-1]), title="Recommendations", border_style="red")
         )
 
 
 # Group B: Main Comparison Entry Points
 
 
-def format_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format comparison result data in a clean, focused way."""
     if not RICH_AVAILABLE:
         return
@@ -514,8 +500,7 @@ def format_comparison_result(formatter, data: Dict[str, Any], title: Optional[st
     if "stage_deep_dive" in data:
         format_stage_differences(formatter, data["stage_deep_dive"])
     elif (
-        "performance_comparison" in data
-        and "stages" in data["performance_comparison"]
+        "performance_comparison" in data and "stages" in data["performance_comparison"]
     ):
         # Handle new structure - stages are now nested under performance_comparison
         format_stage_differences(formatter, data["performance_comparison"]["stages"])
@@ -538,14 +523,14 @@ def format_comparison_result(formatter, data: Dict[str, Any], title: Optional[st
         format_timeline_comparison_result(formatter, data)
 
     # 7. Recommendations panel LAST
-    recommendations = data.get("recommendations") or data.get(
-        "key_recommendations", []
-    )
+    recommendations = data.get("recommendations") or data.get("key_recommendations", [])
     if recommendations:
         format_recommendations(formatter, recommendations)
 
 
-def format_stage_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_stage_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format stage comparison result in a structured, readable way."""
     if not RICH_AVAILABLE:
         return
@@ -713,9 +698,7 @@ def format_stage_summary(formatter, data: Dict[str, Any]) -> None:
 
     if summary_items:
         content = "\n".join(summary_items)
-        console.print(
-            Panel(content, title="Performance Summary", border_style="green")
-        )
+        console.print(Panel(content, title="Performance Summary", border_style="green"))
 
 
 def format_app_summary_diff(formatter, app_summary_diff: Dict[str, Any]) -> None:
@@ -819,7 +802,9 @@ def format_app_summary_diff(formatter, app_summary_diff: Dict[str, Any]) -> None
 # Group C: Specialized Comparisons
 
 
-def format_timeline_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_timeline_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format timeline comparison result in a structured, readable way."""
     if not RICH_AVAILABLE:
         return
@@ -852,9 +837,7 @@ def format_timeline_overview_header(formatter, data: Dict[str, Any]) -> None:
         else "Unknown"
     )
     app1_end = (
-        app1_info.get("end_time", "")[:19]
-        if app1_info.get("end_time")
-        else "Unknown"
+        app1_info.get("end_time", "")[:19] if app1_info.get("end_time") else "Unknown"
     )
     app2_start = (
         app2_info.get("start_time", "")[:19]
@@ -862,9 +845,7 @@ def format_timeline_overview_header(formatter, data: Dict[str, Any]) -> None:
         else "Unknown"
     )
     app2_end = (
-        app2_info.get("end_time", "")[:19]
-        if app2_info.get("end_time")
-        else "Unknown"
+        app2_info.get("end_time", "")[:19] if app2_info.get("end_time") else "Unknown"
     )
 
     # Calculate performance difference
@@ -874,9 +855,7 @@ def format_timeline_overview_header(formatter, data: Dict[str, Any]) -> None:
         if duration_diff > 0:
             perf_text = f"App2 is {duration_diff:.1f}s ({perf_pct:.1f}%) faster"
         else:
-            perf_text = (
-                f"App1 is {abs(duration_diff):.1f}s ({perf_pct:.1f}%) faster"
-            )
+            perf_text = f"App1 is {abs(duration_diff):.1f}s ({perf_pct:.1f}%) faster"
     else:
         perf_text = "Performance comparison unavailable"
 
@@ -926,9 +905,7 @@ def format_timeline_intervals_table(formatter, data: Dict[str, Any]) -> None:
         app2_execs = interval_data.get("app2", {}).get("executor_count", 0)
         diff = interval_data.get("differences", {}).get("executor_count_diff", 0)
 
-        diff_display = (
-            f"+{diff}" if diff > 0 else str(diff) if diff != 0 else "Same"
-        )
+        diff_display = f"+{diff}" if diff > 0 else str(diff) if diff != 0 else "Same"
 
         table.add_row(
             interval, time_display, str(app1_execs), str(app2_execs), diff_display
@@ -996,9 +973,7 @@ def format_timeline_summary(formatter, data: Dict[str, Any]) -> None:
     time_diff = perf_improvement.get("time_difference_seconds", 0)
     if time_diff != 0:
         if time_diff > 0:
-            summary_items.append(
-                f"• App2 completed {time_diff:.1f}s faster than App1"
-            )
+            summary_items.append(f"• App2 completed {time_diff:.1f}s faster than App1")
         else:
             summary_items.append(
                 f"• App1 completed {abs(time_diff):.1f}s faster than App2"
@@ -1007,9 +982,7 @@ def format_timeline_summary(formatter, data: Dict[str, Any]) -> None:
     # Resource usage
     max_diff = summary.get("max_executor_count_difference", 0)
     if max_diff == 0:
-        summary_items.append(
-            "• Both applications used identical peak executor counts"
-        )
+        summary_items.append("• Both applications used identical peak executor counts")
     else:
         summary_items.append(f"• Peak executor difference: {max_diff}")
 
@@ -1026,7 +999,9 @@ def format_timeline_summary(formatter, data: Dict[str, Any]) -> None:
         )
 
 
-def format_executor_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_executor_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format executor comparison with clean header and performance table."""
     if not RICH_AVAILABLE:
         return
@@ -1086,9 +1061,7 @@ def format_executor_comparison_result(formatter, data: Dict[str, Any], title: Op
     exec_comp = data.get("executor_comparison", {})
     if "task_completion_ratio_change" in exec_comp:
         change = exec_comp["task_completion_ratio_change"]
-        table.add_row(
-            "Task Completion Efficiency", "Baseline", "Comparison", change
-        )
+        table.add_row("Task Completion Efficiency", "Baseline", "Comparison", change)
 
     # Add efficiency ratios
     eff_ratios = data.get("efficiency_ratios", {})
@@ -1105,7 +1078,9 @@ def format_executor_comparison_result(formatter, data: Dict[str, Any], title: Op
         console.print(table)
 
 
-def format_job_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_job_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format job comparison with timing and success metrics."""
     if not RICH_AVAILABLE:
         return
@@ -1172,9 +1147,7 @@ def format_job_comparison_result(formatter, data: Dict[str, Any], title: Optiona
             if app1_val > 0:
                 change_pct = ((app2_val - app1_val) / app1_val) * 100
                 change = (
-                    f"+{change_pct:.1f}%"
-                    if change_pct >= 0
-                    else f"{change_pct:.1f}%"
+                    f"+{change_pct:.1f}%" if change_pct >= 0 else f"{change_pct:.1f}%"
                 )
             else:
                 change = "N/A"
@@ -1207,7 +1180,9 @@ def format_job_comparison_result(formatter, data: Dict[str, Any], title: Optiona
         console.print(table)
 
 
-def format_aggregated_stage_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_aggregated_stage_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format aggregated stage metrics comprehensively."""
     if not RICH_AVAILABLE:
         return
@@ -1294,9 +1269,7 @@ def format_aggregated_stage_comparison_result(formatter, data: Dict[str, Any], t
                 app2_val, (int, float)
             ):
                 if max(abs(app1_val), 0) > 0:
-                    change_pct = (
-                        (app2_val - app1_val) / max(abs(app1_val), 1)
-                    ) * 100
+                    change_pct = ((app2_val - app1_val) / max(abs(app1_val), 1)) * 100
                     change_str = f"{change_pct:+.1f}%"
 
             table.add_row(display_name, app1_display, app2_display, change_str)
@@ -1310,12 +1283,14 @@ def format_aggregated_stage_comparison_result(formatter, data: Dict[str, Any], t
                 )
                 app1_val = app1_metrics[metric_key]
                 app2_val = app2_metrics[metric_key]
-                app1_display = format_stage_metric_value(formatter, metric_key, app1_val)
-                app2_display = format_stage_metric_value(formatter, metric_key, app2_val)
+                app1_display = format_stage_metric_value(
+                    formatter, metric_key, app1_val
+                )
+                app2_display = format_stage_metric_value(
+                    formatter, metric_key, app2_val
+                )
                 if max(abs(app1_val), abs(app2_val)) > 0:
-                    change_pct = (
-                        (app2_val - app1_val) / max(abs(app1_val), 1)
-                    ) * 100
+                    change_pct = ((app2_val - app1_val) / max(abs(app1_val), 1)) * 100
                     change_str = f"{change_pct:+.1f}%"
                 else:
                     change_str = "N/A"
@@ -1342,7 +1317,9 @@ def format_stage_metric_value(formatter, metric_key: str, value) -> str:
         return f"{value:,}"
 
 
-def format_environment_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_environment_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format environment configuration comparison."""
     if not RICH_AVAILABLE:
         return
@@ -1360,7 +1337,9 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     # JVM info
     jvm_info = data.get("jvm_info", {})
     if jvm_info:
-        jvm_table = _make_comparison_table("JVM Information", label="Property", show_change=False)
+        jvm_table = _make_comparison_table(
+            "JVM Information", label="Property", show_change=False
+        )
         for key, vals in jvm_info.items():
             if isinstance(vals, dict):
                 jvm_table.add_row(
@@ -1376,7 +1355,9 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     spark_props = data.get("spark_properties", {})
     diff_props = spark_props.get("different", {})
     if diff_props:
-        table = _make_comparison_table("Spark Properties Differences", label="Property", show_change=False)
+        table = _make_comparison_table(
+            "Spark Properties Differences", label="Property", show_change=False
+        )
         if isinstance(diff_props, list):
             for entry in sorted(diff_props, key=lambda e: e.get("property", "")):
                 table.add_row(
@@ -1393,7 +1374,10 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
                     str(values.get("app2", "N/A")),
                 )
         console.print(table)
-        total = spark_props.get("total_different", len(diff_props) if isinstance(diff_props, (list, dict)) else 0)
+        total = spark_props.get(
+            "total_different",
+            len(diff_props) if isinstance(diff_props, (list, dict)) else 0,
+        )
         if isinstance(diff_props, list) and total > len(diff_props):
             console.print(f"  ... and {total - len(diff_props)} more differences")
         console.print()
@@ -1402,7 +1386,9 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     sys_props = data.get("system_properties", {})
     sys_diff = sys_props.get("different", [])
     if sys_diff:
-        table = _make_comparison_table("System Properties Differences", label="Property", show_change=False)
+        table = _make_comparison_table(
+            "System Properties Differences", label="Property", show_change=False
+        )
         if isinstance(sys_diff, list):
             for item in sys_diff:
                 table.add_row(
@@ -1427,22 +1413,20 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     # Summary counts
     summary_parts = []
     if spark_props.get("total_different"):
-        summary_parts.append(
-            f"Spark props: {spark_props['total_different']} different"
-        )
+        summary_parts.append(f"Spark props: {spark_props['total_different']} different")
     if spark_props.get("app1_only_count"):
         summary_parts.append(f"{spark_props['app1_only_count']} app1-only")
     if spark_props.get("app2_only_count"):
         summary_parts.append(f"{spark_props['app2_only_count']} app2-only")
     if sys_props.get("total_different"):
-        summary_parts.append(
-            f"System props: {sys_props['total_different']} different"
-        )
+        summary_parts.append(f"System props: {sys_props['total_different']} different")
     if summary_parts:
         console.print("[bold]Summary:[/bold] " + " | ".join(summary_parts))
 
 
-def format_resource_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_resource_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format resource allocation comparison."""
     if not RICH_AVAILABLE:
         return
@@ -1502,7 +1486,9 @@ def format_resource_comparison_result(formatter, data: Dict[str, Any], title: Op
 # Group D: Standardized Results
 
 
-def format_standardized_metrics_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_standardized_metrics_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format standardized metrics result as a simple key-value table."""
     if not RICH_AVAILABLE:
         return
@@ -1533,7 +1519,9 @@ def format_standardized_metrics_result(formatter, data: Dict[str, Any], title: O
     console.print(table)
 
 
-def format_standardized_comparison_result(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_standardized_comparison_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format standardized comparison result as a comparison table."""
     if not RICH_AVAILABLE:
         return
@@ -1580,7 +1568,9 @@ def format_standardized_comparison_result(formatter, data: Dict[str, Any], title
     console.print(table)
 
 
-def output_table_metrics(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def output_table_metrics(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format standardized metrics result as a simple table using tabulate."""
     if title:
         console.print(f"\n{title}")
@@ -1606,7 +1596,9 @@ def output_table_metrics(formatter, data: Dict[str, Any], title: Optional[str] =
     console.print(tabulate(rows, headers=["Metric", "Value"], tablefmt="grid"))
 
 
-def output_table_comparison(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def output_table_comparison(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format standardized comparison result as a comparison table using tabulate."""
     if title:
         console.print(f"\n{title}")
@@ -1648,9 +1640,7 @@ def output_table_comparison(formatter, data: Dict[str, Any], title: Optional[str
             rows.append([key, str(value), "N/A", "N/A"])
 
     console.print(
-        tabulate(
-            rows, headers=["Metric", "App 1", "App 2", "Change"], tablefmt="grid"
-        )
+        tabulate(rows, headers=["Metric", "App 1", "App 2", "Change"], tablefmt="grid")
     )
 
 
@@ -1658,12 +1648,26 @@ def output_table_comparison(formatter, data: Dict[str, Any], title: Optional[str
 # Note: Order matters if patterns overlap. registry.get_formatter returns the first match.
 registry.register_pattern(is_comparison_result, format_comparison_result)
 registry.register_pattern(is_stage_comparison_result, format_stage_comparison_result)
-registry.register_pattern(is_timeline_comparison_result, format_timeline_comparison_result)
-registry.register_pattern(is_executor_comparison_result, format_executor_comparison_result)
+registry.register_pattern(
+    is_timeline_comparison_result, format_timeline_comparison_result
+)
+registry.register_pattern(
+    is_executor_comparison_result, format_executor_comparison_result
+)
 registry.register_pattern(is_job_comparison_result, format_job_comparison_result)
 registry.register_pattern(is_app_summary_comparison_result, format_app_summary_diff)
-registry.register_pattern(is_aggregated_stage_comparison_result, format_aggregated_stage_comparison_result)
-registry.register_pattern(is_environment_comparison_result, format_environment_comparison_result)
-registry.register_pattern(is_resource_comparison_result, format_resource_comparison_result)
-registry.register_pattern(is_standardized_comparison_result, format_standardized_comparison_result)
-registry.register_pattern(is_standardized_metrics_result, format_standardized_metrics_result)
+registry.register_pattern(
+    is_aggregated_stage_comparison_result, format_aggregated_stage_comparison_result
+)
+registry.register_pattern(
+    is_environment_comparison_result, format_environment_comparison_result
+)
+registry.register_pattern(
+    is_resource_comparison_result, format_resource_comparison_result
+)
+registry.register_pattern(
+    is_standardized_comparison_result, format_standardized_comparison_result
+)
+registry.register_pattern(
+    is_standardized_metrics_result, format_standardized_metrics_result
+)

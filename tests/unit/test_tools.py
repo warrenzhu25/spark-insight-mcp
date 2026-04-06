@@ -652,7 +652,9 @@ class TestTools(unittest.TestCase):
         running_stage.attempt_id = 0
         running_stage.name = "Running Stage"
         running_stage.status = "RUNNING"
-        running_stage.duration_ms = 0  # Running stage has 0 duration in this test's logic
+        running_stage.duration_ms = (
+            0  # Running stage has 0 duration in this test's logic
+        )
 
         # Create completed stage
         completed_stage = MagicMock(spec=StageData)

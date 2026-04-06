@@ -45,7 +45,9 @@ class SparkRestClient(BaseApiClient):
             server_config: Configuration object
         """
         super().__init__(server_config)
-        self.base_url = self.config.url.rstrip("/") + "/api/v1" if self.config.url else ""
+        self.base_url = (
+            self.config.url.rstrip("/") + "/api/v1" if self.config.url else ""
+        )
         self.auth = None
         self.pattern = re.compile(r"(.*?/applications/[^/]+/)(.+)")
 

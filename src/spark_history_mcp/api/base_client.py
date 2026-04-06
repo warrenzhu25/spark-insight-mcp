@@ -29,7 +29,7 @@ class BaseApiClient:
         url: str,
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
-        **kwargs
+        **kwargs,
     ) -> requests.Response:
         """Make an HTTP request using the session."""
         if headers is None:
@@ -50,6 +50,6 @@ class BaseApiClient:
             headers=headers,
             timeout=self.timeout,
             verify=self.verify_ssl,
-            **kwargs
+            **kwargs,
         )
         return response

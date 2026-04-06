@@ -34,9 +34,10 @@ def _make_session(inputs):
 def _invoke_repl(runner, inputs, extra_args=None, obj=None):
     """Invoke the REPL with mocked PromptSession and given user inputs."""
     extra_args = extra_args or []
-    with patch("prompt_toolkit.history.FileHistory"), patch(
-        "prompt_toolkit.PromptSession"
-    ) as mock_prompt_session:
+    with (
+        patch("prompt_toolkit.history.FileHistory"),
+        patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+    ):
         mock_prompt_session.return_value = _make_session(inputs)
         return runner.invoke(cli, ["repl"] + extra_args, obj=obj or {})
 
@@ -54,7 +55,15 @@ class TestAliasesAndCompletions:
 
     def test_aliases_values_are_valid_commands(self):
         """Each alias must expand to a known top-level group + subcommand."""
-        known_groups = {"apps", "analyze", "compare", "server", "config", "cache", "cleanup"}
+        known_groups = {
+            "apps",
+            "analyze",
+            "compare",
+            "server",
+            "config",
+            "cache",
+            "cleanup",
+        }
         for alias, expansion in ALIASES.items():
             group = expansion.split()[0]
             assert group in known_groups, (
@@ -63,8 +72,17 @@ class TestAliasesAndCompletions:
 
     def test_expected_aliases_present(self):
         expected = {
-            "list", "show", "summary", "jobs", "stages",
-            "insights", "bottlenecks", "slowest", "skew", "scaling", "compare",
+            "list",
+            "show",
+            "summary",
+            "jobs",
+            "stages",
+            "insights",
+            "bottlenecks",
+            "slowest",
+            "skew",
+            "scaling",
+            "compare",
         }
         assert expected.issubset(set(ALIASES)), (
             f"Missing aliases: {expected - set(ALIASES)}"
@@ -163,9 +181,10 @@ class TestReplExit:
     def test_ctrl_d_eoferror(self):
         """EOFError (Ctrl+D) should exit cleanly."""
         runner = CliRunner()
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+        ):
             mock_session = MagicMock()
             mock_session.prompt.side_effect = EOFError()
             mock_prompt_session.return_value = mock_session
@@ -176,9 +195,10 @@ class TestReplExit:
     def test_ctrl_c_continues_loop(self):
         """KeyboardInterrupt should not exit; next command is processed."""
         runner = CliRunner()
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+        ):
             mock_session = MagicMock()
             # First call raises Ctrl+C, second call exits
             mock_session.prompt.side_effect = [KeyboardInterrupt(), "exit"]
@@ -229,9 +249,10 @@ class TestReplBuiltins:
 
     def test_prompt_string(self):
         runner = CliRunner()
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+        ):
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["exit"]
             mock_prompt_session.return_value = mock_session
@@ -256,11 +277,11 @@ class TestAliasExpansion:
         def fake_main(args, standalone_mode, obj):
             captured["args"] = args
 
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session, patch(
-            "spark_history_mcp.cli.main.cli"
-        ) as mock_root:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+            patch("spark_history_mcp.cli.main.cli") as mock_root,
+        ):
             mock_root.main.side_effect = fake_main
             mock_session = MagicMock()
             mock_session.prompt.side_effect = [alias_input, EOFError()]
@@ -347,9 +368,11 @@ class TestReplErrorHandling:
     def test_usage_error_shown(self):
         """Click UsageError from a bad command is displayed, not crash."""
         runner = CliRunner()
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session, patch("spark_history_mcp.cli.main.cli") as mock_root:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+            patch("spark_history_mcp.cli.main.cli") as mock_root,
+        ):
             mock_root.main.side_effect = click.exceptions.UsageError("bad args")
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["apps list", "exit"]
@@ -361,9 +384,11 @@ class TestReplErrorHandling:
     def test_generic_exception_shown(self):
         """Unexpected exceptions are caught and displayed, REPL stays alive."""
         runner = CliRunner()
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session, patch("spark_history_mcp.cli.main.cli") as mock_root:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+            patch("spark_history_mcp.cli.main.cli") as mock_root,
+        ):
             mock_root.main.side_effect = [RuntimeError("something went wrong"), None]
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["apps list", "exit"]
@@ -375,9 +400,11 @@ class TestReplErrorHandling:
     def test_system_exit_swallowed(self):
         """SystemExit (e.g. from --help) should not crash the REPL."""
         runner = CliRunner()
-        with patch("prompt_toolkit.history.FileHistory"), patch(
-            "prompt_toolkit.PromptSession"
-        ) as mock_prompt_session, patch("spark_history_mcp.cli.main.cli") as mock_root:
+        with (
+            patch("prompt_toolkit.history.FileHistory"),
+            patch("prompt_toolkit.PromptSession") as mock_prompt_session,
+            patch("spark_history_mcp.cli.main.cli") as mock_root,
+        ):
             mock_root.main.side_effect = [SystemExit(0), None]
             mock_session = MagicMock()
             mock_session.prompt.side_effect = ["apps --help", "exit"]

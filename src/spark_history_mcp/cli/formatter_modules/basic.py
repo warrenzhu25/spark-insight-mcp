@@ -77,7 +77,9 @@ def format_application_list(formatter, apps: List[ApplicationInfo]) -> None:
     console.print(table)
 
 
-def format_application(formatter, app: ApplicationInfo, title: Optional[str] = None) -> None:
+def format_application(
+    formatter, app: ApplicationInfo, title: Optional[str] = None
+) -> None:
     """Format single application details."""
     if not RICH_AVAILABLE:
         return
@@ -167,7 +169,9 @@ def format_job_list(formatter, jobs: List[JobData]) -> None:
     for job in jobs:
         duration = "N/A"
         if job.submission_time and job.completion_time:
-            duration = f"{(job.completion_time - job.submission_time).total_seconds():.1f}s"
+            duration = (
+                f"{(job.completion_time - job.submission_time).total_seconds():.1f}s"
+            )
 
         submitted = (
             job.submission_time.strftime("%Y-%m-%d %H:%M")
@@ -285,7 +289,9 @@ def is_app_summary(data: Any) -> bool:
     return summary_keys.issubset(data.keys())
 
 
-def format_app_summary(formatter, data: Dict[str, Any], title: Optional[str] = None) -> None:
+def format_app_summary(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format application performance summary."""
     if not RICH_AVAILABLE:
         return

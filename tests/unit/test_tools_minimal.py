@@ -138,8 +138,7 @@ def test_find_slowest_jobs_respects_include_running_default(
 
     mock_fetch_jobs.return_value = [running_job]
     mock_get_config.return_value = SimpleNamespace(
-        include_running_defaults=True,
-        compact_tool_output=False
+        include_running_defaults=True, compact_tool_output=False
     )
 
     result = _find_slowest_jobs(app_id="app", n=1)
@@ -163,8 +162,7 @@ def test_find_slowest_stages_respects_include_running_default(
 
     mock_fetch_stages.return_value = [running_stage]
     mock_get_config.return_value = SimpleNamespace(
-        include_running_defaults=True,
-        compact_tool_output=False
+        include_running_defaults=True, compact_tool_output=False
     )
 
     result = _find_slowest_stages(app_id="app", n=1)

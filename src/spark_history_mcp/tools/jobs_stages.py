@@ -238,7 +238,7 @@ def _find_slowest_sql(
         attempt_id=attempt_id,
         page_size=cfg.sql_page_size,
         details=True,
-        plan_description=False, # Don't fetch plans for ranking
+        plan_description=False,  # Don't fetch plans for ranking
     )
 
     if not all_executions:
