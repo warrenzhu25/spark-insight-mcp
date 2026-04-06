@@ -28,12 +28,12 @@ def _make_comparison_table(
     """Create a consistently-formatted comparison table.
 
     Standard structure:
-      <label> (cyan) | App 1 (blue, min 10) | App 2 (blue, min 10) | Change (magenta, min 8)
+      <label> (cyan) | App 1 (default, min 10) | App 2 (default, min 10) | Change (magenta, min 8)
     """
     table = Table(title=title, show_lines=True)
     table.add_column(label, style="cyan")
-    table.add_column("App 1", style="blue", min_width=10)
-    table.add_column("App 2", style="blue", min_width=10)
+    table.add_column("App 1", min_width=10)
+    table.add_column("App 2", min_width=10)
     if show_change:
         table.add_column("Change", style="magenta", min_width=8)
     return table
