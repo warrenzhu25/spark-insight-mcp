@@ -336,6 +336,71 @@ class TestOutputFormatterHuman:
         fmt.output(timeline, title="TimelineFull")
 
 
+class TestFormatterRegistryPriority:
+    """Registry must check pattern matchers before type matchers."""
+
+    def test_pattern_matcher_wins_over_type_matcher_for_dict(self):
+        """A dict that matches a pattern should use the pattern formatter, not format_dict."""
+        from spark_history_mcp.cli.formatter_modules.base import FormatterRegistry
+
+        called = []
+        reg = FormatterRegistry()
+        reg.register_type(dict, lambda f, d, t: called.append("type"))
+        reg.register_pattern(
+            lambda d: isinstance(d, dict) and "marker" in d,
+            lambda f, d, t: called.append("pattern"),
+        )
+
+        formatter_func = reg.get_formatter({"marker": True, "other": 1})
+        assert formatter_func is not None
+        formatter_func(None, {}, None)
+        assert called == ["pattern"], (
+            "Pattern matcher should win over dict type matcher; got: " + str(called)
+        )
+
+    def test_type_matcher_used_when_no_pattern_matches(self):
+        """A plain dict with no matching pattern should fall through to type matcher."""
+        from spark_history_mcp.cli.formatter_modules.base import FormatterRegistry
+
+        called = []
+        reg = FormatterRegistry()
+        reg.register_type(dict, lambda f, d, t: called.append("type"))
+        reg.register_pattern(lambda d: False, lambda f, d, t: called.append("pattern"))
+
+        formatter_func = reg.get_formatter({"key": "val"})
+        assert formatter_func is not None
+        formatter_func(None, {}, None)
+        assert called == ["type"]
+
+    def test_comparison_dict_routes_to_comparison_formatter_not_format_dict(self):
+        """End-to-end: a comparison-shaped dict must not fall through to format_dict."""
+        from spark_history_mcp.cli.formatter_modules.comparison import (
+            format_comparison_result,
+            is_comparison_result,
+        )
+        from spark_history_mcp.cli.formatter_modules.base import registry
+
+        comparison_data = {
+            "applications": {
+                "app1": {"id": "app-1", "name": "App One"},
+                "app2": {"id": "app-2", "name": "App Two"},
+            },
+            "aggregated_overview": {},
+            "stage_deep_dive": {},
+            "recommendations": [],
+            "key_recommendations": [],
+        }
+
+        assert is_comparison_result(comparison_data), (
+            "is_comparison_result should match this data"
+        )
+
+        formatter_func = registry.get_formatter(comparison_data)
+        assert formatter_func is format_comparison_result, (
+            f"Expected format_comparison_result but got {formatter_func}"
+        )
+
+
 class TestOutputFormatterJSON:
     def test_output_json_from_dict(self, capsys):
         fmt = OutputFormatter(format_type="json")

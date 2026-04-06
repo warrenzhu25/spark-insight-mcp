@@ -41,15 +41,16 @@ class FormatterRegistry:
 
     def get_formatter(self, data: Any) -> Optional[Callable]:
         """Find a formatter for the given data."""
-        # Try exact type match
-        data_type = type(data)
-        if data_type in self.type_formatters:
-            return self.type_formatters[data_type]
-
-        # Try pattern matches (predicates)
+        # Try pattern matches first — they encode more specific criteria
+        # and must take priority over generic type matchers (e.g. dict).
         for predicate, formatter_func in self.pattern_formatters:
             if predicate(data):
                 return formatter_func
+
+        # Fall back to exact type match
+        data_type = type(data)
+        if data_type in self.type_formatters:
+            return self.type_formatters[data_type]
 
         return None
 
