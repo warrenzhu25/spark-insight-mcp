@@ -324,57 +324,101 @@ The `compare` command group provides **stateful multi-app comparisons** with ses
 
 ## 📚 Command Reference (All CLI Commands)
 
-Top-level:
-- `repl` - **interactive shell** with tab completion and history
-- `apps` - list, inspect, and compare applications
-- `analyze` - targeted analyses and diagnostics
-- `compare` - stateful multi-app comparisons
-- `server` - manage MCP server
-- `config` - manage configuration files
-- `cache` - clear CLI cache
+Top-level groups:
 
-`apps` subcommands:
-- `apps list`
-- `apps compare`
-- `apps show`
-- `apps jobs`
-- `apps stages`
-- `apps summary`
+| Group | Description |
+|-------|-------------|
+| `repl` | Interactive shell with tab completion and persistent history |
+| `apps` | List, inspect, and compare Spark applications |
+| `analyze` | Single-app performance analysis and AI-powered insights |
+| `compare` | Stateful multi-app comparisons with session context |
+| `server` | MCP server lifecycle management |
+| `config` | Configuration file management |
+| `cache` | Disk cache management |
+| `cleanup` | Event log and storage cleanup |
 
-`analyze` subcommands:
-- `analyze insights`
-- `analyze bottlenecks`
-- `analyze auto-scaling`
-- `analyze shuffle-skew`
-- `analyze slowest`
-- `analyze compare` (deprecated)
+---
 
-`compare` subcommands:
-- `compare apps`
-- `compare stages`
-- `compare timeline`
-- `compare stage-timeline`
-- `compare resources`
-- `compare env`
-- `compare summaries`
-- `compare executors`
-- `compare jobs`
-- `compare status`
-- `compare clear`
+### `apps` subcommands
 
-`server` subcommands:
-- `server start`
-- `server test`
-- `server status`
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `apps list` | Fetch and display all Spark applications from the History Server. Assigns numbered references (`#1`, `#2`, …) valid for 1 hour so you can use them in subsequent commands instead of full app IDs. | `--limit N`, `--status COMPLETED\|RUNNING\|FAILED`, `--name <contains>`, `--name-exact <exact>`, `--no-interactive` |
+| `apps show <id>` | Show full metadata for one application: attempt history, start/end times, duration, Spark user, and status. Accepts app IDs or `#N` number references. | `--server`, `--format` |
+| `apps jobs <id>` | List all Spark jobs within an application with their status, task counts, and duration. Useful for identifying which jobs contributed most to total runtime. | `--status`, `--server`, `--format` |
+| `apps stages <id>` | List all stages within an application including task metrics, shuffle read/write bytes, and executor time. Filter by stage status to focus on failed or active stages. | `--status`, `--server`, `--format` |
+| `apps summary <id>` | High-level performance summary: total duration, task counts, input/output bytes, shuffle size, spill, executor utilization, and GC time ratio. Accepts app ID or partial name. | `--server`, `--format` |
+| `apps compare <id1> [id2]` | Shortcut alias for `compare apps` — runs a full performance comparison and sets the comparison context for subsequent `compare` subcommands. | `--top-n N`, `--all`, `--threshold`, `--interactive`, `--server`, `--format` |
 
-`config` subcommands:
-- `config init`
-- `config show`
-- `config validate`
-- `config edit`
+---
 
-`cache` subcommands:
-- `cache clear`
+### `analyze` subcommands
+
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `analyze insights <id>` | All-in-one AI-powered analysis combining bottleneck detection, auto-scaling recommendations, shuffle skew detection, failed task analysis, and executor utilization — all in one call. Individual components can be toggled off. | `--no-auto-scaling`, `--no-shuffle-skew`, `--no-failed-tasks`, `--no-executor-utilization`, `--server`, `--format` |
+| `analyze bottlenecks <id>` | Rank the top N performance bottlenecks across all jobs by computing weighted scores from task duration, failure rate, shuffle overhead, and spill. Returns actionable recommendations per bottleneck. | `--top-n N` (default 5), `--server`, `--format` |
+| `analyze auto-scaling <id>` | Recommend the optimal executor count for each stage by comparing actual resource usage against a target stage duration. Highlights over-provisioned and under-provisioned stages. | `--target-duration N` (minutes, default 2), `--server`, `--format` |
+| `analyze shuffle-skew <id>` | Detect data skew by comparing the maximum shuffle write per task against the median. Stages where the max/median ratio exceeds the threshold and total shuffle write exceeds the GB threshold are flagged with skew severity and remediation hints. | `--shuffle-threshold N` (GB, default 10), `--skew-ratio R` (default 2.0), `--server`, `--format` |
+| `analyze slowest <id>` | Find the N slowest jobs, stages, or SQL queries by elapsed time. Use `--type stages` (default) to find stage bottlenecks, `--type jobs` for job-level, or `--type sql` for SQL execution plans. | `--type jobs\|stages\|sql`, `--top-n N` (default 5), `--server`, `--format` |
+| `analyze compare <id1> <id2>` | ⚠️ **Deprecated** — use `apps compare` or `compare apps` instead. Runs a basic performance comparison without saving session context. Will be removed in a future version. | `--top-n`, `--server`, `--format` |
+
+---
+
+### `compare` subcommands
+
+All `compare` subcommands use a **saved session context** — run `apps compare <id1> <id2>` once to set the two apps, then call any compare subcommand without repeating the IDs. Override with `--apps <id1> <id2>` on any individual command.
+
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `compare apps <id1> [id2]` | Full performance comparison: stage differences, executor overview, resource summary, and top metric deltas sorted by % change. Saves context for all subsequent `compare` calls. Accepts IDs, names, or `#N` number references; providing a single name auto-selects the 2 most recent matching apps. | `--top-n N`, `--threshold F` (significance, default 0.1 = 10%), `--all` (show all metrics), `--interactive`, `--server`, `--format` |
+| `compare stages <s1> <s2>` | Deep-dive comparison of two specific stage IDs (one from each app in context). Shows per-task metrics, shuffle read/write, memory spill, GC time, and CPU efficiency side-by-side. Uses saved app context; override with `--apps`. | `--apps APP1 APP2`, `--significance-threshold F`, `--server`, `--format` |
+| `compare timeline` | Compare executor utilization over time by dividing each app's run into fixed intervals and counting active executors per interval. Highlights periods of under-utilization or executor churn. | `--apps APP1 APP2`, `--interval-minutes N` (default 1), `--server`, `--format` |
+| `compare stage-timeline <s1> <s2>` | Same as `compare timeline` but scoped to two specific stages. Useful for diagnosing why a stage ran longer in one app. | `--apps APP1 APP2`, `--interval-minutes N` (default 1), `--server`, `--format` |
+| `compare resources` | Compare resource allocation: executor count, total cores, driver/executor memory settings, and max concurrent tasks. Surfaces configuration differences that explain runtime discrepancies. | `--apps APP1 APP2`, `--server`, `--format` |
+| `compare env` | Compare Spark configuration properties between two apps. Auto-generated or transient values are filtered out so only meaningful config differences are shown (e.g. `spark.executor.memory`, `spark.sql.shuffle.partitions`). | `--apps APP1 APP2`, `--server`, `--format` |
+| `compare summaries` | Compare aggregated stage-level metrics summaries: total executor run time, input/output bytes, shuffle totals, and task counts. More granular than `compare apps`; less detail than `compare stages`. | `--apps APP1 APP2`, `--server`, `--format` |
+| `compare executors` | Compare per-executor performance: completed tasks, total duration, GC time, and shuffle metrics for each executor in both apps. Significant-only filtering removes noise from small differences. | `--apps APP1 APP2`, `--significance-threshold F`, `--show-all` (disable filter), `--server`, `--format` |
+| `compare jobs` | Compare job-level metrics between the two apps in context: duration, task counts, failure rates, and stage breakdown per job. | `--apps APP1 APP2`, `--server`, `--format` |
+| `compare status` | Display the currently saved comparison context — which two app IDs are set and which server they are on. | `--format` |
+| `compare clear` | Delete the saved comparison context. Next `compare` subcommand will require `--apps` or will prompt to run `apps compare` first. | — |
+
+---
+
+### `server` subcommands
+
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `server start` | Start the MCP server using settings from `config.yaml`. CLI flags override the config values for that run only. | `--port N`, `--debug`, `--transport stdio\|sse\|streamable-http` |
+| `server test` | Test HTTP connectivity to every server defined in `config.yaml`. Reports success or failure (with error type) per server. Useful for validating config before using the CLI or MCP mode. | `--timeout N` (seconds, default 10) |
+| `server status` | Print MCP settings (port, transports, debug flag) and a list of every configured Spark History Server with its URL, default flag, and EMR cluster ARN if applicable. | — |
+
+---
+
+### `config` subcommands
+
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `config init` | Create a new `config.yaml` with default values. `--interactive` walks through each field (server URL, auth, SSL, EMR cluster ARN, MCP port). Warns if credentials are stored in plaintext and suggests environment variable alternatives. | `--interactive`, `--force` (overwrite existing) |
+| `config show` | Print the current configuration. Use `--server <name>` to show only one server's settings. Supports `human`, `json`, and `yaml` output formats. | `--server`, `--format human\|json\|yaml` |
+| `config validate` | Parse `config.yaml` and report structural errors, warnings (no default server, multiple defaults, missing URLs), and total server count. Exits non-zero on invalid config. | — |
+| `config edit` | Open `config.yaml` in `$EDITOR` (falls back to `nano` then `vi`). Automatically re-validates the file after the editor closes and warns if the result is invalid. | — |
+
+---
+
+### `cache` subcommands
+
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `cache clear` | Remove all cached Spark History Server API responses from disk. The cache speeds up repeated reads of the same application data; clear it when the History Server data has changed. | — |
+
+---
+
+### `cleanup` subcommands
+
+| Subcommand | Description | Key options |
+|------------|-------------|-------------|
+| `cleanup event-logs <gcs_dir>` | Delete Spark event log files from a GCS directory. Filters by maximum age and optional name pattern. `--dry-run` lists files that would be deleted without removing them. | `--max-duration DURATION`, `--name-pattern REGEX`, `--limit N`, `--dry-run`, `--server`, `--format` |
 
 ## 🧹 Cleanup (`cleanup`)
 
