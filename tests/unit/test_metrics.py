@@ -182,7 +182,10 @@ class TestSummarizeApp:
         assert result["executor_utilization_percent"] == 20.0
 
     def test_shuffle_metrics_from_stage_fields(self):
-        """Test shuffle metrics use stage-level totals directly (not median*count)."""
+        """Test shuffle metrics use stage-level totals with correct units.
+
+        shuffleFetchWaitTime is in milliseconds; shuffleWriteTime is in nanoseconds.
+        """
         app = SimpleNamespace(
             id="app-shuffle",
             name="shuffle-test",
@@ -190,8 +193,7 @@ class TestSummarizeApp:
             cores_per_executor=1,
         )
 
-        # Stage has pre-aggregated shuffle timing in nanoseconds
-        # 6_000_000_000 ns = 6s = 0.1 min; 3_000_000_000 ns = 3s = 0.05 min
+        # 6_000 ms = 6s = 0.1 min fetch wait; 3_000_000_000 ns = 3s = 0.05 min write
         stages = [
             SimpleNamespace(
                 executor_run_time=60000,
@@ -207,15 +209,15 @@ class TestSummarizeApp:
                 num_tasks=100,
                 status=StageStatus.COMPLETE,
                 task_metrics_distributions=None,
-                shuffle_fetch_wait_time=6_000_000_000,  # 6s total in ns
-                shuffle_write_time=3_000_000_000,  # 3s total in ns
+                shuffle_fetch_wait_time=6_000,  # 6000 ms = 6s (milliseconds)
+                shuffle_write_time=3_000_000_000,  # 3s in nanoseconds
             )
         ]
         executors = []
 
         result = summarize_app(app, stages, executors)
 
-        # 6_000_000_000 ns / (1e9 * 60) = 0.1 min
+        # 6000 ms / 60000 = 0.1 min
         assert result["shuffle_read_wait_time_minutes"] == pytest.approx(0.1, rel=1e-6)
         # 3_000_000_000 ns / (1e9 * 60) = 0.05 min
         assert result["shuffle_write_time_minutes"] == pytest.approx(0.05, rel=1e-6)
@@ -229,7 +231,7 @@ class TestSummarizeApp:
             cores_per_executor=1,
         )
 
-        def make_stage(fetch_ns, write_ns):
+        def make_stage(fetch_ms, write_ns):
             return SimpleNamespace(
                 executor_run_time=10000,
                 executor_cpu_time=0,
@@ -244,19 +246,19 @@ class TestSummarizeApp:
                 num_tasks=5,
                 status=StageStatus.COMPLETE,
                 task_metrics_distributions=None,
-                shuffle_fetch_wait_time=fetch_ns,
+                shuffle_fetch_wait_time=fetch_ms,
                 shuffle_write_time=write_ns,
             )
 
         stages = [
-            make_stage(2_000_000_000, 1_000_000_000),  # 2s fetch, 1s write
-            make_stage(4_000_000_000, 2_000_000_000),  # 4s fetch, 2s write
+            make_stage(2_000, 1_000_000_000),  # 2s fetch (ms), 1s write (ns)
+            make_stage(4_000, 2_000_000_000),  # 4s fetch (ms), 2s write (ns)
         ]
         executors = []
 
         result = summarize_app(app, stages, executors)
 
-        # Total: 6s fetch = 0.1 min; 3s write = 0.05 min
+        # Total: 6000 ms / 60000 = 0.1 min; 3s ns / (1e9*60) = 0.05 min
         assert result["shuffle_read_wait_time_minutes"] == pytest.approx(0.1, rel=1e-6)
         assert result["shuffle_write_time_minutes"] == pytest.approx(0.05, rel=1e-6)
 

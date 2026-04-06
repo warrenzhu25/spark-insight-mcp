@@ -86,15 +86,15 @@ def summarize_app(app, stages, executors) -> Dict[str, Any]:
         getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
     )
 
-    # Use stage-level totals (nanoseconds) — more accurate than median*count approximation
-    total_shuffle_fetch_wait_time_ns = sum(
+    # shuffleFetchWaitTime is in milliseconds; shuffleWriteTime is in nanoseconds
+    total_shuffle_fetch_wait_time_ms = sum(
         getattr(stage, "shuffle_fetch_wait_time", 0) or 0 for stage in stages
     )
     total_shuffle_write_time_ns = sum(
         getattr(stage, "shuffle_write_time", 0) or 0 for stage in stages
     )
 
-    shuffle_fetch_wait_min = ns_to_min(total_shuffle_fetch_wait_time_ns)
+    shuffle_fetch_wait_min = ms_to_min(total_shuffle_fetch_wait_time_ms)
     shuffle_write_time_min = ns_to_min(total_shuffle_write_time_ns)
 
     summary = {

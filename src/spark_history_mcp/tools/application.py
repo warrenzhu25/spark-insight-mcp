@@ -416,20 +416,18 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
         )
         total_disk_spilled_gb = common.bytes_to_gb(total_disk_spilled_bytes)
 
-        # Calculate performance metrics — use stage-level totals (nanoseconds),
-        # which are more accurate than the previous median*count approximation.
+        # Calculate performance metrics.
+        # shuffleFetchWaitTime is in milliseconds; shuffleWriteTime is in nanoseconds.
         total_failed_tasks = sum(
             getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
         )
-        total_shuffle_fetch_wait_time_ns = sum(
+        total_shuffle_fetch_wait_time_ms = sum(
             getattr(stage, "shuffle_fetch_wait_time", 0) or 0 for stage in stages
         )
         total_shuffle_write_time_ns = sum(
             getattr(stage, "shuffle_write_time", 0) or 0 for stage in stages
         )
-        shuffle_fetch_wait_min = total_shuffle_fetch_wait_time_ns / (
-            1000 * 1000 * 1000 * 60
-        )
+        shuffle_fetch_wait_min = total_shuffle_fetch_wait_time_ms / (1000 * 60)
         shuffle_write_time_min = total_shuffle_write_time_ns / (1000 * 1000 * 1000 * 60)
 
         # Build summary

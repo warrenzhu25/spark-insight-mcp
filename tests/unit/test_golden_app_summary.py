@@ -15,9 +15,9 @@ def make_attempt(duration_ms: int, start: datetime):
 
 
 def make_stage():
-    # shuffle_fetch_wait_time / shuffle_write_time are stage-level totals in nanoseconds.
+    # shuffleFetchWaitTime is in milliseconds; shuffleWriteTime is in nanoseconds.
     # Values chosen to match the golden fixture:
-    #   10_000_000_000 ns = 10s / 60 ≈ 0.17 min
+    #   10_000 ms = 10s / 60 ≈ 0.17 min
     #   20_000_000_000 ns = 20s / 60 ≈ 0.33 min
     st = SimpleNamespace(
         executor_run_time=30000,
@@ -33,8 +33,8 @@ def make_stage():
         num_tasks=10,
         status=StageStatus.COMPLETE,
         task_metrics_distributions=None,
-        shuffle_fetch_wait_time=10_000_000_000,  # 10s total in ns
-        shuffle_write_time=20_000_000_000,  # 20s total in ns
+        shuffle_fetch_wait_time=10_000,  # 10000 ms = 10s (milliseconds)
+        shuffle_write_time=20_000_000_000,  # 20s in nanoseconds
     )
     return st
 
