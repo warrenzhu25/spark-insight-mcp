@@ -20,6 +20,25 @@ except ImportError:
 from .base import registry
 
 
+def _make_comparison_table(
+    title: Optional[str],
+    label: str = "Metric",
+    show_change: bool = True,
+) -> "Table":
+    """Create a consistently-formatted comparison table.
+
+    Standard structure:
+      <label> (cyan) | App 1 (blue, min 10) | App 2 (blue, min 10) | Change (magenta, min 8)
+    """
+    table = Table(title=title, show_lines=True)
+    table.add_column(label, style="cyan")
+    table.add_column("App 1", style="blue", min_width=10)
+    table.add_column("App 2", style="blue", min_width=10)
+    if show_change:
+        table.add_column("Change", style="magenta", min_width=8)
+    return table
+
+
 def is_comparison_result(data: Any) -> bool:
     """Detect if data is a comparison result structure."""
     if not isinstance(data, dict):
@@ -252,11 +271,7 @@ def format_performance_metrics(formatter, overview: Dict[str, Any]) -> None:
     if "executor_comparison" not in overview and "stage_comparison" not in overview:
         return
 
-    table = Table(title="Performance Metrics Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Performance Metrics Comparison")
 
     # Dynamic executor metrics
     if "executor_comparison" in overview:
@@ -345,11 +360,7 @@ def format_top_metrics_differences(formatter, metrics: List[Dict[str, Any]]) -> 
     if not RICH_AVAILABLE or not metrics:
         return
 
-    table = Table(title="Top Stage Metric Differences")
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Top Stage Metric Differences")
 
     for item in metrics:
         metric_key = item.get("metric", "unknown")
@@ -404,11 +415,7 @@ def format_stage_differences(formatter, stage_deep_dive: Dict[str, Any]) -> None
         return
 
     # Create table
-    table = Table(title="Stage Differences", show_lines=True)
-    table.add_column("Stage", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Diff", style="magenta")
+    table = _make_comparison_table("Stage Differences", label="Stage")
 
     for diff in differences:
         stage_name = diff.get("stage_name", "Unknown Stage")
@@ -598,11 +605,7 @@ def format_stage_performance_metrics(formatter, data: Dict[str, Any]) -> None:
     if not stage_metrics and not task_dist and not exec_dist:
         return
 
-    table = Table(title="Performance Metrics Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Performance Metrics Comparison")
 
     # Sort stage-level metrics by difference ratio (descending)
     # Metrics are already sorted by the MCP tool, use existing order
@@ -725,11 +728,7 @@ def format_app_summary_diff(formatter, app_summary_diff: Dict[str, Any]) -> None
     app2_summary = app_summary_diff.get("app2_summary", {})
 
     # Create table
-    table = Table(title="Application Metrics Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Application Metrics Comparison")
 
     # Define metric display preferences for formatting
     metric_display_config = {
@@ -1044,11 +1043,7 @@ def format_executor_comparison_result(formatter, data: Dict[str, Any], title: Op
         console.print()  # Empty line for spacing
 
     # 2. Executor Performance Table
-    table = Table(title="Executor Performance Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Executor Performance Comparison")
 
     # Extract executor metrics
     app1_metrics = (
@@ -1127,11 +1122,7 @@ def format_job_comparison_result(formatter, data: Dict[str, Any], title: Optiona
         console.print()  # Empty line for spacing
 
     # 2. Job Performance Table
-    table = Table(title="Job Performance Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Job Performance Comparison")
 
     # Extract job metrics
     app1_data = data.get("applications", {}).get("app1", {})
@@ -1233,11 +1224,7 @@ def format_aggregated_stage_comparison_result(formatter, data: Dict[str, Any], t
         console.print()  # Empty line for spacing
 
     # 2. Aggregated Stage Metrics Table
-    table = Table(title="Aggregated Stage Metrics Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Aggregated Stage Metrics Comparison")
 
     # Get raw metrics and comparison data
     agg_metrics = data.get("aggregated_stage_metrics", {})
@@ -1373,11 +1360,7 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     # JVM info
     jvm_info = data.get("jvm_info", {})
     if jvm_info:
-        console.print("[bold]JVM Information[/bold]")
-        jvm_table = Table(show_lines=True)
-        jvm_table.add_column("Property", style="cyan")
-        jvm_table.add_column("App1", style="blue")
-        jvm_table.add_column("App2", style="blue")
+        jvm_table = _make_comparison_table("JVM Information", label="Property", show_change=False)
         for key, vals in jvm_info.items():
             if isinstance(vals, dict):
                 jvm_table.add_row(
@@ -1393,10 +1376,7 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     spark_props = data.get("spark_properties", {})
     diff_props = spark_props.get("different", {})
     if diff_props:
-        table = Table(title="Spark Properties Differences", show_lines=True)
-        table.add_column("Property", style="cyan")
-        table.add_column("App1", style="blue")
-        table.add_column("App2", style="blue")
+        table = _make_comparison_table("Spark Properties Differences", label="Property", show_change=False)
         if isinstance(diff_props, list):
             for entry in sorted(diff_props, key=lambda e: e.get("property", "")):
                 table.add_row(
@@ -1422,10 +1402,7 @@ def format_environment_comparison_result(formatter, data: Dict[str, Any], title:
     sys_props = data.get("system_properties", {})
     sys_diff = sys_props.get("different", [])
     if sys_diff:
-        table = Table(title="System Properties Differences", show_lines=True)
-        table.add_column("Property", style="cyan")
-        table.add_column("App1", style="blue")
-        table.add_column("App2", style="blue")
+        table = _make_comparison_table("System Properties Differences", label="Property", show_change=False)
         if isinstance(sys_diff, list):
             for item in sys_diff:
                 table.add_row(
@@ -1482,11 +1459,7 @@ def format_resource_comparison_result(formatter, data: Dict[str, Any], title: Op
         console.print()  # Empty line for spacing
 
     # 2. Resource Allocation Table
-    table = Table(title="Resource Allocation Comparison", show_lines=True)
-    table.add_column("Metric", style="cyan")
-    table.add_column("App1", style="blue")
-    table.add_column("App2", style="blue")
-    table.add_column("Change", style="magenta")
+    table = _make_comparison_table("Resource Allocation Comparison")
 
     # Extract resource metrics
     app1_data = data.get("applications", {}).get("app1", {})
@@ -1568,11 +1541,7 @@ def format_standardized_comparison_result(formatter, data: Dict[str, Any], title
     if title:
         console.print(f"\n[bold blue]{title}[/bold blue]")
 
-    table = Table(title="Comparison")
-    table.add_column("Metric", style="cyan")
-    table.add_column("Left", style="blue")
-    table.add_column("Right", style="blue")
-    table.add_column("Change %", style="magenta")
+    table = _make_comparison_table(title or "Comparison")
 
     for key, value in data.items():
         if isinstance(value, tuple) and len(value) == 3:
