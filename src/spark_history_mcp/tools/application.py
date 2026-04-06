@@ -416,49 +416,21 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
         )
         total_disk_spilled_gb = common.bytes_to_gb(total_disk_spilled_bytes)
 
-        # Calculate performance metrics (values are in nanoseconds from Spark)
-        total_shuffle_fetch_wait_time_ns = 0
-        total_shuffle_write_time_ns = 0
+        # Calculate performance metrics — use stage-level totals (nanoseconds),
+        # which are more accurate than the previous median*count approximation.
         total_failed_tasks = sum(
             getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
         )
-
-        for stage in stages:
-            # Get shuffle timing from task metrics if available
-            if (
-                hasattr(stage, "task_metrics_distributions")
-                and stage.task_metrics_distributions
-            ):
-                dist = stage.task_metrics_distributions
-
-                # Shuffle fetch wait time
-                if (
-                    dist.shuffle_read_metrics
-                    and dist.shuffle_read_metrics.fetch_wait_time
-                    and len(dist.shuffle_read_metrics.fetch_wait_time) >= 3
-                ):
-                    # Use median value approximation
-                    median_fetch_wait = dist.shuffle_read_metrics.fetch_wait_time[2]
-                    num_tasks = stage.num_tasks or 0
-                    total_shuffle_fetch_wait_time_ns += median_fetch_wait * num_tasks
-
-                # Shuffle write time
-                if (
-                    dist.shuffle_write_metrics
-                    and dist.shuffle_write_metrics.write_time
-                    and len(dist.shuffle_write_metrics.write_time) >= 3
-                ):
-                    # Use median value approximation
-                    median_write_time = dist.shuffle_write_metrics.write_time[2]
-                    num_tasks = stage.num_tasks or 0
-                    total_shuffle_write_time_ns += median_write_time * num_tasks
-
+        total_shuffle_fetch_wait_time_ns = sum(
+            getattr(stage, "shuffle_fetch_wait_time", 0) or 0 for stage in stages
+        )
+        total_shuffle_write_time_ns = sum(
+            getattr(stage, "shuffle_write_time", 0) or 0 for stage in stages
+        )
         shuffle_fetch_wait_min = total_shuffle_fetch_wait_time_ns / (
             1000 * 1000 * 1000 * 60
-        )  # Convert from nanoseconds
-        shuffle_write_time_min = total_shuffle_write_time_ns / (
-            1000 * 1000 * 1000 * 60
-        )  # Convert from nanoseconds
+        )
+        shuffle_write_time_min = total_shuffle_write_time_ns / (1000 * 1000 * 1000 * 60)
 
         # Build summary
         summary = {

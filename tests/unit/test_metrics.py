@@ -181,8 +181,8 @@ class TestSummarizeApp:
         # Utilization: 240,000 / 1,200,000 * 100 = 20%
         assert result["executor_utilization_percent"] == 20.0
 
-    def test_shuffle_metrics_from_distributions(self):
-        """Test shuffle metrics extraction from task distributions."""
+    def test_shuffle_metrics_from_stage_fields(self):
+        """Test shuffle metrics use stage-level totals directly (not median*count)."""
         app = SimpleNamespace(
             id="app-shuffle",
             name="shuffle-test",
@@ -190,30 +190,8 @@ class TestSummarizeApp:
             cores_per_executor=1,
         )
 
-        # Mock distributions with shuffle metrics
-        shuffle_read_metrics = SimpleNamespace(
-            fetch_wait_time=[
-                1000000,
-                2000000,
-                3000000,
-                4000000,
-                5000000,
-            ]  # ns, median = 3ms
-        )
-        shuffle_write_metrics = SimpleNamespace(
-            write_time=[
-                500000,
-                1000000,
-                1500000,
-                2000000,
-                2500000,
-            ]  # ns, median = 1.5ms
-        )
-        distributions = SimpleNamespace(
-            shuffle_read_metrics=shuffle_read_metrics,
-            shuffle_write_metrics=shuffle_write_metrics,
-        )
-
+        # Stage has pre-aggregated shuffle timing in nanoseconds
+        # 6_000_000_000 ns = 6s = 0.1 min; 3_000_000_000 ns = 3s = 0.05 min
         stages = [
             SimpleNamespace(
                 executor_run_time=60000,
@@ -226,20 +204,94 @@ class TestSummarizeApp:
                 memory_bytes_spilled=0,
                 disk_bytes_spilled=0,
                 num_failed_tasks=0,
-                num_tasks=100,  # 100 tasks
+                num_tasks=100,
                 status=StageStatus.COMPLETE,
-                task_metrics_distributions=distributions,
+                task_metrics_distributions=None,
+                shuffle_fetch_wait_time=6_000_000_000,  # 6s total in ns
+                shuffle_write_time=3_000_000_000,  # 3s total in ns
             )
         ]
         executors = []
 
         result = summarize_app(app, stages, executors)
 
-        # Shuffle fetch wait: 3ms * 100 tasks = 300ms = 0.005 minutes
-        # Shuffle write time: 1.5ms * 100 tasks = 150ms = 0.0025 minutes
-        assert (
-            result["shuffle_read_wait_time_minutes"] == 0.01
-        )  # rounded to 2 decimal places
+        # 6_000_000_000 ns / (1e9 * 60) = 0.1 min
+        assert result["shuffle_read_wait_time_minutes"] == pytest.approx(0.1, rel=1e-6)
+        # 3_000_000_000 ns / (1e9 * 60) = 0.05 min
+        assert result["shuffle_write_time_minutes"] == pytest.approx(0.05, rel=1e-6)
+
+    def test_shuffle_metrics_summed_across_stages(self):
+        """Test that shuffle timing is summed across all stages."""
+        app = SimpleNamespace(
+            id="app-multi",
+            name="multi-stage",
+            attempts=[SimpleNamespace(duration=60000)],
+            cores_per_executor=1,
+        )
+
+        def make_stage(fetch_ns, write_ns):
+            return SimpleNamespace(
+                executor_run_time=10000,
+                executor_cpu_time=0,
+                jvm_gc_time=0,
+                input_bytes=0,
+                output_bytes=0,
+                shuffle_read_bytes=0,
+                shuffle_write_bytes=0,
+                memory_bytes_spilled=0,
+                disk_bytes_spilled=0,
+                num_failed_tasks=0,
+                num_tasks=5,
+                status=StageStatus.COMPLETE,
+                task_metrics_distributions=None,
+                shuffle_fetch_wait_time=fetch_ns,
+                shuffle_write_time=write_ns,
+            )
+
+        stages = [
+            make_stage(2_000_000_000, 1_000_000_000),  # 2s fetch, 1s write
+            make_stage(4_000_000_000, 2_000_000_000),  # 4s fetch, 2s write
+        ]
+        executors = []
+
+        result = summarize_app(app, stages, executors)
+
+        # Total: 6s fetch = 0.1 min; 3s write = 0.05 min
+        assert result["shuffle_read_wait_time_minutes"] == pytest.approx(0.1, rel=1e-6)
+        assert result["shuffle_write_time_minutes"] == pytest.approx(0.05, rel=1e-6)
+
+    def test_shuffle_metrics_missing_fields_default_to_zero(self):
+        """Test that stages missing shuffle_fetch_wait_time/shuffle_write_time default to 0."""
+        app = SimpleNamespace(
+            id="app-no-shuffle",
+            name="no-shuffle",
+            attempts=[SimpleNamespace(duration=60000)],
+            cores_per_executor=1,
+        )
+
+        stages = [
+            SimpleNamespace(
+                executor_run_time=10000,
+                executor_cpu_time=0,
+                jvm_gc_time=0,
+                input_bytes=0,
+                output_bytes=0,
+                shuffle_read_bytes=0,
+                shuffle_write_bytes=0,
+                memory_bytes_spilled=0,
+                disk_bytes_spilled=0,
+                num_failed_tasks=0,
+                num_tasks=5,
+                status=StageStatus.COMPLETE,
+                task_metrics_distributions=None,
+                # no shuffle_fetch_wait_time or shuffle_write_time
+            )
+        ]
+        executors = []
+
+        result = summarize_app(app, stages, executors)
+
+        assert result["shuffle_read_wait_time_minutes"] == 0.0
         assert result["shuffle_write_time_minutes"] == 0.0
 
     def test_missing_attributes_handling(self):

@@ -82,34 +82,17 @@ def summarize_app(app, stages, executors) -> Dict[str, Any]:
         sum(getattr(stage, "disk_bytes_spilled", 0) or 0 for stage in stages)
     )
 
-    total_shuffle_fetch_wait_time_ns = 0
-    total_shuffle_write_time_ns = 0
     total_failed_tasks = sum(
         getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
     )
 
-    for stage in stages:
-        dist = getattr(stage, "task_metrics_distributions", None)
-        if not dist:
-            continue
-
-        if (
-            getattr(dist, "shuffle_read_metrics", None)
-            and getattr(dist.shuffle_read_metrics, "fetch_wait_time", None)
-            and len(dist.shuffle_read_metrics.fetch_wait_time) >= 3
-        ):
-            median_fetch_wait = dist.shuffle_read_metrics.fetch_wait_time[2]
-            num_tasks = getattr(stage, "num_tasks", 0) or 0
-            total_shuffle_fetch_wait_time_ns += median_fetch_wait * num_tasks
-
-        if (
-            getattr(dist, "shuffle_write_metrics", None)
-            and getattr(dist.shuffle_write_metrics, "write_time", None)
-            and len(dist.shuffle_write_metrics.write_time) >= 3
-        ):
-            median_write_time = dist.shuffle_write_metrics.write_time[2]
-            num_tasks = getattr(stage, "num_tasks", 0) or 0
-            total_shuffle_write_time_ns += median_write_time * num_tasks
+    # Use stage-level totals (nanoseconds) — more accurate than median*count approximation
+    total_shuffle_fetch_wait_time_ns = sum(
+        getattr(stage, "shuffle_fetch_wait_time", 0) or 0 for stage in stages
+    )
+    total_shuffle_write_time_ns = sum(
+        getattr(stage, "shuffle_write_time", 0) or 0 for stage in stages
+    )
 
     shuffle_fetch_wait_min = ns_to_min(total_shuffle_fetch_wait_time_ns)
     shuffle_write_time_min = ns_to_min(total_shuffle_write_time_ns)
