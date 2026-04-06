@@ -438,9 +438,11 @@ def format_stage_differences(formatter, stage_deep_dive: Dict[str, Any]) -> None
         slower_app = time_diff.get("slower_application", "unknown")
 
         if slower_app == "app1":
-            diff_display = f"[red]+{percentage:.0f}%[/red]"
-        else:
+            # App1 is slower → App2 improved
             diff_display = f"[green]-{percentage:.0f}%[/green]"
+        else:
+            # App2 is slower → App2 regressed
+            diff_display = f"[red]+{percentage:.0f}%[/red]"
 
         table.add_row(stage_display, app1_display, app2_display, diff_display)
 
