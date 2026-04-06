@@ -72,12 +72,26 @@ class FormatterUtilsMixin:
     def _get_stage_metric_display_name(self, metric_key: str) -> str:
         """Get user-friendly display name for stage ratio metrics."""
         stage_metric_names = {
+            # Legacy ratio-change keys
             "duration_ratio_change": "Total Duration",
             "executor_runtime_ratio_change": "Executor Runtime",
             "shuffle_read_ratio_change": "Shuffle Read",
             "shuffle_write_ratio_change": "Shuffle Write",
             "input_ratio_change": "Input Data",
             "output_ratio_change": "Output Data",
+            # Base metric names (used by aggregated stage comparison)
+            "avg_stage_duration_ms": "Avg Stage Duration",
+            "total_executor_cpu_time_ns": "CPU Time",
+            "total_executor_run_time_ms": "Executor Runtime",
+            "total_gc_time_ms": "GC Time",
+            "total_tasks": "Total Tasks",
+            "total_shuffle_read_bytes": "Shuffle Read",
+            "total_shuffle_write_bytes": "Shuffle Write",
+            "total_input_bytes": "Input Data",
+            "total_output_bytes": "Output Data",
+            "total_memory_spilled": "Memory Spilled",
+            "stage_count": "Stage Count",
+            "total_failed_tasks": "Failed Tasks",
         }
         return stage_metric_names.get(metric_key, metric_key.replace("_", " ").title())
 

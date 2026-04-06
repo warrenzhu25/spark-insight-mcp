@@ -1271,7 +1271,7 @@ def format_aggregated_stage_comparison_result(formatter, data: Dict[str, Any], t
         if metric_key.endswith("_percent_change"):
             # Extract base metric name
             base_metric = metric_key.replace("_percent_change", "")
-            display_name = formatter._get_stage_metric_display_name(metric_key)
+            display_name = formatter._get_stage_metric_display_name(base_metric)
             change_pct = stage_comp[metric_key]
 
             # Get actual values from aggregated metrics
@@ -1285,10 +1285,14 @@ def format_aggregated_stage_comparison_result(formatter, data: Dict[str, Any], t
             change_str = f"{change_pct:+.1f}%"
             table.add_row(display_name, app1_display, app2_display, change_str)
         elif metric_key.endswith("_ratio"):
+            # Skip if a _percent_change entry already covers this metric
+            base_for_ratio = metric_key[: -len("_ratio")]
+            if f"{base_for_ratio}_percent_change" in stage_comp:
+                continue
             base_metric = ratio_metric_map.get(
                 metric_key, metric_key.replace("_ratio", "")
             )
-            display_name = formatter._get_stage_metric_display_name(metric_key)
+            display_name = formatter._get_stage_metric_display_name(base_metric)
             ratio_val = stage_comp.get(metric_key, 0)
 
             app1_val = app1_metrics.get(base_metric)
