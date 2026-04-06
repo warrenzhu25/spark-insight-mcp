@@ -100,12 +100,14 @@ if CLI_RUNTIME_AVAILABLE:
         from spark_history_mcp.cli.commands.cleanup import cleanup
         from spark_history_mcp.cli.commands.compare import compare
         from spark_history_mcp.cli.commands.config import config_cmd
+        from spark_history_mcp.cli.commands.repl import repl
         from spark_history_mcp.cli.commands.server import server
 
         cli.add_command(apps)
         cli.add_command(analyze)
         cli.add_command(cleanup)
         cli.add_command(compare)
+        cli.add_command(repl)
         cli.add_command(server)
         cli.add_command(config_cmd, name="config")
         cli.add_command(cache_cmd, name="cache")

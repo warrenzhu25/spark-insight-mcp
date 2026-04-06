@@ -40,11 +40,87 @@ uv run spark-mcp --cli <command> <subcommand> [options]
 
 | Command | Description |
 |---------|-------------|
+| `repl` | **Interactive shell** with tab completion and command history |
 | `apps` | Application management (list, show, details) |
 | `analyze` | Single-app performance analysis and insights |
 | `compare` | Multi-app comparisons with stateful context |
 | `server` | MCP server management |
 | `config` | Configuration management |
+
+## 🎮 Interactive REPL Mode (`repl`)
+
+The REPL (Read-Eval-Print Loop) drops you into a persistent interactive shell — no need to retype `spark-mcp --cli` for every command. Tab completion and command history are built in.
+
+### Starting the REPL
+
+```bash
+uv run spark-mcp --cli repl
+```
+
+```
+Spark REPL — type 'help' for commands, 'exit' to quit, Tab to autocomplete
+
+spark>
+```
+
+### Short Aliases
+
+Inside the REPL, the most common commands have single-word shortcuts. You no longer need the group prefix:
+
+| Short alias | Full command |
+|-------------|-------------|
+| `list` | `apps list` |
+| `show <id>` | `apps show <id>` |
+| `summary <id>` | `apps summary <id>` |
+| `jobs <id>` | `apps jobs <id>` |
+| `stages <id>` | `apps stages <id>` |
+| `insights <id>` | `analyze insights <id>` |
+| `bottlenecks <id>` | `analyze bottlenecks <id>` |
+| `slowest <id>` | `analyze slowest <id>` |
+| `skew <id>` | `analyze shuffle-skew <id>` |
+| `scaling <id>` | `analyze auto-scaling <id>` |
+| `compare <id1> <id2>` | `compare apps <id1> <id2>` |
+
+Full commands also work unchanged (e.g. `apps list --limit 5`).
+
+### Tab Completion
+
+Press **Tab** at any point to autocomplete commands, subcommands, and options:
+
+```
+spark> an<Tab>       → analyze
+spark> analyze <Tab> → insights  bottlenecks  auto-scaling  shuffle-skew  slowest
+spark> li<Tab>       → list
+```
+
+### Command History
+
+- **Up/Down arrows** to cycle through previous commands
+- History persists across sessions in `~/.spark_mcp_history`
+
+### Typical REPL Session
+
+```bash
+spark> list                          # apps list
+spark> show 1                        # apps show <first result>
+spark> insights 1                    # analyze insights 1
+spark> compare 1 2                   # compare apps 1 2
+spark> apps list --limit 5           # full commands work too
+spark> help                          # show alias reference
+spark> exit                          # or Ctrl+D
+```
+
+### Built-in REPL Commands
+
+| Command | Action |
+|---------|--------|
+| `help` / `?` / `h` | Show alias reference and tips |
+| `exit` / `quit` / `q` | Exit the REPL |
+| `Ctrl+D` | Exit the REPL |
+| `Ctrl+C` | Cancel current line (stays in REPL) |
+| `# comment` | Line is ignored |
+
+---
 
 ## 📊 Applications (`apps`)
 
@@ -249,6 +325,7 @@ The `compare` command group provides **stateful multi-app comparisons** with ses
 ## 📚 Command Reference (All CLI Commands)
 
 Top-level:
+- `repl` - **interactive shell** with tab completion and history
 - `apps` - list, inspect, and compare applications
 - `analyze` - targeted analyses and diagnostics
 - `compare` - stateful multi-app comparisons
@@ -833,15 +910,16 @@ done
 3. Try `analyze insights 1` for comprehensive analysis
 
 ### Intermediate
-4. Use `apps compare 1 2` for quick performance comparisons
-5. Use `analyze bottlenecks 1` to identify issues
-6. Explore `analyze slowest 1` for component analysis
+4. Use `repl` to enter the interactive shell — Tab completion makes exploration fast
+5. Use short aliases inside REPL: `list`, `show 1`, `insights 1`, `compare 1 2`
+6. Use `analyze bottlenecks 1` to identify issues
+7. Explore `analyze slowest 1` for component analysis
 
 ### Advanced
-7. Script with JSON output and jq processing
-8. Set up monitoring with cron jobs
-9. Integrate with CI/CD pipelines
-10. Build custom analysis workflows
+8. Script with JSON output and jq processing
+9. Set up monitoring with cron jobs
+10. Integrate with CI/CD pipelines
+11. Build custom analysis workflows
 
 ## 🆘 Getting Help
 
@@ -849,6 +927,9 @@ done
 ```bash
 # General help
 uv run spark-mcp --cli --help
+
+# Start interactive REPL (type 'help' inside for alias reference)
+uv run spark-mcp --cli repl
 
 # Command-specific help
 uv run spark-mcp --cli apps --help
@@ -874,11 +955,16 @@ uv run spark-mcp --cli analyze insights --help
 
 🎯 **Ready to analyze your Spark applications?** Start with:
 ```bash
-# List apps (note the numbers 1, 2, 3...)
-uv run spark-mcp --cli apps list --limit 5
-
-# Then use numbers for quick access
+# Option A: one-off commands
+uv run spark-mcp --cli apps list --limit 5   # List apps (numbered)
 uv run spark-mcp --cli apps show 1           # Show first app
 uv run spark-mcp --cli analyze insights 1    # Analyze first app
 uv run spark-mcp --cli apps compare 1 2      # Compare first two apps
+
+# Option B: interactive REPL (recommended for exploration)
+uv run spark-mcp --cli repl
+# spark> list
+# spark> show 1
+# spark> insights 1
+# spark> compare 1 2
 ```

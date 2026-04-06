@@ -44,6 +44,30 @@ spark-mcp --cli server test
 spark-mcp --cli server status
 ```
 
+### **REPL Mode** (Interactive Shell)
+```bash
+# Enter interactive shell with tab completion and history
+spark-mcp --cli repl
+```
+
+Inside the REPL, short aliases replace the full group prefix:
+
+| Alias | Equivalent |
+|-------|-----------|
+| `list` | `apps list` |
+| `show <id>` | `apps show <id>` |
+| `summary <id>` | `apps summary <id>` |
+| `jobs <id>` | `apps jobs <id>` |
+| `stages <id>` | `apps stages <id>` |
+| `insights <id>` | `analyze insights <id>` |
+| `bottlenecks <id>` | `analyze bottlenecks <id>` |
+| `slowest <id>` | `analyze slowest <id>` |
+| `skew <id>` | `analyze shuffle-skew <id>` |
+| `scaling <id>` | `analyze auto-scaling <id>` |
+| `compare <id1> <id2>` | `compare apps <id1> <id2>` |
+
+Full commands (e.g. `apps list --limit 5`) also work. Press **Tab** to autocomplete any command or subcommand. History is saved in `~/.spark_mcp_history`.
+
 ### **Output Formats**
 All CLI commands support multiple output formats:
 - `--format human` (default) - Rich tables and panels
