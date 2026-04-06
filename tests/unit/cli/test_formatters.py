@@ -336,6 +336,47 @@ class TestOutputFormatterHuman:
         fmt.output(timeline, title="TimelineFull")
 
 
+class TestStageDiffSign:
+    """Stage diff sign and color must reflect App2's change relative to App1."""
+
+    def _make_stage_dive(self, slower_application: str, percentage: int) -> dict:
+        return {
+            "top_stage_differences": [
+                {
+                    "stage_name": "some stage",
+                    "time_difference": {
+                        "percentage": percentage,
+                        "slower_application": slower_application,
+                    },
+                    "app1_stage": {"stage_id": 1, "duration_seconds": 10.0},
+                    "app2_stage": {"stage_id": 2, "duration_seconds": 5.0},
+                }
+            ]
+        }
+
+    def test_app1_slower_shows_negative_diff(self, capsys):
+        """When App1 is slower, App2 improved → diff should be negative (green)."""
+        from spark_history_mcp.cli.formatter_modules.comparison import format_stage_differences
+        from spark_history_mcp.cli.formatter_modules import OutputFormatter
+
+        fmt = OutputFormatter(format_type="human")
+        format_stage_differences(fmt, self._make_stage_dive("app1", 54))
+        out = capsys.readouterr().out
+        assert "-54%" in out, f"Expected '-54%' in output, got: {out}"
+        assert "+54%" not in out
+
+    def test_app2_slower_shows_positive_diff(self, capsys):
+        """When App2 is slower, it regressed → diff should be positive (red)."""
+        from spark_history_mcp.cli.formatter_modules.comparison import format_stage_differences
+        from spark_history_mcp.cli.formatter_modules import OutputFormatter
+
+        fmt = OutputFormatter(format_type="human")
+        format_stage_differences(fmt, self._make_stage_dive("app2", 50))
+        out = capsys.readouterr().out
+        assert "+50%" in out, f"Expected '+50%' in output, got: {out}"
+        assert "-50%" not in out
+
+
 class TestFormatterRegistryPriority:
     """Registry must check pattern matchers before type matchers."""
 
