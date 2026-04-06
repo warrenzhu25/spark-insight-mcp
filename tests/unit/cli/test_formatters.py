@@ -336,6 +336,67 @@ class TestOutputFormatterHuman:
         fmt.output(timeline, title="TimelineFull")
 
 
+class TestMakeComparisonTable:
+    """_make_comparison_table enforces consistent structure across all comparison tables."""
+
+    def test_default_four_columns(self):
+        from spark_history_mcp.cli.formatter_modules.comparison import _make_comparison_table
+
+        table = _make_comparison_table("My Title")
+        col_names = [col.header for col in table.columns]
+        assert col_names == ["Metric", "App 1", "App 2", "Change"]
+
+    def test_custom_label(self):
+        from spark_history_mcp.cli.formatter_modules.comparison import _make_comparison_table
+
+        table = _make_comparison_table("T", label="Stage")
+        assert table.columns[0].header == "Stage"
+
+    def test_show_change_false_gives_three_columns(self):
+        from spark_history_mcp.cli.formatter_modules.comparison import _make_comparison_table
+
+        table = _make_comparison_table("T", show_change=False)
+        col_names = [col.header for col in table.columns]
+        assert col_names == ["Metric", "App 1", "App 2"]
+
+    def test_show_lines_always_true(self):
+        from spark_history_mcp.cli.formatter_modules.comparison import _make_comparison_table
+
+        assert _make_comparison_table("T").show_lines is True
+        assert _make_comparison_table("T", show_change=False).show_lines is True
+
+    def test_value_columns_have_min_width(self):
+        from spark_history_mcp.cli.formatter_modules.comparison import _make_comparison_table
+
+        table = _make_comparison_table("T")
+        # App 1 and App 2 are columns 1 and 2
+        assert table.columns[1].min_width == 10
+        assert table.columns[2].min_width == 10
+        # Change is column 3
+        assert table.columns[3].min_width == 8
+
+    def test_stage_differences_uses_app1_app2_change_headers(self, capsys):
+        """Regression: Stage Differences must say 'App 1'/'App 2'/'Change', not 'App1'/'Diff'."""
+        from spark_history_mcp.cli.formatter_modules.comparison import format_stage_differences
+
+        from spark_history_mcp.cli.formatter_modules import OutputFormatter
+        fmt = OutputFormatter(format_type="human")
+        format_stage_differences(fmt, {
+            "top_stage_differences": [{
+                "stage_name": "some stage",
+                "time_difference": {"percentage": 10, "slower_application": "app2"},
+                "app1_stage": {"stage_id": 1, "duration_seconds": 5.0},
+                "app2_stage": {"stage_id": 2, "duration_seconds": 6.0},
+            }]
+        })
+        out = capsys.readouterr().out
+        assert "App 1" in out
+        assert "App 2" in out
+        assert "Change" in out
+        # Column header must be "Change", not "Diff" (title "Stage Differences" is fine)
+        assert "┃ Diff" not in out
+
+
 class TestStageDiffSign:
     """Stage diff sign and color must reflect App2's change relative to App1."""
 
