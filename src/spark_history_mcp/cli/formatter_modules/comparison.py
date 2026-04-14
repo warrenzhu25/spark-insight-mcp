@@ -731,19 +731,6 @@ def format_app_summary_diff(
     app2_agg = agg_metrics.get("app2", {})
     stage_comp = agg_stage.get("stage_performance_comparison", {})
 
-    # Merge avg_stage_duration (convert ms to seconds)
-    if "avg_stage_duration_ms" in app1_agg:
-        app1_summary["avg_stage_duration_seconds"] = (
-            app1_agg["avg_stage_duration_ms"] / 1000
-        )
-        app2_summary["avg_stage_duration_seconds"] = (
-            app2_agg.get("avg_stage_duration_ms", 0) / 1000
-        )
-        if "avg_stage_duration_ms_percent_change" in stage_comp:
-            diff_data["avg_stage_duration_seconds_change"] = (
-                f"{stage_comp['avg_stage_duration_ms_percent_change']:+.1f}%"
-            )
-
     # Merge total_tasks
     if "total_tasks" in app1_agg:
         app1_summary["total_tasks"] = app1_agg["total_tasks"]
@@ -760,7 +747,6 @@ def format_app_summary_diff(
     metric_display_config = {
         # Time metrics
         "application_duration_minutes": ("App Duration (min)", "time"),
-        "avg_stage_duration_seconds": ("Avg Stage Duration (s)", "time"),
         "total_executor_runtime_minutes": ("Executor Runtime (min)", "time"),
         "executor_cpu_time_minutes": ("CPU Time (min)", "time"),
         "jvm_gc_time_minutes": ("GC Time (min)", "time"),

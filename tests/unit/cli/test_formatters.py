@@ -616,16 +616,13 @@ class TestMergedSummaryTable:
                 },
                 "aggregated_stage_metrics": {
                     "app1": {
-                        "avg_stage_duration_ms": 77500,
                         "total_tasks": 141,
                     },
                     "app2": {
-                        "avg_stage_duration_ms": 43300,
                         "total_tasks": 73,
                     },
                 },
                 "stage_performance_comparison": {
-                    "avg_stage_duration_ms_percent_change": -44.2,
                     "total_tasks_percent_change": -48.2,
                 },
             },
@@ -638,7 +635,6 @@ class TestMergedSummaryTable:
         assert "Aggregated Stage Metrics Comparison" not in out
 
         # The merged metrics should appear in the single Summary Comparison table
-        assert "Avg Stage Duration" in out
         assert "Total Tasks" in out
 
         # Summary Comparison title should appear exactly once (in the single table)
