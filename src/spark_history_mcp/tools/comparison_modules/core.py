@@ -294,25 +294,39 @@ def compare_app_summaries(
     app2_metrics["application_id"] = app2_summary.get("application_id", app_id2)
 
     # Calculate percentage changes
-    diff = {}
-    filtered_app1_metrics = {}
-    filtered_app2_metrics = {}
-
+    metrics_with_changes = []
     for metric_name in app1_metrics:
         if metric_name in app2_metrics and metric_name != "application_id":
             change_str = _calculate_percentage_change(
                 app1_metrics[metric_name], app2_metrics[metric_name]
             )
             change_value = _extract_percentage_value(change_str)
+            metrics_with_changes.append(
+                {
+                    "name": metric_name,
+                    "change_str": change_str,
+                    "change_value": change_value,
+                    "app1_val": app1_metrics[metric_name],
+                    "app2_val": app2_metrics[metric_name],
+                }
+            )
 
-            # Only include metrics that meet the significance threshold
-            if (
-                change_value >= (significance_threshold * 100)
-                or metric_name == "application_id"
-            ):
-                diff[f"{metric_name}_change"] = change_str
-                filtered_app1_metrics[metric_name] = app1_metrics[metric_name]
-                filtered_app2_metrics[metric_name] = app2_metrics[metric_name]
+    # Sort by absolute change value descending
+    metrics_with_changes.sort(key=lambda x: x["change_value"], reverse=True)
+
+    diff = {}
+    filtered_app1_metrics = {}
+    filtered_app2_metrics = {}
+
+    for i, m in enumerate(metrics_with_changes):
+        # Include if:
+        # 1. It's one of the top 5 most significant changes
+        # 2. OR it meets the significance threshold
+        if i < 5 or m["change_value"] >= (significance_threshold * 100):
+            metric_name = m["name"]
+            diff[f"{metric_name}_change"] = m["change_str"]
+            filtered_app1_metrics[metric_name] = m["app1_val"]
+            filtered_app2_metrics[metric_name] = m["app2_val"]
 
     # Always include application_id for identification
     filtered_app1_metrics["application_id"] = app1_metrics["application_id"]
@@ -326,7 +340,7 @@ def compare_app_summaries(
             "total_metrics": len(app1_metrics) - 1,  # Exclude application_id
             "significant_metrics": len(diff),
             "significance_threshold": significance_threshold,
-            "filtering_applied": len(diff) < len(app1_metrics) - 1,
+            "forced_top_metrics": min(5, len(metrics_with_changes)),
         },
     }
 
