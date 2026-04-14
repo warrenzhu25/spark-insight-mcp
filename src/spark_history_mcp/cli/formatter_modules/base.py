@@ -162,14 +162,16 @@ class OutputFormatter(FormatterUtilsMixin):
             self._output_simple(data, title)
             return
 
-        if title:
-            console.print(f"\n[bold blue]{title}[/bold blue]")
-
         # Check registry for type-specific formatter
         formatter_func = registry.get_formatter(data)
         if formatter_func:
+            # Let the formatter handle title display to avoid duplication
             formatter_func(self, data, title)
             return
+
+        # Only print title here for fallback/unregistered types
+        if title:
+            console.print(f"\n[bold blue]{title}[/bold blue]")
 
         # Fallback to monolithic formatter for un-migrated types
         from ..formatters import OutputFormatter as MonolithicFormatter

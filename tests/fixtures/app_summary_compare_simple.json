@@ -17,7 +17,7 @@
     "total_metrics": 2,
     "significant_metrics": 2,
     "significance_threshold": 0.1,
-    "filtering_applied": false
+    "forced_top_metrics": 2
   },
   "aggregated_stage_comparison": {
     "applications": {

@@ -62,8 +62,8 @@ class TestEMRIntegration(unittest.TestCase):
         mock_session.request.assert_called_once()
         self.assertEqual(apps, [])
 
-    @patch("spark_history_mcp.core.app.EMRPersistentUIClient")
-    @patch("spark_history_mcp.core.app.Config.from_file")
+    @patch("spark_history_mcp.api.factory.EMRPersistentUIClient")
+    @patch("spark_history_mcp.config.config.Config.from_file")
     def test_app_lifespan_with_emr_config(
         self, mock_config_from_file, mock_emr_client_class
     ):

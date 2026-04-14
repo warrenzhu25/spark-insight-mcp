@@ -231,6 +231,12 @@ All configuration can be overridden via environment variables with pattern:
 
 ## Key Development Notes
 
+### Commit Requirements (MANDATORY)
+- **Every change MUST have tests** - No code changes without corresponding test coverage
+- **All tests MUST pass** - Run `task test` before committing
+- **Pre-commit hooks MUST pass** - Run `task validate` or let pre-commit run automatically
+- **Never commit broken code** - If tests fail, fix them before committing
+
 ### Code Style
 - Python 3.12+ required
 - Uses Ruff for linting and formatting (88-char line length)
