@@ -64,6 +64,22 @@ class TestOutputFormatterHuman:
         # Should not raise
         fmt.output(comparison_data, title="Comparison")
 
+    def test_format_app_summary_diff_directly(self):
+        fmt = OutputFormatter(format_type="human")
+        data = {
+            "app1_summary": {
+                "application_duration_minutes": 10.0,
+            },
+            "app2_summary": {
+                "application_duration_minutes": 11.0,
+            },
+            "diff": {
+                "application_duration_minutes_change": "+10%",
+            },
+        }
+        # This would have raised TypeError before the fix
+        fmt.output(data, title="Direct Summary Comparison")
+
     def test_format_stage_comparison_result(self):
         fmt = OutputFormatter(format_type="human")
         data = {

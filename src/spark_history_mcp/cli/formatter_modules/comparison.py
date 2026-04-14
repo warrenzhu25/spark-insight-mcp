@@ -701,7 +701,9 @@ def format_stage_summary(formatter, data: Dict[str, Any]) -> None:
         console.print(Panel(content, title="Performance Summary", border_style="green"))
 
 
-def format_app_summary_diff(formatter, app_summary_diff: Dict[str, Any]) -> None:
+def format_app_summary_diff(
+    formatter, app_summary_diff: Dict[str, Any], title: Optional[str] = None
+) -> None:
     """Format application summary differences in a table format."""
     if not RICH_AVAILABLE or "diff" not in app_summary_diff:
         return
@@ -711,7 +713,7 @@ def format_app_summary_diff(formatter, app_summary_diff: Dict[str, Any]) -> None
     app2_summary = app_summary_diff.get("app2_summary", {})
 
     # Create table
-    table = _make_comparison_table("Application Metrics Comparison")
+    table = _make_comparison_table(title or "Application Metrics Comparison")
 
     # Define metric display preferences for formatting
     metric_display_config = {
