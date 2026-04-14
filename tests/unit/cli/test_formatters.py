@@ -543,6 +543,53 @@ class TestFormatterRegistryPriority:
         )
 
 
+class TestTitleDeduplication:
+    """Title should only appear once when using registered formatters."""
+
+    def test_registered_formatter_does_not_duplicate_title(self, capsys):
+        """When a registered formatter handles data, title should appear only once."""
+        fmt = OutputFormatter(format_type="human")
+        # This data matches is_app_summary_comparison_result pattern
+        data = {
+            "app1_summary": {"application_duration_minutes": 10.0},
+            "app2_summary": {"application_duration_minutes": 11.0},
+            "diff": {"application_duration_minutes_change": "+10%"},
+        }
+        title = "Summary Comparison: app-1 vs app-2"
+        fmt.output(data, title=title)
+        out = capsys.readouterr().out
+
+        # Title should appear exactly once (in the table header)
+        # Before the fix, it appeared twice: once from _output_human and once from formatter
+        count = out.count("Summary Comparison")
+        assert count == 1, f"Expected title to appear once, but found {count} times"
+
+    def test_comparison_result_title_in_table(self, capsys):
+        """Comparison results should include title in Rich table header."""
+        fmt = OutputFormatter(format_type="human")
+        # Full comparison result that matches is_comparison_result pattern
+        data = {
+            "applications": {
+                "app1": {"id": "app-1", "name": "App One"},
+                "app2": {"id": "app-2", "name": "App Two"},
+            },
+            "aggregated_overview": {},
+            "stage_deep_dive": {"top_stage_differences": []},
+            "recommendations": [],
+        }
+        title = "Performance Comparison: app-1 vs app-2"
+        fmt.output(data, title=title)
+        out = capsys.readouterr().out
+
+        # Title appears in the Panel header, not duplicated
+        assert "Performance Comparison" in out
+        # The title shouldn't be printed as plain text before the panel
+        lines = out.strip().split("\n")
+        # First non-empty line should not be the raw title
+        first_content = next((line for line in lines if line.strip()), "")
+        assert not first_content.strip().startswith("Performance Comparison:")
+
+
 class TestOutputFormatterJSON:
     def test_output_json_from_dict(self, capsys):
         fmt = OutputFormatter(format_type="json")
