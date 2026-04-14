@@ -11,15 +11,25 @@ from ..models.spark_types import StageStatus
 from .common import bytes_to_gb, get_config, ms_to_min, ns_to_min
 
 
-def summarize_app(app, stages, executors) -> Dict[str, Any]:
+def summarize_app(
+    app, stages, executors, *, app_id: Optional[str] = None
+) -> Dict[str, Any]:
     """Build the application summary dict used by get_app_summary.
 
     Keeps behavior aligned with current tools.get_app_summary implementation.
+
+    Args:
+        app: Application object with attempts, name, cores_per_executor attributes
+        stages: Iterable of stage objects with metrics
+        executors: Iterable of executor objects with timing info
+        app_id: Optional application ID override (uses app.id if not provided)
     """
+    resolved_app_id = app_id if app_id is not None else getattr(app, "id", None)
+
     if not app.attempts:
         return {
             "error": "No application attempts found",
-            "application_id": getattr(app, "id", None),
+            "application_id": resolved_app_id,
         }
 
     attempt = app.attempts[-1]
@@ -98,7 +108,7 @@ def summarize_app(app, stages, executors) -> Dict[str, Any]:
     shuffle_write_time_min = ns_to_min(total_shuffle_write_time_ns)
 
     summary = {
-        "application_id": getattr(app, "id", None),
+        "application_id": resolved_app_id,
         "application_name": getattr(app, "name", None),
         "analysis_timestamp": datetime.now().isoformat(),
         "application_duration_minutes": round(total_runtime_min, 2),

@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ..core.app import mcp
-from ..models.spark_types import StageStatus
 from . import common
 from .analysis import (
     analyze_auto_scaling,
@@ -18,6 +17,7 @@ from .analysis import (
 )
 from .common import compact_output
 from .fetchers import fetch_app, fetch_env, fetch_executors, fetch_stages
+from .metrics import summarize_app
 from .recommendations import compact_recommendation
 
 
@@ -327,141 +327,10 @@ def get_app_summary(app_id: str, server: Optional[str] = None) -> Dict[str, Any]
         Dictionary containing application performance summary
     """
     try:
-        # Get application data
         app = fetch_app(app_id=app_id, server=server)
         stages = fetch_stages(app_id=app_id, server=server, with_summaries=True)
         executors = fetch_executors(app_id=app_id, server=server)
-
-        if not app.attempts:
-            return {"error": "No application attempts found", "application_id": app_id}
-
-        attempt = app.attempts[-1]  # Latest attempt
-
-        # Calculate timing metrics
-        total_runtime_ms = attempt.duration or 0
-        total_runtime_min = total_runtime_ms / (1000 * 60)
-
-        # Calculate executor metrics
-        total_executor_runtime_ms = sum(
-            stage.executor_run_time or 0 for stage in stages
-        )
-        total_executor_runtime_min = total_executor_runtime_ms / (1000 * 60)
-
-        total_executor_cpu_time_ns = sum(
-            stage.executor_cpu_time or 0 for stage in stages
-        )
-        total_executor_cpu_time_min = total_executor_cpu_time_ns / (
-            1000 * 1000 * 1000 * 60
-        )  # Convert from nanoseconds to minutes
-
-        total_gc_time_ms = sum(
-            getattr(stage, "jvm_gc_time", 0) or 0 for stage in stages
-        )
-        total_gc_time_min = total_gc_time_ms / (1000 * 60)
-
-        # Calculate executor utilization
-        if attempt.end_time and attempt.start_time:
-            app_end_time_ms = attempt.end_time.timestamp() * 1000
-        else:
-            app_end_time_ms = None
-
-        total_executor_time_ms = 0
-        executor_cores = app.cores_per_executor or 1
-
-        for executor in executors:
-            if executor.add_time:
-                add_time_ms = executor.add_time.timestamp() * 1000
-                if executor.remove_time:
-                    remove_time_ms = executor.remove_time.timestamp() * 1000
-                elif app_end_time_ms:
-                    remove_time_ms = app_end_time_ms
-                else:
-                    continue
-                total_executor_time_ms += remove_time_ms - add_time_ms
-
-        executor_utilization = 0.0
-        if total_executor_time_ms > 0:
-            executor_utilization = (
-                total_executor_runtime_ms / (total_executor_time_ms * executor_cores)
-            ) * 100
-
-        # Calculate data processing metrics
-        total_input_bytes = sum(
-            getattr(stage, "input_bytes", 0) or 0 for stage in stages
-        )
-        total_input_gb = common.bytes_to_gb(total_input_bytes)
-
-        total_output_bytes = sum(
-            getattr(stage, "output_bytes", 0) or 0 for stage in stages
-        )
-        total_output_gb = common.bytes_to_gb(total_output_bytes)
-
-        total_shuffle_read_bytes = sum(
-            getattr(stage, "shuffle_read_bytes", 0) or 0 for stage in stages
-        )
-        total_shuffle_read_gb = common.bytes_to_gb(total_shuffle_read_bytes)
-
-        total_shuffle_write_bytes = sum(
-            getattr(stage, "shuffle_write_bytes", 0) or 0 for stage in stages
-        )
-        total_shuffle_write_gb = common.bytes_to_gb(total_shuffle_write_bytes)
-
-        total_memory_spilled_bytes = sum(
-            getattr(stage, "memory_bytes_spilled", 0) or 0 for stage in stages
-        )
-        total_memory_spilled_gb = common.bytes_to_gb(total_memory_spilled_bytes)
-
-        total_disk_spilled_bytes = sum(
-            getattr(stage, "disk_bytes_spilled", 0) or 0 for stage in stages
-        )
-        total_disk_spilled_gb = common.bytes_to_gb(total_disk_spilled_bytes)
-
-        # Calculate performance metrics.
-        # shuffleFetchWaitTime is in milliseconds; shuffleWriteTime is in nanoseconds.
-        total_failed_tasks = sum(
-            getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
-        )
-        total_shuffle_fetch_wait_time_ms = sum(
-            getattr(stage, "shuffle_fetch_wait_time", 0) or 0 for stage in stages
-        )
-        total_shuffle_write_time_ns = sum(
-            getattr(stage, "shuffle_write_time", 0) or 0 for stage in stages
-        )
-        shuffle_fetch_wait_min = total_shuffle_fetch_wait_time_ms / (1000 * 60)
-        shuffle_write_time_min = total_shuffle_write_time_ns / (1000 * 1000 * 1000 * 60)
-
-        # Build summary
-        summary = {
-            "application_id": app_id,
-            "application_name": app.name,
-            "analysis_timestamp": datetime.now().isoformat(),
-            # Time metrics (improved for clarity)
-            "application_duration_minutes": round(total_runtime_min, 2),
-            "total_executor_runtime_minutes": round(total_executor_runtime_min, 2),
-            "executor_cpu_time_minutes": round(total_executor_cpu_time_min, 2),
-            "jvm_gc_time_minutes": round(total_gc_time_min, 2),
-            "executor_utilization_percent": round(executor_utilization, 2),
-            # Data processing metrics
-            "input_data_size_gb": round(total_input_gb, 3),
-            "output_data_size_gb": round(total_output_gb, 3),
-            "shuffle_read_size_gb": round(total_shuffle_read_gb, 3),
-            "shuffle_write_size_gb": round(total_shuffle_write_gb, 3),
-            "memory_spilled_gb": round(total_memory_spilled_gb, 3),
-            "disk_spilled_gb": round(total_disk_spilled_gb, 3),
-            # Performance metrics
-            "shuffle_read_wait_time_minutes": round(shuffle_fetch_wait_min, 2),
-            "shuffle_write_time_minutes": round(shuffle_write_time_min, 2),
-            "failed_tasks": total_failed_tasks,
-            # Additional context
-            "total_stages": len(stages),
-            "completed_stages": len(
-                [s for s in stages if s.status == StageStatus.COMPLETE]
-            ),
-            "failed_stages": len([s for s in stages if s.status == StageStatus.FAILED]),
-        }
-
-        return summary
-
+        return summarize_app(app, stages, executors, app_id=app_id)
     except Exception as e:
         return {
             "error": f"Failed to generate app summary: {str(e)}",
