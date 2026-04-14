@@ -98,17 +98,15 @@ class FormatterUtilsMixin:
     def _format_duration(self, duration_ms: float) -> str:
         """Format duration in human readable format."""
         if duration_ms < 1000:
-            return f"{duration_ms}ms"
+            return f"{duration_ms:.1f}ms"
         elif duration_ms < 60000:
             return f"{duration_ms / 1000:.1f}s"
         elif duration_ms < 3600000:
-            minutes = duration_ms // 60000
-            seconds = (duration_ms % 60000) // 1000
-            return f"{minutes}m {seconds}s"
+            minutes = duration_ms / 60000
+            return f"{minutes:.1f}m"
         else:
-            hours = duration_ms // 3600000
-            minutes = (duration_ms % 3600000) // 60000
-            return f"{hours}h {minutes}m"
+            hours = duration_ms / 3600000
+            return f"{hours:.1f}h"
 
     def _format_bytes(self, bytes_value: int) -> str:
         """Format bytes in human readable format."""
