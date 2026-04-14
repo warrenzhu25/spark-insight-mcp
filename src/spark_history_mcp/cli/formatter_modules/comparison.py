@@ -1303,16 +1303,25 @@ def format_aggregated_stage_comparison_result(
 
 
 def format_stage_metric_value(formatter, metric_key: str, value) -> str:
-    """Format a stage metric value based on its type."""
+    """Format a stage metric value as plain number (units shown in header)."""
     if value is None:
         return "N/A"
     if "bytes" in metric_key:
-        return formatter._format_bytes(value)
+        # Convert bytes to GB for display
+        gb_value = value / (1024 * 1024 * 1024)
+        return f"{gb_value:.2f}"
     elif metric_key.endswith("_ms") or "duration_ms" in metric_key:
-        return formatter._format_duration(value)
+        # Convert ms to appropriate unit based on metric
+        if "avg_stage_duration" in metric_key:
+            # Show as seconds
+            return f"{value / 1000:.1f}"
+        else:
+            # Show as minutes
+            return f"{value / 60000:.2f}"
     elif metric_key.endswith("_ns"):
-        # Nanoseconds - convert to milliseconds for display
-        return formatter._format_duration(value / 1_000_000)
+        # Nanoseconds - convert to minutes for CPU time
+        minutes = value / (1_000_000 * 60 * 1000)
+        return f"{minutes:.2f}"
     elif isinstance(value, float):
         return f"{value:,.1f}"
     else:
