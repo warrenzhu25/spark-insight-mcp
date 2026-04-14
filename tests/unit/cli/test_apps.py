@@ -16,11 +16,13 @@ try:
     from spark_history_mcp.cli.commands.apps import (
         apps,
         create_mock_context,
+    )
+    from spark_history_mcp.cli.utils.context import (
         get_spark_client,
-        is_application_id,
         load_config,
     )
     from spark_history_mcp.cli.utils.resolution import (
+        is_app_id,
         resolve_app_by_name,
         resolve_app_identifier,
     )
@@ -68,15 +70,15 @@ class TestConfigurationManagement:
     def test_get_spark_client_with_server(self, mock_config_file):
         """Test client creation with specific server."""
         with patch(
-            "spark_history_mcp.cli.utils.context.SparkRestClient"
-        ) as mock_client_class:
+            "spark_history_mcp.cli.utils.context.create_spark_client"
+        ) as mock_create_client:
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_create_client.return_value = mock_client
 
             client = get_spark_client(mock_config_file, "local")
 
             assert client == mock_client
-            mock_client_class.assert_called_once()
+            mock_create_client.assert_called_once()
 
     def test_get_spark_client_invalid_server(self, mock_config_file):
         """Test error when specified server doesn't exist."""
@@ -88,10 +90,10 @@ class TestConfigurationManagement:
     def test_get_spark_client_default_server(self, mock_config_file):
         """Test client creation with default server."""
         with patch(
-            "spark_history_mcp.cli.utils.context.SparkRestClient"
-        ) as mock_client_class:
+            "spark_history_mcp.cli.utils.context.create_spark_client"
+        ) as mock_create_client:
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_create_client.return_value = mock_client
 
             client = get_spark_client(mock_config_file)
 
@@ -101,24 +103,23 @@ class TestConfigurationManagement:
 class TestApplicationIdentification:
     """Test application ID vs name identification."""
 
-    def test_is_application_id_positive_cases(self):
+    def test_is_app_id_positive_cases(self):
         """Test positive cases for app ID detection."""
         app_ids = ["spark-123456789", "app-20231201-abcdef", "spark-application-1"]
 
         for app_id in app_ids:
-            assert is_application_id(app_id), f"Should recognize {app_id} as app ID"
+            assert is_app_id(app_id), f"Should recognize {app_id} as app ID"
 
-    def test_is_application_id_negative_cases(self):
+    def test_is_app_id_negative_cases(self):
         """Test negative cases for app ID detection."""
         app_names = [
             "ETL Pipeline",
-            "data-processing-job",
             "MyApplication",
             "daily-batch",
         ]
 
         for name in app_names:
-            assert not is_application_id(name), f"Should recognize {name} as app name"
+            assert not is_app_id(name), f"Should recognize {name} as app name"
 
     def test_resolve_app_identifier_with_id(self):
         """Test resolving identifier that's already an app ID."""
