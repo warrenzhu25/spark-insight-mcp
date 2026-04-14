@@ -716,23 +716,24 @@ def format_app_summary_diff(
     table = _make_comparison_table(title or "Application Metrics Comparison")
 
     # Define metric display preferences for formatting
+    # Headers without units for consistency with aggregated stage comparison
     metric_display_config = {
-        # Time metrics
-        "application_duration_minutes": ("App Duration (min)", "time"),
-        "total_executor_runtime_minutes": ("Executor Runtime (min)", "time"),
-        "executor_cpu_time_minutes": ("CPU Time (min)", "time"),
-        "jvm_gc_time_minutes": ("GC Time (min)", "time"),
-        "shuffle_read_wait_time_minutes": ("Shuffle Read Wait (min)", "time"),
-        "shuffle_write_time_minutes": ("Shuffle Write Time (min)", "time"),
-        # Size metrics (GB)
-        "input_data_size_gb": ("Input Data (GB)", "size"),
-        "output_data_size_gb": ("Output Data (GB)", "size"),
-        "shuffle_read_size_gb": ("Shuffle Read (GB)", "size"),
-        "shuffle_write_size_gb": ("Shuffle Write (GB)", "size"),
-        "memory_spilled_gb": ("Memory Spilled (GB)", "size"),
-        "disk_spilled_gb": ("Disk Spilled (GB)", "size"),
+        # Time metrics (values in minutes, formatted as duration)
+        "application_duration_minutes": ("App Duration", "time_min"),
+        "total_executor_runtime_minutes": ("Executor Runtime", "time_min"),
+        "executor_cpu_time_minutes": ("CPU Time", "time_min"),
+        "jvm_gc_time_minutes": ("GC Time", "time_min"),
+        "shuffle_read_wait_time_minutes": ("Shuffle Read Wait", "time_min"),
+        "shuffle_write_time_minutes": ("Shuffle Write Time", "time_min"),
+        # Size metrics (values in GB, formatted as bytes)
+        "input_data_size_gb": ("Input Data", "size_gb"),
+        "output_data_size_gb": ("Output Data", "size_gb"),
+        "shuffle_read_size_gb": ("Shuffle Read", "size_gb"),
+        "shuffle_write_size_gb": ("Shuffle Write", "size_gb"),
+        "memory_spilled_gb": ("Memory Spilled", "size_gb"),
+        "disk_spilled_gb": ("Disk Spilled", "size_gb"),
         # Percentage metrics
-        "executor_utilization_percent": ("Executor Utilization (%)", "percent"),
+        "executor_utilization_percent": ("Executor Utilization", "percent"),
         # Count metrics
         "total_stages": ("Total Stages", "count"),
         "completed_stages": ("Completed Stages", "count"),
@@ -769,16 +770,21 @@ def format_app_summary_diff(
         app1_val = app1_summary.get(field_name, 0)
         app2_val = app2_summary.get(field_name, 0)
 
-        # Format values based on type
-        if format_type == "size":
-            app1_str = f"{app1_val:.2f}"
-            app2_str = f"{app2_val:.2f}"
-        elif format_type == "time":
-            app1_str = f"{app1_val:.2f}"
-            app2_str = f"{app2_val:.2f}"
+        # Format values based on type (consistent with aggregated stage comparison)
+        if format_type == "size_gb":
+            # Convert GB to bytes for formatter, then format
+            app1_str = formatter._format_bytes(app1_val * 1024 * 1024 * 1024)
+            app2_str = formatter._format_bytes(app2_val * 1024 * 1024 * 1024)
+        elif format_type == "time_min":
+            # Convert minutes to milliseconds for formatter, then format
+            app1_str = formatter._format_duration(app1_val * 60 * 1000)
+            app2_str = formatter._format_duration(app2_val * 60 * 1000)
         elif format_type == "percent":
-            app1_str = f"{app1_val:.1f}"
-            app2_str = f"{app2_val:.1f}"
+            app1_str = f"{app1_val:.1f}%"
+            app2_str = f"{app2_val:.1f}%"
+        elif format_type == "count":
+            app1_str = f"{int(app1_val):,}"
+            app2_str = f"{int(app2_val):,}"
         elif isinstance(app1_val, float):
             app1_str = f"{app1_val:.2f}"
             app2_str = f"{app2_val:.2f}"
