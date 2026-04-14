@@ -38,6 +38,7 @@ from .comparison_modules.executors import (
     compare_stage_executor_timeline,
 )
 from .comparison_modules.stages import (
+    compare_stage_metrics_dist,
     compare_stages,
     find_top_stage_differences,
 )
@@ -94,6 +95,7 @@ __all__ = [
     # Comparison tools (MCP-exposed)
     "compare_app_performance",
     "compare_stages",
+    "compare_stage_metrics_dist",
     "compare_app_environments",
     # Comparison helpers (internal, used by CLI)
     "compare_app_executor_timeline",

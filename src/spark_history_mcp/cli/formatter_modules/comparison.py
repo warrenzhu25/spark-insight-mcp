@@ -66,6 +66,13 @@ def is_stage_comparison_result(data: Any) -> bool:
     return len(stage_keys.intersection(data.keys())) >= 2
 
 
+def is_stage_metrics_dist_result(data: Any) -> bool:
+    """Detect stage metrics distribution comparison result."""
+    if not isinstance(data, dict):
+        return False
+    return "metric_distributions" in data and "stages" in data
+
+
 def is_timeline_comparison_result(data: Any) -> bool:
     """Detect if data is a timeline comparison result structure."""
     if not isinstance(data, dict):
@@ -699,6 +706,140 @@ def format_stage_summary(formatter, data: Dict[str, Any]) -> None:
     if summary_items:
         content = "\n".join(summary_items)
         console.print(Panel(content, title="Performance Summary", border_style="green"))
+
+
+def format_stage_metrics_dist_result(
+    formatter, data: Dict[str, Any], title: Optional[str] = None
+) -> None:
+    """Format stage metric distribution comparison."""
+    if not RICH_AVAILABLE:
+        return
+
+    # Handle error case
+    if "error" in data:
+        console.print(f"[red]Error:[/red] {data['error']}")
+        return
+
+    stages = data.get("stages", {})
+    stage1 = stages.get("stage1", {})
+    stage2 = stages.get("stage2", {})
+
+    # Header panel
+    stage_name = stage1.get("name", "Unknown")[:50]
+    app1_id = stage1.get("app_id", "App1")
+    app2_id = stage2.get("app_id", "App2")
+    stage_id1 = stage1.get("stage_id", "?")
+
+    # Truncate app IDs for display
+    if len(app1_id) > 20:
+        app1_short = app1_id[:17] + "..."
+    else:
+        app1_short = app1_id
+    if len(app2_id) > 20:
+        app2_short = app2_id[:17] + "..."
+    else:
+        app2_short = app2_id
+
+    header_content = f"[bold]Stage {stage_id1}:[/bold] {stage_name}\n"
+    header_content += f"[bold]App1:[/bold] {app1_short}\n"
+    header_content += f"[bold]App2:[/bold] {app2_short}"
+
+    console.print(
+        Panel(
+            header_content,
+            title="Stage Metrics Distribution Comparison",
+            border_style="blue",
+        )
+    )
+
+    # Metric distributions table
+    metric_distributions = data.get("metric_distributions", {})
+    if not metric_distributions:
+        console.print("[yellow]No significant metric differences found.[/yellow]")
+        return
+
+    table = Table(title="Task Metric Distributions", show_lines=True)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Stat", style="dim")
+    table.add_column("App 1", min_width=12)
+    table.add_column("App 2", min_width=12)
+    table.add_column("Change", style="magenta", min_width=10)
+
+    # Metric display name mapping
+    metric_names = {
+        "duration": "Task Duration",
+        "executor_run_time": "Executor Run Time",
+        "executor_cpu_time": "Executor CPU Time",
+        "jvm_gc_time": "JVM GC Time",
+        "executor_deserialize_time": "Deserialize Time",
+        "result_serialization_time": "Result Serialization",
+        "memory_bytes_spilled": "Memory Spilled",
+        "disk_bytes_spilled": "Disk Spilled",
+        "shuffle_read_bytes": "Shuffle Read Bytes",
+        "shuffle_read_fetch_wait": "Shuffle Fetch Wait",
+        "shuffle_write_bytes": "Shuffle Write Bytes",
+        "shuffle_write_time": "Shuffle Write Time",
+    }
+
+    for metric_key, metric_data in metric_distributions.items():
+        display_name = metric_names.get(
+            metric_key, metric_key.replace("_", " ").title()
+        )
+
+        # Determine if this is a bytes or time metric for formatting
+        is_bytes = "bytes" in metric_key.lower() or "spilled" in metric_key.lower()
+        is_time = (
+            "time" in metric_key.lower()
+            or "duration" in metric_key.lower()
+            or "wait" in metric_key.lower()
+        )
+
+        for stat_type in ["median", "max"]:
+            if stat_type not in metric_data:
+                continue
+
+            stat_data = metric_data[stat_type]
+            val1 = stat_data.get("stage1", 0)
+            val2 = stat_data.get("stage2", 0)
+            change = stat_data.get("change", "N/A")
+
+            # Format values based on metric type
+            if is_bytes:
+                val1_str = formatter._format_bytes(val1)
+                val2_str = formatter._format_bytes(val2)
+            elif is_time:
+                val1_str = formatter._format_duration(val1)
+                val2_str = formatter._format_duration(val2)
+            else:
+                val1_str = f"{val1:,.0f}"
+                val2_str = f"{val2:,.0f}"
+
+            # Color the change based on direction
+            if change.startswith("+"):
+                change_str = f"[red]{change}[/red]"
+            elif change.startswith("-"):
+                change_str = f"[green]{change}[/green]"
+            else:
+                change_str = change
+
+            stat_display = "Median" if stat_type == "median" else "Max (p95)"
+            table.add_row(display_name, stat_display, val1_str, val2_str, change_str)
+
+            # Only show metric name once (first row), use empty for subsequent rows
+            display_name = ""
+
+    console.print(table)
+
+    # Summary panel
+    summary = data.get("summary", {})
+    total_compared = summary.get("total_metrics_compared", 0)
+    significant = summary.get("significant_differences", 0)
+    threshold = summary.get("significance_threshold", 0.1)
+
+    summary_content = f"• {total_compared} metrics compared\n"
+    summary_content += f"• {significant} significant differences (>{threshold:.0%})"
+
+    console.print(Panel(summary_content, title="Summary", border_style="green"))
 
 
 def format_app_summary_diff(
@@ -1683,6 +1824,9 @@ def output_table_comparison(
 # Note: Order matters if patterns overlap. registry.get_formatter returns the first match.
 registry.register_pattern(is_comparison_result, format_comparison_result)
 registry.register_pattern(is_stage_comparison_result, format_stage_comparison_result)
+registry.register_pattern(
+    is_stage_metrics_dist_result, format_stage_metrics_dist_result
+)
 registry.register_pattern(
     is_timeline_comparison_result, format_timeline_comparison_result
 )

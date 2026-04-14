@@ -17,6 +17,7 @@ from spark_history_mcp.tools import (
     analyze_auto_scaling,
     analyze_failed_tasks,
     analyze_shuffle_skew,
+    compare_stage_metrics_dist,
     compare_stages,
     get_application,
 )
@@ -1426,3 +1427,123 @@ class TestSparkInsightTools(unittest.TestCase):
         self.assertEqual(len(result["failed_stages"]), 0)
         self.assertEqual(len(result["problematic_executors"]), 0)
         self.assertEqual(len(result["recommendations"]), 0)
+
+
+class TestCompareStageMetricsDist(unittest.TestCase):
+    """Test the compare_stage_metrics_dist MCP tool."""
+
+    def setUp(self):
+        self.mock_client = MagicMock(spec=SparkRestClient)
+
+    def _create_mock_task_distributions(
+        self,
+        executor_run_time=None,
+        jvm_gc_time=None,
+        duration=None,
+    ):
+        """Create mock TaskMetricDistributions."""
+        # Default quantiles: [0.05, 0.25, 0.5, 0.75, 0.95]
+        dist = MagicMock(spec=TaskMetricDistributions)
+        dist.quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
+        dist.executor_run_time = executor_run_time or [100, 500, 1000, 2000, 5000]
+        dist.jvm_gc_time = jvm_gc_time or [10, 50, 100, 200, 500]
+        dist.duration = duration or [200, 600, 1200, 2500, 6000]
+        dist.executor_cpu_time = [50, 250, 500, 1000, 2500]
+        dist.executor_deserialize_time = [5, 20, 50, 100, 250]
+        dist.result_serialization_time = [1, 5, 10, 20, 50]
+        dist.memory_bytes_spilled = [0, 0, 0, 0, 0]
+        dist.disk_bytes_spilled = [0, 0, 0, 0, 0]
+        # Nested metrics
+        dist.shuffle_read_metrics = MagicMock()
+        dist.shuffle_read_metrics.read_bytes = [1000, 5000, 10000, 20000, 50000]
+        dist.shuffle_read_metrics.fetch_wait_time = [5, 20, 50, 100, 200]
+        dist.shuffle_write_metrics = MagicMock()
+        dist.shuffle_write_metrics.write_bytes = [500, 2500, 5000, 10000, 25000]
+        dist.shuffle_write_metrics.write_time = [2, 10, 25, 50, 100]
+        return dist
+
+    def _create_mock_stage(self, stage_id, name):
+        """Create a mock stage."""
+        stage = MagicMock(spec=StageData)
+        stage.stage_id = stage_id
+        stage.name = name
+        stage.status = "COMPLETE"
+        return stage
+
+    @patch("spark_history_mcp.tools.comparison_modules.stages.fetcher_tools")
+    def test_compare_stage_metrics_dist_basic(self, mock_fetcher):
+        """Test basic comparison of stage metric distributions."""
+        # Create distributions with different values
+        dist1 = self._create_mock_task_distributions(
+            executor_run_time=[100, 500, 1000, 2000, 5000],  # median=1000
+            jvm_gc_time=[10, 50, 100, 200, 500],  # median=100
+        )
+        dist2 = self._create_mock_task_distributions(
+            executor_run_time=[200, 1000, 2000, 4000, 10000],  # median=2000 (+100%)
+            jvm_gc_time=[20, 100, 200, 400, 1000],  # median=200 (+100%)
+        )
+
+        mock_fetcher.fetch_stage_task_summary.side_effect = [dist1, dist2]
+        mock_fetcher.fetch_stage_attempt.side_effect = [
+            self._create_mock_stage(0, "Test Stage 1"),
+            self._create_mock_stage(0, "Test Stage 2"),
+        ]
+
+        result = compare_stage_metrics_dist(
+            app_id1="app-123",
+            app_id2="app-456",
+            stage_id1=0,
+            stage_id2=0,
+            significance_threshold=0.1,
+        )
+
+        # Verify structure
+        self.assertIn("stages", result)
+        self.assertIn("metric_distributions", result)
+        self.assertIn("summary", result)
+        self.assertEqual(result["stages"]["stage1"]["app_id"], "app-123")
+        self.assertEqual(result["stages"]["stage2"]["app_id"], "app-456")
+
+        # Should detect significant differences
+        self.assertGreater(result["summary"]["significant_differences"], 0)
+
+    @patch("spark_history_mcp.tools.comparison_modules.stages.fetcher_tools")
+    def test_compare_stage_metrics_dist_error_handling(self, mock_fetcher):
+        """Test error handling when stage task summary not available."""
+        mock_fetcher.fetch_stage_task_summary.side_effect = Exception("Not found")
+
+        result = compare_stage_metrics_dist(
+            app_id1="app-123",
+            app_id2="app-456",
+            stage_id1=0,
+            stage_id2=0,
+        )
+
+        # Should return error
+        self.assertIn("error", result)
+        self.assertIn("stages", result)
+
+    @patch("spark_history_mcp.tools.comparison_modules.stages.fetcher_tools")
+    def test_compare_stage_metrics_dist_no_significant_diff(self, mock_fetcher):
+        """Test when no significant differences exist."""
+        # Create identical distributions
+        dist = self._create_mock_task_distributions()
+
+        mock_fetcher.fetch_stage_task_summary.side_effect = [dist, dist]
+        mock_fetcher.fetch_stage_attempt.side_effect = [
+            self._create_mock_stage(0, "Test Stage"),
+            self._create_mock_stage(0, "Test Stage"),
+        ]
+
+        result = compare_stage_metrics_dist(
+            app_id1="app-123",
+            app_id2="app-456",
+            stage_id1=0,
+            stage_id2=0,
+            significance_threshold=0.1,
+        )
+
+        # Should return empty metric_distributions when no significant diffs
+        self.assertIn("metric_distributions", result)
+        self.assertEqual(len(result["metric_distributions"]), 0)
+        self.assertEqual(result["summary"]["significant_differences"], 0)

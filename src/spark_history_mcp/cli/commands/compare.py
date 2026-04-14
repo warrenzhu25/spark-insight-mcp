@@ -1093,6 +1093,90 @@ if CLI_AVAILABLE:
         except Exception as e:
             raise click.ClickException(f"Error comparing stages: {e}") from e
 
+    @compare.command("stage-metrics-dist")
+    @click.argument("stage_id1", type=int)
+    @click.argument("stage_id2", type=int)
+    @click.option(
+        "--apps",
+        nargs=2,
+        metavar="APP1 APP2",
+        help="Override apps from context (app1 app2)",
+    )
+    @click.option("--server", "-s", help="Server name to use")
+    @click.option(
+        "--threshold",
+        "-t",
+        type=float,
+        default=0.1,
+        help="Significance threshold (0.1 = 10%)",
+    )
+    @click.option(
+        "--format",
+        "-f",
+        "output_format",
+        type=click.Choice(["human", "json", "table"]),
+        default="human",
+        help="Output format",
+    )
+    @click.pass_context
+    def stage_metrics_dist(
+        ctx,
+        stage_id1: int,
+        stage_id2: int,
+        apps: Optional[Tuple[str, str]],
+        server: Optional[str],
+        threshold: float,
+        output_format: str,
+    ):
+        """Compare task metric distributions between stages.
+
+        Shows median and p95 (max) values for key performance metrics like
+        executor run time, GC time, shuffle metrics, etc.
+
+        STAGE_ID1: Stage ID from first application
+        STAGE_ID2: Stage ID from second application
+
+        Examples:
+            compare stage-metrics-dist 0 0               # Compare stage 0 vs 0
+            compare stage-metrics-dist 1 2 --apps a b    # Compare stage 1 vs 2
+            compare stage-metrics-dist 0 0 -t 0.2        # 20% threshold
+        """
+        config_path = ctx.obj["config_path"]
+        formatter = OutputFormatter(output_format, ctx.obj.get("quiet", False))
+
+        try:
+            # Get app context
+            if apps:
+                app_id1, app_id2 = apps
+                final_server = server
+            else:
+                app_id1, app_id2, final_server = get_app_context(server=server)
+
+            client = get_spark_client(config_path, final_server)
+
+            import spark_history_mcp.tools as tools_module
+            from spark_history_mcp.tools import compare_stage_metrics_dist
+
+            with patch_tool_context(client, tools_module):
+                comparison_data = compare_stage_metrics_dist(
+                    app_id1=app_id1,
+                    app_id2=app_id2,
+                    stage_id1=stage_id1,
+                    stage_id2=stage_id2,
+                    server=final_server,
+                    significance_threshold=threshold,
+                )
+                formatter.output(
+                    comparison_data,
+                    f"Stage Metrics Distribution: {app_id1}:stage{stage_id1} vs "
+                    f"{app_id2}:stage{stage_id2}",
+                )
+
+        except Exception as e:
+            raise click.ClickException(
+                f"Error comparing stage metrics distributions: {e}"
+            ) from e
+
     @compare.command("timeline")
     @click.option(
         "--apps",

@@ -443,6 +443,88 @@ class TestCompareStagesCommand:
         assert call_args.kwargs["app_id2"] == "app-012"
 
 
+class TestCompareStageMetricsDistCommand:
+    """Test the compare stage-metrics-dist command."""
+
+    @patch("spark_history_mcp.cli.commands.compare.get_app_context")
+    @patch("spark_history_mcp.cli.commands.compare.get_spark_client")
+    @patch("spark_history_mcp.tools.compare_stage_metrics_dist")
+    def test_compare_stage_metrics_dist_with_context(
+        self, mock_compare_dist, mock_get_client, mock_get_context, cli_runner
+    ):
+        """Test stage metrics distribution comparison using saved context."""
+        # Setup mocks
+        mock_get_context.return_value = ("app-123", "app-456", "local")
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_compare_dist.return_value = {
+            "stages": {
+                "stage1": {"app_id": "app-123", "stage_id": 0, "name": "Test Stage"},
+                "stage2": {"app_id": "app-456", "stage_id": 0, "name": "Test Stage"},
+            },
+            "metric_distributions": {
+                "executor_run_time": {
+                    "median": {"stage1": 1000, "stage2": 2000, "change": "+100.0%"},
+                    "max": {"stage1": 5000, "stage2": 8000, "change": "+60.0%"},
+                }
+            },
+            "summary": {
+                "total_metrics_compared": 5,
+                "significant_differences": 2,
+                "significance_threshold": 0.1,
+            },
+        }
+
+        # Run command
+        result = cli_runner.invoke(
+            compare,
+            ["stage-metrics-dist", "0", "0", "--threshold", "0.2", "--format", "json"],
+            obj={"config_path": CONFIG_PATH, "quiet": True},
+        )
+
+        # Verify success
+        assert result.exit_code == 0
+        mock_get_context.assert_called_once()
+        mock_compare_dist.assert_called_once_with(
+            app_id1="app-123",
+            app_id2="app-456",
+            stage_id1=0,
+            stage_id2=0,
+            server="local",
+            significance_threshold=0.2,
+        )
+
+    @patch("spark_history_mcp.cli.commands.compare.get_spark_client")
+    @patch("spark_history_mcp.tools.compare_stage_metrics_dist")
+    def test_compare_stage_metrics_dist_with_apps_override(
+        self, mock_compare_dist, mock_get_client, cli_runner
+    ):
+        """Test stage metrics distribution with explicit app override."""
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_compare_dist.return_value = {
+            "stages": {},
+            "metric_distributions": {},
+            "summary": {},
+        }
+
+        result = cli_runner.invoke(
+            compare,
+            ["stage-metrics-dist", "1", "2", "--apps", "app-789", "app-012"],
+            obj={"config_path": CONFIG_PATH},
+        )
+
+        assert result.exit_code == 0
+        mock_compare_dist.assert_called_once()
+        # Verify it used the override apps, not context
+        call_args = mock_compare_dist.call_args
+        assert call_args.kwargs["app_id1"] == "app-789"
+        assert call_args.kwargs["app_id2"] == "app-012"
+        assert call_args.kwargs["stage_id1"] == 1
+        assert call_args.kwargs["stage_id2"] == 2
+
+
 class TestCompareTimelineCommand:
     """Test the compare timeline command."""
 

@@ -581,3 +581,237 @@ def _compare_task_distributions(
                 }
 
     return task_metrics
+
+
+def _get_quantile_value(
+    dist, field_name: str, quantile_index: int, nested_field: Optional[str] = None
+) -> float:
+    """
+    Extract a specific quantile value from a distribution field.
+
+    Args:
+        dist: TaskMetricDistributions object
+        field_name: Name of the field (e.g., 'duration', 'executor_run_time')
+        quantile_index: Index into the quantiles array (2=median, 4=p95 for standard)
+        nested_field: For nested metrics (shuffle_read_metrics.read_bytes), the nested
+                      field name
+
+    Returns:
+        The quantile value or 0.0 if not available
+    """
+    try:
+        if nested_field:
+            # Handle nested metrics like shuffle_read_metrics.read_bytes
+            parent = getattr(dist, field_name, None)
+            if parent is None:
+                return 0.0
+            values = getattr(parent, nested_field, None)
+        else:
+            values = getattr(dist, field_name, None)
+
+        if values is None or not isinstance(values, (list, tuple)):
+            return 0.0
+
+        if quantile_index >= len(values):
+            return 0.0
+
+        value = values[quantile_index]
+        return float(value) if value is not None else 0.0
+    except (TypeError, ValueError, AttributeError, IndexError):
+        return 0.0
+
+
+def _compare_distribution_metric(
+    val1: float, val2: float, threshold: float
+) -> Optional[Dict[str, Any]]:
+    """
+    Calculate difference between two values with significance check.
+
+    Args:
+        val1: Value from first stage
+        val2: Value from second stage
+        threshold: Minimum difference ratio to be significant
+
+    Returns:
+        Dict with stage1, stage2, and change values, or None if not significant
+    """
+    if val1 == 0 and val2 == 0:
+        return None
+
+    denominator = max(abs(val1), abs(val2), 1)
+    diff_ratio = abs(val1 - val2) / denominator
+
+    if diff_ratio < threshold:
+        return None
+
+    change_pct = ((val2 - val1) / max(abs(val1), 1)) * 100
+    return {
+        "stage1": val1,
+        "stage2": val2,
+        "change": f"{change_pct:+.1f}%",
+    }
+
+
+@mcp.tool()
+def compare_stage_metrics_dist(
+    app_id1: str,
+    app_id2: str,
+    stage_id1: int,
+    stage_id2: int,
+    server: Optional[str] = None,
+    significance_threshold: float = SIGNIFICANCE_THRESHOLD,
+) -> Dict[str, Any]:
+    """
+    Compare task metric distributions between two stages.
+
+    Shows median and p95 (max) values for key metrics like executor_run_time,
+    jvm_gc_time, shuffle metrics, etc. This is useful for identifying task-level
+    performance differences between stages.
+
+    Args:
+        app_id1: First Spark application ID
+        app_id2: Second Spark application ID
+        stage_id1: Stage ID from first application
+        stage_id2: Stage ID from second application
+        server: Optional server name to use (uses default if not specified)
+        significance_threshold: Minimum difference threshold to include metric
+                                (default: 0.1 = 10%)
+
+    Returns:
+        Dictionary containing:
+        - stages: Info about both stages being compared
+        - metric_distributions: Comparison of median and p95 values for each metric
+        - summary: Count of total metrics compared and significant differences
+    """
+    # Fetch task metric distributions for both stages
+    try:
+        dist1 = fetcher_tools.fetch_stage_task_summary(
+            app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server
+        )
+    except Exception as e:
+        return {
+            "error": f"Failed to fetch task metrics for stage {stage_id1}: {str(e)}",
+            "stages": {
+                "stage1": {"app_id": app_id1, "stage_id": stage_id1},
+                "stage2": {"app_id": app_id2, "stage_id": stage_id2},
+            },
+        }
+
+    try:
+        dist2 = fetcher_tools.fetch_stage_task_summary(
+            app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server
+        )
+    except Exception as e:
+        return {
+            "error": f"Failed to fetch task metrics for stage {stage_id2}: {str(e)}",
+            "stages": {
+                "stage1": {"app_id": app_id1, "stage_id": stage_id1},
+                "stage2": {"app_id": app_id2, "stage_id": stage_id2},
+            },
+        }
+
+    if dist1 is None or dist2 is None:
+        return {
+            "error": "Task metric distributions not available for one or both stages",
+            "stages": {
+                "stage1": {"app_id": app_id1, "stage_id": stage_id1},
+                "stage2": {"app_id": app_id2, "stage_id": stage_id2},
+            },
+        }
+
+    # Also fetch stage info for names
+    try:
+        stage1 = fetcher_tools.fetch_stage_attempt(
+            app_id=app_id1, stage_id=stage_id1, attempt_id=0, server=server
+        )
+        stage1_name = stage1.name if stage1 else "Unknown"
+    except Exception:
+        stage1_name = "Unknown"
+
+    try:
+        stage2 = fetcher_tools.fetch_stage_attempt(
+            app_id=app_id2, stage_id=stage_id2, attempt_id=0, server=server
+        )
+        stage2_name = stage2.name if stage2 else "Unknown"
+    except Exception:
+        stage2_name = "Unknown"
+
+    # Define metrics to compare
+    # Format: (display_name, field_name, nested_field_or_None)
+    metrics_to_compare = [
+        ("duration", "duration", None),
+        ("executor_run_time", "executor_run_time", None),
+        ("executor_cpu_time", "executor_cpu_time", None),
+        ("jvm_gc_time", "jvm_gc_time", None),
+        ("executor_deserialize_time", "executor_deserialize_time", None),
+        ("result_serialization_time", "result_serialization_time", None),
+        ("memory_bytes_spilled", "memory_bytes_spilled", None),
+        ("disk_bytes_spilled", "disk_bytes_spilled", None),
+        ("shuffle_read_bytes", "shuffle_read_metrics", "read_bytes"),
+        ("shuffle_read_fetch_wait", "shuffle_read_metrics", "fetch_wait_time"),
+        ("shuffle_write_bytes", "shuffle_write_metrics", "write_bytes"),
+        ("shuffle_write_time", "shuffle_write_metrics", "write_time"),
+    ]
+
+    # Quantile indices: default quantiles are [0.05, 0.25, 0.5, 0.75, 0.95]
+    # Index 2 = median (0.5), Index 4 = p95 (0.95)
+    median_index = 2
+    p95_index = 4
+
+    metric_distributions: Dict[str, Dict[str, Any]] = {}
+    total_metrics_compared = 0
+    significant_differences = 0
+
+    for display_name, field_name, nested_field in metrics_to_compare:
+        # Get median and p95 values for both distributions
+        median1 = _get_quantile_value(dist1, field_name, median_index, nested_field)
+        median2 = _get_quantile_value(dist2, field_name, median_index, nested_field)
+        p95_1 = _get_quantile_value(dist1, field_name, p95_index, nested_field)
+        p95_2 = _get_quantile_value(dist2, field_name, p95_index, nested_field)
+
+        # Skip if all values are zero
+        if median1 == 0 and median2 == 0 and p95_1 == 0 and p95_2 == 0:
+            continue
+
+        total_metrics_compared += 1
+
+        metric_entry: Dict[str, Any] = {}
+
+        # Compare medians
+        median_diff = _compare_distribution_metric(
+            median1, median2, significance_threshold
+        )
+        if median_diff:
+            metric_entry["median"] = median_diff
+            significant_differences += 1
+
+        # Compare p95 (max)
+        p95_diff = _compare_distribution_metric(p95_1, p95_2, significance_threshold)
+        if p95_diff:
+            metric_entry["max"] = p95_diff
+            significant_differences += 1
+
+        # Only include metric if there's at least one significant difference
+        if metric_entry:
+            metric_distributions[display_name] = metric_entry
+
+    return {
+        "stages": {
+            "stage1": {
+                "app_id": app_id1,
+                "stage_id": stage_id1,
+                "name": stage1_name,
+            },
+            "stage2": {
+                "app_id": app_id2,
+                "stage_id": stage_id2,
+                "name": stage2_name,
+            },
+        },
+        "metric_distributions": metric_distributions,
+        "summary": {
+            "total_metrics_compared": total_metrics_compared,
+            "significant_differences": significant_differences,
+            "significance_threshold": significance_threshold,
+        },
+    }
