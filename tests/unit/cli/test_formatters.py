@@ -590,6 +590,62 @@ class TestTitleDeduplication:
         assert not first_content.strip().startswith("Performance Comparison:")
 
 
+class TestMergedSummaryTable:
+    """Summary and Aggregated Stage tables should be merged into one."""
+
+    def test_summary_diff_produces_single_table(self, capsys):
+        """Summary diff should produce one table with merged metrics, not two."""
+        fmt = OutputFormatter(format_type="human")
+        data = {
+            "app1_summary": {
+                "application_duration_minutes": 8.48,
+                "total_executor_runtime_minutes": 17.91,
+            },
+            "app2_summary": {
+                "application_duration_minutes": 5.07,
+                "total_executor_runtime_minutes": 9.21,
+            },
+            "diff": {
+                "application_duration_minutes_change": "-40.2%",
+                "total_executor_runtime_minutes_change": "-48.6%",
+            },
+            "aggregated_stage_comparison": {
+                "applications": {
+                    "app1": {"id": "app-1", "name": "App One"},
+                    "app2": {"id": "app-2", "name": "App Two"},
+                },
+                "aggregated_stage_metrics": {
+                    "app1": {
+                        "avg_stage_duration_ms": 77500,
+                        "total_tasks": 141,
+                    },
+                    "app2": {
+                        "avg_stage_duration_ms": 43300,
+                        "total_tasks": 73,
+                    },
+                },
+                "stage_performance_comparison": {
+                    "avg_stage_duration_ms_percent_change": -44.2,
+                    "total_tasks_percent_change": -48.2,
+                },
+            },
+        }
+        fmt.output(data, title="Summary Comparison")
+        out = capsys.readouterr().out
+
+        # Should have only ONE table, not two separate tables
+        # "Aggregated Stage" should NOT appear as a separate table header
+        assert "Aggregated Stage Metrics Comparison" not in out
+
+        # The merged metrics should appear in the single Summary Comparison table
+        assert "Avg Stage Duration" in out
+        assert "Total Tasks" in out
+
+        # Summary Comparison title should appear exactly once (in the single table)
+        count = out.count("Summary Comparison")
+        assert count == 1, f"Expected 'Summary Comparison' once, found {count} times"
+
+
 class TestOutputFormatterJSON:
     def test_output_json_from_dict(self, capsys):
         fmt = OutputFormatter(format_type="json")

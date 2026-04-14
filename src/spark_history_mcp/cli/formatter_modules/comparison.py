@@ -725,6 +725,34 @@ def format_app_summary_diff(
         console.print("─" * 80)
         console.print()  # Empty line for spacing
 
+    # Extract and merge unique metrics from aggregated_stage_comparison
+    agg_metrics = agg_stage.get("aggregated_stage_metrics", {})
+    app1_agg = agg_metrics.get("app1", {})
+    app2_agg = agg_metrics.get("app2", {})
+    stage_comp = agg_stage.get("stage_performance_comparison", {})
+
+    # Merge avg_stage_duration (convert ms to seconds)
+    if "avg_stage_duration_ms" in app1_agg:
+        app1_summary["avg_stage_duration_seconds"] = (
+            app1_agg["avg_stage_duration_ms"] / 1000
+        )
+        app2_summary["avg_stage_duration_seconds"] = (
+            app2_agg.get("avg_stage_duration_ms", 0) / 1000
+        )
+        if "avg_stage_duration_ms_percent_change" in stage_comp:
+            diff_data["avg_stage_duration_seconds_change"] = (
+                f"{stage_comp['avg_stage_duration_ms_percent_change']:+.1f}%"
+            )
+
+    # Merge total_tasks
+    if "total_tasks" in app1_agg:
+        app1_summary["total_tasks"] = app1_agg["total_tasks"]
+        app2_summary["total_tasks"] = app2_agg.get("total_tasks", 0)
+        if "total_tasks_percent_change" in stage_comp:
+            diff_data["total_tasks_change"] = (
+                f"{stage_comp['total_tasks_percent_change']:+.1f}%"
+            )
+
     # Create table with static title
     table = _make_comparison_table("Summary Comparison")
 
@@ -732,6 +760,7 @@ def format_app_summary_diff(
     metric_display_config = {
         # Time metrics
         "application_duration_minutes": ("App Duration (min)", "time"),
+        "avg_stage_duration_seconds": ("Avg Stage Duration (s)", "time"),
         "total_executor_runtime_minutes": ("Executor Runtime (min)", "time"),
         "executor_cpu_time_minutes": ("CPU Time (min)", "time"),
         "jvm_gc_time_minutes": ("GC Time (min)", "time"),
@@ -751,6 +780,7 @@ def format_app_summary_diff(
         "completed_stages": ("Completed Stages", "count"),
         "failed_stages": ("Failed Stages", "count"),
         "failed_tasks": ("Failed Tasks", "count"),
+        "total_tasks": ("Total Tasks", "count"),
     }
 
     # Use the sorted order from diff keys (already sorted by MCP tool)
@@ -807,11 +837,6 @@ def format_app_summary_diff(
 
     console.print()  # Empty line for spacing
     console.print(table)
-
-    aggregated_stage = app_summary_diff.get("aggregated_stage_comparison")
-    if aggregated_stage:
-        console.print()
-        format_aggregated_stage_comparison_result(formatter, aggregated_stage)
 
 
 # Group C: Specialized Comparisons
