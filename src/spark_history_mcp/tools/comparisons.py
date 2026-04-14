@@ -12,7 +12,6 @@ from .comparison_modules.executors import *  # noqa: F401,F403
 from .comparison_modules.stages import *  # noqa: F401,F403
 from .comparison_modules.utils import (  # noqa: F401
     _compare_environments,
-    _compare_sql_execution_plans,
     calculate_safe_ratio,
     filter_significant_metrics,
     sort_comparison_data,

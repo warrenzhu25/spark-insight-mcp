@@ -290,27 +290,7 @@ def ms_to_min(value: float | int) -> float:
     return float(value) / MS_PER_MIN
 
 
-def pct_change(val1: float, val2: float) -> str:
-    if val1 == 0:
-        return "N/A" if val2 == 0 else "+∞"
-    change = ((val2 - val1) / val1) * 100
-    sign = "+" if change >= 0 else ""
-    return f"{sign}{change:.1f}%"
-
-
-T = TypeVar("T")
 F = TypeVar("F", bound=Callable[..., Any])
-
-
-def safe_get(fn: Callable[[], T], default: Optional[T] = None) -> Optional[T]:
-    """Execute ``fn`` and return its result; on exception return ``default``.
-
-    Keeps try/except noise out of callers for non-critical paths.
-    """
-    try:
-        return fn()
-    except Exception:
-        return default
 
 
 def resolve_legacy_tool(name: str, fallback: F) -> F:

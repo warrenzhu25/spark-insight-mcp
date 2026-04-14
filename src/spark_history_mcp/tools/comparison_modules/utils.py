@@ -387,23 +387,3 @@ def _compare_environments(
     }
 
     return comparison
-
-
-def _compare_sql_execution_plans(client, app_id1: str, app_id2: str) -> Dict[str, Any]:
-    """Compare SQL execution plans between applications."""
-    try:
-        # Get SQL queries for both applications
-        sql1 = client.list_sql_queries(app_id=app_id1, details=False)
-        sql2 = client.list_sql_queries(app_id=app_id2, details=False)
-
-        return {
-            "app1_queries": len(sql1) if sql1 else 0,
-            "app2_queries": len(sql2) if sql2 else 0,
-            "comparison": "SQL query comparison would require detailed analysis",
-        }
-    except Exception as e:
-        return {
-            "error": f"Failed to compare SQL plans: {str(e)}",
-            "app1_queries": 0,
-            "app2_queries": 0,
-        }

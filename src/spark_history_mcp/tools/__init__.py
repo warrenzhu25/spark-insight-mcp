@@ -43,7 +43,6 @@ from .comparison_modules.stages import (
 )
 from .comparison_modules.utils import (  # noqa: F401
     _compare_environments,
-    _compare_sql_execution_plans,
 )
 
 # Executor and resource tools
