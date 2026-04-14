@@ -712,8 +712,21 @@ def format_app_summary_diff(
     app1_summary = app_summary_diff.get("app1_summary", {})
     app2_summary = app_summary_diff.get("app2_summary", {})
 
-    # Create table
-    table = _make_comparison_table(title or "Application Metrics Comparison")
+    # Add app names header (extract from aggregated_stage_comparison if available)
+    agg_stage = app_summary_diff.get("aggregated_stage_comparison", {})
+    applications = agg_stage.get("applications", {})
+    if applications:
+        app1_data = applications.get("app1", {})
+        app2_data = applications.get("app2", {})
+        app1_name = app1_data.get("name", app1_data.get("id", "App1"))
+        app2_name = app2_data.get("name", app2_data.get("id", "App2"))
+
+        console.print(f"[cyan]{app1_name}[/cyan] vs [cyan]{app2_name}[/cyan]")
+        console.print("─" * 80)
+        console.print()  # Empty line for spacing
+
+    # Create table with static title
+    table = _make_comparison_table("Summary Comparison")
 
     # Define metric display preferences for formatting
     metric_display_config = {
