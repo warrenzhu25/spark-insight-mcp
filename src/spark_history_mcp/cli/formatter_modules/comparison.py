@@ -566,9 +566,9 @@ def format_stage_info_header(formatter, data: Dict[str, Any]) -> None:
     stage_name = stage1.get("name", "Unknown Stage")[:60]  # Truncate long names
     stage_status = stage1.get("status", "Unknown")
 
-    # Get app names (shortened)
-    app1_id = stage1.get("app_id", "App1")[:20] + "..."
-    app2_id = stage2.get("app_id", "App2")[:20] + "..."
+    # Get app names
+    app1_id = stage1.get("app_id", "App1")
+    app2_id = stage2.get("app_id", "App2")
 
     content = f"[bold]Stage {stage_id}:[/bold] {stage_name}\n"
     content += f"[bold]App1:[/bold] {app1_id}\n"
