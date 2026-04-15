@@ -9,6 +9,13 @@ import logging
 from typing import Any, Dict, Optional
 
 from ...core.app import mcp
+from ...models.spark_types import StageData, TaskMetricDistributions
+from ...utils import (
+    get_comparable_numeric_fields,
+    get_distribution_fields,
+    get_field_value,
+    get_quantile_value,
+)
 from .. import fetchers as fetcher_tools
 from .. import matching as matching_tools
 from .constants import SIGNIFICANCE_THRESHOLD, SIMILARITY_THRESHOLD
@@ -486,40 +493,16 @@ def _compare_stage_level_metrics(
     if diff:
         all_metrics.append({"name": "duration_ms", **diff})
 
-    # Compare numeric stage attributes
-    numeric_attrs = [
-        "num_tasks",
-        "num_active_tasks",
-        "num_complete_tasks",
-        "num_failed_tasks",
-        "executor_run_time",
-        "executor_cpu_time",
-        "jvm_gc_time",
-        "input_bytes",
-        "input_records",
-        "output_bytes",
-        "output_records",
-        "shuffle_read_bytes",
-        "shuffle_read_records",
-        "shuffle_write_bytes",
-        "shuffle_write_records",
-        "shuffle_fetch_wait_time",
-        "memory_bytes_spilled",
-        "disk_bytes_spilled",
-    ]
+    # Dynamically extract numeric fields from StageData model
+    numeric_fields = get_comparable_numeric_fields(StageData)
 
-    for attr in numeric_attrs:
-        val1 = getattr(stage1, attr, 0) or 0
-        val2 = getattr(stage2, attr, 0) or 0
+    for field in numeric_fields:
+        val1 = get_field_value(stage1, field, default=0.0)
+        val2 = get_field_value(stage2, field, default=0.0)
 
-        # Convert nanoseconds to milliseconds for consistency in display
-        if attr == "executor_cpu_time":
-            val1 = float(val1) / 1_000_000.0
-            val2 = float(val2) / 1_000_000.0
-
-        diff = calculate_difference(float(val1), float(val2))
+        diff = calculate_difference(val1, val2)
         if diff:
-            all_metrics.append({"name": attr, **diff})
+            all_metrics.append({"name": field.name, **diff})
 
     # Sort by significance descending
     all_metrics.sort(key=lambda x: x["significance"], reverse=True)
@@ -548,25 +531,18 @@ def _compare_task_distributions(
     if not (dist1 and dist2):
         return task_metrics
 
-    # Compare key distribution metrics (median and max values)
-    distribution_fields = [
-        ("executor_deserialize_time", "executor_deserialize_time"),
-        ("executor_deserialize_cpu_time", "executor_deserialize_cpu_time"),
-        ("executor_run_time", "executor_run_time"),
-        ("executor_cpu_time", "executor_cpu_time"),
-        ("result_size", "result_size"),
-        ("jvm_gc_time", "jvm_gc_time"),
-        ("result_serialization_time", "result_serialization_time"),
-        ("memory_bytes_spilled", "memory_bytes_spilled"),
-        ("disk_bytes_spilled", "disk_bytes_spilled"),
-    ]
+    # Dynamically extract distribution fields from TaskMetricDistributions
+    # Only include top-level distribution fields (no nested) for this comparison
+    distribution_fields = get_distribution_fields(
+        TaskMetricDistributions, include_nested=False
+    )
 
     median_index = 2
 
-    for attr_name, field_name in distribution_fields:
+    for field in distribution_fields:
         # Compare median values
-        median1 = _get_quantile_value(dist1, field_name, median_index)
-        median2 = _get_quantile_value(dist2, field_name, median_index)
+        median1 = get_quantile_value(dist1, field, median_index)
+        median2 = get_quantile_value(dist2, field, median_index)
 
         if median1 > 0 or median2 > 0:
             denominator = max(abs(median1), abs(median2), 1)
@@ -574,7 +550,7 @@ def _compare_task_distributions(
 
             if diff_ratio >= significance_threshold:
                 change_pct = ((median2 - median1) / max(abs(median1), 1)) * 100
-                task_metrics[f"{attr_name}_median"] = {
+                task_metrics[f"{field.name}_median"] = {
                     "stage1": median1,
                     "stage2": median2,
                     "change": f"{change_pct:+.1f}%",
@@ -582,44 +558,6 @@ def _compare_task_distributions(
                 }
 
     return task_metrics
-
-
-def _get_quantile_value(
-    dist, field_name: str, quantile_index: int, nested_field: Optional[str] = None
-) -> float:
-    """
-    Extract a specific quantile value from a distribution field.
-
-    Args:
-        dist: TaskMetricDistributions object
-        field_name: Name of the field (e.g., 'duration', 'executor_run_time')
-        quantile_index: Index into the quantiles array (2=median, 4=p95 for standard)
-        nested_field: For nested metrics (shuffle_read_metrics.read_bytes), the nested
-                      field name
-
-    Returns:
-        The quantile value or 0.0 if not available
-    """
-    try:
-        if nested_field:
-            # Handle nested metrics like shuffle_read_metrics.read_bytes
-            parent = getattr(dist, field_name, None)
-            if parent is None:
-                return 0.0
-            values = getattr(parent, nested_field, None)
-        else:
-            values = getattr(dist, field_name, None)
-
-        if values is None or not isinstance(values, (list, tuple)):
-            return 0.0
-
-        if quantile_index >= len(values):
-            return 0.0
-
-        value = values[quantile_index]
-        return float(value) if value is not None else 0.0
-    except (TypeError, ValueError, AttributeError, IndexError):
-        return 0.0
 
 
 @mcp.tool()
@@ -706,22 +644,11 @@ def compare_stage_metrics_dist(
     except Exception:
         stage2_name = "Unknown"
 
-    # Define metrics to compare
-    # Format: (display_name, field_name, nested_field_or_None)
-    metrics_to_compare = [
-        ("duration", "duration", None),
-        ("executor_run_time", "executor_run_time", None),
-        ("executor_cpu_time", "executor_cpu_time", None),
-        ("jvm_gc_time", "jvm_gc_time", None),
-        ("executor_deserialize_time", "executor_deserialize_time", None),
-        ("result_serialization_time", "result_serialization_time", None),
-        ("memory_bytes_spilled", "memory_bytes_spilled", None),
-        ("disk_bytes_spilled", "disk_bytes_spilled", None),
-        ("shuffle_read_bytes", "shuffle_read_metrics", "read_bytes"),
-        ("shuffle_read_fetch_wait", "shuffle_read_metrics", "fetch_wait_time"),
-        ("shuffle_write_bytes", "shuffle_write_metrics", "write_bytes"),
-        ("shuffle_write_time", "shuffle_write_metrics", "write_time"),
-    ]
+    # Dynamically extract distribution fields from TaskMetricDistributions
+    # Include nested fields (shuffle_read_metrics, shuffle_write_metrics, etc.)
+    distribution_fields = get_distribution_fields(
+        TaskMetricDistributions, include_nested=True
+    )
 
     # Quantile indices: default quantiles are [0.05, 0.25, 0.5, 0.75, 0.95]
     # Index 2 = median (0.5), Index 4 = p95 (0.95)
@@ -733,12 +660,12 @@ def compare_stage_metrics_dist(
 
     all_metrics_list = []
 
-    for display_name, field_name, nested_field in metrics_to_compare:
+    for field in distribution_fields:
         # Get median and p95 values for both distributions
-        median1 = _get_quantile_value(dist1, field_name, median_index, nested_field)
-        median2 = _get_quantile_value(dist2, field_name, median_index, nested_field)
-        p95_1 = _get_quantile_value(dist1, field_name, p95_index, nested_field)
-        p95_2 = _get_quantile_value(dist2, field_name, p95_index, nested_field)
+        median1 = get_quantile_value(dist1, field, median_index)
+        median2 = get_quantile_value(dist2, field, median_index)
+        p95_1 = get_quantile_value(dist1, field, p95_index)
+        p95_2 = get_quantile_value(dist2, field, p95_index)
 
         # Skip if all values are zero
         if median1 == 0 and median2 == 0 and p95_1 == 0 and p95_2 == 0:
@@ -756,7 +683,7 @@ def compare_stage_metrics_dist(
         max_sig = max(sig_median, sig_p95)
 
         metric_entry: Dict[str, Any] = {
-            "display_name": display_name,
+            "display_name": field.name,
             "max_sig": max_sig,
         }
 
