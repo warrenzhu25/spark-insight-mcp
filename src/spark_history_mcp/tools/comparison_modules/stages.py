@@ -503,6 +503,7 @@ def _compare_stage_level_metrics(
         "shuffle_read_records",
         "shuffle_write_bytes",
         "shuffle_write_records",
+        "shuffle_fetch_wait_time",
         "memory_bytes_spilled",
         "disk_bytes_spilled",
     ]

@@ -23,7 +23,7 @@ class FormatterUtilsMixin:
             "duration": "Duration",
             "executor_run_time": "Runtime",
             "shuffle_read_bytes": "Shuffle Read",
-            "shuffle_fetch_wait_time": "Fetch Wait Time",
+            "shuffle_fetch_wait_time": "Shuffle Fetch Wait Time",
             "shuffle_remote_reqs_duration": "Remote Requests",
             "shuffle_write_bytes": "Shuffle Write",
             "task_time": "Task Time",
