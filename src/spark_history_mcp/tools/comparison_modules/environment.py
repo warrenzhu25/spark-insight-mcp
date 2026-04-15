@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 from ...core.app import mcp
 from .. import fetchers as fetcher_tools
+from ..stage_aggregation import aggregate_stage_metrics_for_comparison
 from .constants import SIGNIFICANCE_THRESHOLD
 from .utils import (
     _compare_environments,
@@ -223,9 +224,9 @@ def compare_app_stages_aggregated(
         app1 = fetcher_tools.fetch_app(app_id1, server)
         app2 = fetcher_tools.fetch_app(app_id2, server)
 
-        # Calculate aggregated stage metrics
-        agg_metrics1 = _calculate_aggregated_stage_metrics(stages1)
-        agg_metrics2 = _calculate_aggregated_stage_metrics(stages2)
+        # Calculate aggregated stage metrics using shared aggregation
+        agg_metrics1 = aggregate_stage_metrics_for_comparison(stages1)
+        agg_metrics2 = aggregate_stage_metrics_for_comparison(stages2)
 
         # Calculate stage performance ratios
         stage_comparison = {}
@@ -382,71 +383,6 @@ def _calculate_job_stats(jobs) -> Dict[str, Any]:
         "avg_job_duration_ms": avg_duration,
         "max_job_duration_ms": max_duration,
         "success_rate": success_rate,
-    }
-
-
-def _calculate_aggregated_stage_metrics(stages) -> Dict[str, Any]:
-    """Calculate aggregated metrics across all stages."""
-    if not stages:
-        return {
-            "total_stages": 0,
-            "total_input_bytes": 0,
-            "total_output_bytes": 0,
-            "total_shuffle_read_bytes": 0,
-            "total_shuffle_write_bytes": 0,
-            "total_memory_spilled_bytes": 0,
-            "total_disk_spilled_bytes": 0,
-            "total_executor_run_time_ms": 0,
-            "total_executor_cpu_time_ms": 0,
-            "total_gc_time_ms": 0,
-            "avg_stage_duration_ms": 0,
-            "total_tasks": 0,
-            "total_failed_tasks": 0,
-        }
-
-    total_input = sum(getattr(s, "input_bytes", 0) or 0 for s in stages)
-    total_output = sum(getattr(s, "output_bytes", 0) or 0 for s in stages)
-    total_shuffle_read = sum(getattr(s, "shuffle_read_bytes", 0) or 0 for s in stages)
-    total_shuffle_write = sum(getattr(s, "shuffle_write_bytes", 0) or 0 for s in stages)
-    total_memory_spilled = sum(
-        getattr(s, "memory_bytes_spilled", 0) or 0 for s in stages
-    )
-    total_disk_spilled = sum(getattr(s, "disk_bytes_spilled", 0) or 0 for s in stages)
-    total_executor_runtime = sum(
-        getattr(s, "executor_run_time", 0) or 0 for s in stages
-    )
-    total_executor_cpu_time_ms = (
-        sum(getattr(s, "executor_cpu_time", 0) or 0 for s in stages) / 1_000_000.0
-    )
-    total_gc_time = sum(getattr(s, "jvm_gc_time", 0) or 0 for s in stages)
-    total_tasks = sum(getattr(s, "num_tasks", 0) or 0 for s in stages)
-    total_failed_tasks = sum(getattr(s, "num_failed_tasks", 0) or 0 for s in stages)
-
-    # Calculate average stage duration
-    durations = []
-    for stage in stages:
-        if stage.completion_time and stage.submission_time:
-            duration = (
-                stage.completion_time - stage.submission_time
-            ).total_seconds() * 1000  # ms
-            durations.append(duration)
-
-    avg_duration = sum(durations) / len(durations) if durations else 0
-
-    return {
-        "total_stages": len(stages),
-        "total_input_bytes": total_input,
-        "total_output_bytes": total_output,
-        "total_shuffle_read_bytes": total_shuffle_read,
-        "total_shuffle_write_bytes": total_shuffle_write,
-        "total_memory_spilled_bytes": total_memory_spilled,
-        "total_disk_spilled_bytes": total_disk_spilled,
-        "total_executor_run_time_ms": total_executor_runtime,
-        "total_executor_cpu_time_ms": total_executor_cpu_time_ms,
-        "total_gc_time_ms": total_gc_time,
-        "avg_stage_duration_ms": avg_duration,
-        "total_tasks": total_tasks,
-        "total_failed_tasks": total_failed_tasks,
     }
 
 

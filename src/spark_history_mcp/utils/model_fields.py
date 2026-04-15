@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 
 class ComparableField(NamedTuple):
-    """Represents a field that can be compared between models."""
+    """Represents a field that can be compared or aggregated between models."""
 
     name: str
     """Field name as defined in the model."""
@@ -37,6 +37,9 @@ class ComparableField(NamedTuple):
 
     scale_factor: float = 1.0
     """Scale factor to apply when extracting values (e.g., for ns to ms conversion)."""
+
+    aggregatable: bool = True
+    """Whether this field is suitable for aggregation (summing across instances)."""
 
 
 # Fields that are identifiers or metadata, not comparable metrics
@@ -81,6 +84,23 @@ NANOSECOND_FIELDS: FrozenSet[str] = frozenset(
 
 # Scale factor for nanosecond to millisecond conversion
 NS_TO_MS_FACTOR: float = 1.0 / 1_000_000.0
+
+# Fields that represent point-in-time counts or max values, not suitable for summing
+# These should be excluded when aggregating metrics across multiple stages
+NON_AGGREGATABLE_FIELDS: FrozenSet[str] = frozenset(
+    {
+        # Point-in-time counts (snapshots, not totals)
+        "num_active_tasks",
+        "num_active_stages",
+        # Derived/computed indices
+        "num_completed_indices",
+        # Peak/max values (should use max, not sum)
+        "peak_execution_memory",
+        # Boolean-like counts
+        "is_shuffle_push_enabled",
+        "shuffle_mergers_count",
+    }
+)
 
 
 def is_numeric_type(type_hint: Any) -> bool:
@@ -281,6 +301,57 @@ def get_distribution_fields(
                 inner_type, field_name, exclude_fields
             )
             fields.extend(nested_fields)
+
+    return fields
+
+
+@lru_cache(maxsize=32)
+def get_aggregatable_fields(
+    model_class: Type[BaseModel],
+    exclude_fields: Optional[FrozenSet[str]] = None,
+) -> List[ComparableField]:
+    """
+    Get numeric fields suitable for aggregation (sum across multiple instances).
+
+    This is similar to get_comparable_numeric_fields but excludes fields that
+    don't make sense to sum, such as point-in-time counts (num_active_tasks)
+    or peak/max values (peak_execution_memory).
+
+    Args:
+        model_class: A Pydantic BaseModel class
+        exclude_fields: Optional set of field names to exclude (defaults to
+                        DEFAULT_EXCLUDE_FIELDS)
+
+    Returns:
+        List of ComparableField objects representing aggregatable numeric fields
+    """
+    if exclude_fields is None:
+        exclude_fields = DEFAULT_EXCLUDE_FIELDS
+
+    fields: List[ComparableField] = []
+
+    for field_name, field_info in model_class.model_fields.items():
+        if field_name in exclude_fields:
+            continue
+
+        type_hint = field_info.annotation
+        if type_hint is None:
+            continue
+
+        if is_numeric_type(type_hint):
+            # Skip fields not suitable for aggregation
+            is_aggregatable = field_name not in NON_AGGREGATABLE_FIELDS
+            # Determine scale factor for nanosecond fields
+            scale = NS_TO_MS_FACTOR if field_name in NANOSECOND_FIELDS else 1.0
+            fields.append(
+                ComparableField(
+                    name=field_name,
+                    is_sequence=False,
+                    nested_path=None,
+                    scale_factor=scale,
+                    aggregatable=is_aggregatable,
+                )
+            )
 
     return fields
 

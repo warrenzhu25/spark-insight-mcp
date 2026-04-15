@@ -119,54 +119,6 @@ def calculate_stage_duration(stage) -> float:
     return 0.0
 
 
-def _calculate_aggregated_stage_metrics(stages) -> Dict[str, Any]:
-    """Aggregate key metrics across a collection of stages."""
-
-    total_duration = 0.0
-    total_executor_run_time = 0.0
-    total_memory_spilled = 0.0
-    total_shuffle_read = 0.0
-    total_shuffle_write = 0.0
-    total_input = 0.0
-    total_output = 0.0
-    total_tasks = 0
-    total_failed_tasks = 0
-    completed = 0
-    failed = 0
-
-    for stage in stages:
-        total_duration += calculate_stage_duration(stage)
-        total_executor_run_time += float(getattr(stage, "executor_run_time", 0) or 0)
-        total_memory_spilled += float(getattr(stage, "memory_bytes_spilled", 0) or 0)
-        total_shuffle_read += float(getattr(stage, "shuffle_read_bytes", 0) or 0)
-        total_shuffle_write += float(getattr(stage, "shuffle_write_bytes", 0) or 0)
-        total_input += float(getattr(stage, "input_bytes", 0) or 0)
-        total_output += float(getattr(stage, "output_bytes", 0) or 0)
-        total_tasks += int(getattr(stage, "num_tasks", 0) or 0)
-        total_failed_tasks += int(getattr(stage, "num_failed_tasks", 0) or 0)
-
-        status = (getattr(stage, "status", "") or "").upper()
-        if status == "COMPLETE" or status == "COMPLETED":
-            completed += 1
-        elif status == "FAILED":
-            failed += 1
-
-    return {
-        "total_stages": len(stages),
-        "total_stage_duration": total_duration,
-        "total_executor_run_time": total_executor_run_time,
-        "total_memory_spilled": total_memory_spilled,
-        "total_shuffle_read_bytes": total_shuffle_read,
-        "total_shuffle_write_bytes": total_shuffle_write,
-        "total_input_bytes": total_input,
-        "total_output_bytes": total_output,
-        "total_tasks": total_tasks,
-        "total_failed_tasks": total_failed_tasks,
-        "completed_count": completed,
-        "failed_count": failed,
-    }
-
-
 def _calculate_job_stats(jobs) -> Dict[str, Any]:
     """Aggregate basic statistics for a collection of jobs."""
 

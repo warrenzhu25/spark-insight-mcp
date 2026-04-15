@@ -7,8 +7,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from ..models.spark_types import StageStatus
 from .common import bytes_to_gb, get_config, ms_to_min, ns_to_min
+from .stage_aggregation import aggregate_stage_metrics
 
 
 def summarize_app(
@@ -16,7 +16,8 @@ def summarize_app(
 ) -> Dict[str, Any]:
     """Build the application summary dict used by get_app_summary.
 
-    Keeps behavior aligned with current tools.get_app_summary implementation.
+    Uses dynamic field extraction to aggregate stage metrics, then applies
+    unit conversions for the final output format.
 
     Args:
         app: Application object with attempts, name, cores_per_executor attributes
@@ -34,21 +35,31 @@ def summarize_app(
 
     attempt = app.attempts[-1]
 
+    # Convert stages to list for multiple iterations
+    stages_list = list(stages)
+
+    # Use dynamic aggregation for stage metrics
+    agg = aggregate_stage_metrics(stages_list, include_duration=False)
+
+    # Application duration from attempt
     total_runtime_min = ms_to_min(getattr(attempt, "duration", 0))
 
-    total_executor_runtime_ms = sum(
-        getattr(stage, "executor_run_time", 0) or 0 for stage in stages
-    )
+    # Extract aggregated values and apply unit conversions
+    # All values are RAW from aggregate_stage_metrics (no scale factor applied)
+
+    # executor_run_time is in milliseconds
+    total_executor_runtime_ms = agg.get("executor_run_time", 0)
     total_executor_runtime_min = ms_to_min(total_executor_runtime_ms)
 
-    total_executor_cpu_time_ns = sum(
-        getattr(stage, "executor_cpu_time", 0) or 0 for stage in stages
-    )
+    # executor_cpu_time is in nanoseconds
+    total_executor_cpu_time_ns = agg.get("executor_cpu_time", 0)
     total_executor_cpu_time_min = ns_to_min(total_executor_cpu_time_ns)
 
-    total_gc_time_ms = sum(getattr(stage, "jvm_gc_time", 0) or 0 for stage in stages)
+    # jvm_gc_time is in milliseconds
+    total_gc_time_ms = agg.get("jvm_gc_time", 0)
     total_gc_time_min = ms_to_min(total_gc_time_ms)
 
+    # Calculate executor utilization
     if getattr(attempt, "end_time", None) and getattr(attempt, "start_time", None):
         app_end_time_ms = attempt.end_time.timestamp() * 1000
     else:
@@ -73,36 +84,20 @@ def summarize_app(
             total_executor_runtime_ms / (total_executor_time_ms * executor_cores)
         ) * 100
 
-    total_input_gb = bytes_to_gb(
-        sum(getattr(stage, "input_bytes", 0) or 0 for stage in stages)
-    )
-    total_output_gb = bytes_to_gb(
-        sum(getattr(stage, "output_bytes", 0) or 0 for stage in stages)
-    )
-    total_shuffle_read_gb = bytes_to_gb(
-        sum(getattr(stage, "shuffle_read_bytes", 0) or 0 for stage in stages)
-    )
-    total_shuffle_write_gb = bytes_to_gb(
-        sum(getattr(stage, "shuffle_write_bytes", 0) or 0 for stage in stages)
-    )
-    total_memory_spilled_gb = bytes_to_gb(
-        sum(getattr(stage, "memory_bytes_spilled", 0) or 0 for stage in stages)
-    )
-    total_disk_spilled_gb = bytes_to_gb(
-        sum(getattr(stage, "disk_bytes_spilled", 0) or 0 for stage in stages)
-    )
+    # Convert byte metrics to GB
+    total_input_gb = bytes_to_gb(agg.get("input_bytes", 0))
+    total_output_gb = bytes_to_gb(agg.get("output_bytes", 0))
+    total_shuffle_read_gb = bytes_to_gb(agg.get("shuffle_read_bytes", 0))
+    total_shuffle_write_gb = bytes_to_gb(agg.get("shuffle_write_bytes", 0))
+    total_memory_spilled_gb = bytes_to_gb(agg.get("memory_bytes_spilled", 0))
+    total_disk_spilled_gb = bytes_to_gb(agg.get("disk_bytes_spilled", 0))
 
-    total_failed_tasks = sum(
-        getattr(stage, "num_failed_tasks", 0) or 0 for stage in stages
-    )
+    # Task counts
+    total_failed_tasks = int(agg.get("num_failed_tasks", 0))
 
-    # shuffleFetchWaitTime is in milliseconds; shuffleWriteTime is in nanoseconds
-    total_shuffle_fetch_wait_time_ms = sum(
-        getattr(stage, "shuffle_fetch_wait_time", 0) or 0 for stage in stages
-    )
-    total_shuffle_write_time_ns = sum(
-        getattr(stage, "shuffle_write_time", 0) or 0 for stage in stages
-    )
+    # Shuffle timing: fetch_wait_time is ms, write_time is ns
+    total_shuffle_fetch_wait_time_ms = agg.get("shuffle_fetch_wait_time", 0)
+    total_shuffle_write_time_ns = agg.get("shuffle_write_time", 0)
 
     shuffle_fetch_wait_min = ms_to_min(total_shuffle_fetch_wait_time_ms)
     shuffle_write_time_min = ns_to_min(total_shuffle_write_time_ns)
@@ -125,13 +120,9 @@ def summarize_app(
         "shuffle_read_wait_time_minutes": round(shuffle_fetch_wait_min, 2),
         "shuffle_write_time_minutes": round(shuffle_write_time_min, 2),
         "failed_tasks": total_failed_tasks,
-        "total_stages": len(stages),
-        "completed_stages": len(
-            [s for s in stages if getattr(s, "status", None) == StageStatus.COMPLETE]
-        ),
-        "failed_stages": len(
-            [s for s in stages if getattr(s, "status", None) == StageStatus.FAILED]
-        ),
+        "total_stages": agg.get("total_stages", len(stages_list)),
+        "completed_stages": agg.get("completed_stages", 0),
+        "failed_stages": agg.get("failed_stages", 0),
     }
     return summary
 

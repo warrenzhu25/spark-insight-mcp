@@ -10,8 +10,10 @@ from spark_history_mcp.models.spark_types import StageData, TaskMetricDistributi
 from spark_history_mcp.utils.model_fields import (
     DEFAULT_EXCLUDE_FIELDS,
     NANOSECOND_FIELDS,
+    NON_AGGREGATABLE_FIELDS,
     NS_TO_MS_FACTOR,
     ComparableField,
+    get_aggregatable_fields,
     get_comparable_numeric_fields,
     get_distribution_fields,
     get_field_value,
@@ -500,3 +502,71 @@ class TestIntegrationWithRealModels:
 
         assert len(shuffle_read_fields) > 0, "No shuffle read fields found"
         assert len(shuffle_write_fields) > 0, "No shuffle write fields found"
+
+
+class TestGetAggregatableFields:
+    """Test the get_aggregatable_fields function."""
+
+    def test_extract_from_stage_data(self):
+        """Test extraction of aggregatable fields from StageData."""
+        fields = get_aggregatable_fields(StageData)
+
+        # Should have fields
+        assert len(fields) > 0
+
+        # All should be ComparableField
+        for field in fields:
+            assert isinstance(field, ComparableField)
+            assert field.is_sequence is False
+
+        # Check some known fields exist
+        field_names = {f.name for f in fields}
+        assert "num_tasks" in field_names
+        assert "executor_run_time" in field_names
+        assert "input_bytes" in field_names
+
+    def test_excludes_non_aggregatable_fields(self):
+        """Test that non-aggregatable fields are marked correctly."""
+        fields = get_aggregatable_fields(StageData)
+        fields_by_name = {f.name: f for f in fields}
+
+        # These should be marked as non-aggregatable
+        if "num_active_tasks" in fields_by_name:
+            assert fields_by_name["num_active_tasks"].aggregatable is False
+
+        if "peak_execution_memory" in fields_by_name:
+            assert fields_by_name["peak_execution_memory"].aggregatable is False
+
+    def test_aggregatable_fields_are_marked(self):
+        """Test that normal metrics are marked as aggregatable."""
+        fields = get_aggregatable_fields(StageData)
+        fields_by_name = {f.name: f for f in fields}
+
+        # These should be aggregatable
+        assert fields_by_name["executor_run_time"].aggregatable is True
+        assert fields_by_name["input_bytes"].aggregatable is True
+        assert fields_by_name["num_tasks"].aggregatable is True
+
+    def test_caching(self):
+        """Test that results are cached."""
+        fields1 = get_aggregatable_fields(StageData)
+        fields2 = get_aggregatable_fields(StageData)
+
+        # Should be same object due to caching
+        assert fields1 is fields2
+
+
+class TestNonAggregatableFieldsConstant:
+    """Test the NON_AGGREGATABLE_FIELDS constant."""
+
+    def test_contains_expected_fields(self):
+        """Test that the constant contains expected non-aggregatable fields."""
+        assert "num_active_tasks" in NON_AGGREGATABLE_FIELDS
+        assert "peak_execution_memory" in NON_AGGREGATABLE_FIELDS
+        assert "num_completed_indices" in NON_AGGREGATABLE_FIELDS
+
+    def test_does_not_contain_aggregatable_fields(self):
+        """Test that normal aggregatable fields are not in the constant."""
+        assert "executor_run_time" not in NON_AGGREGATABLE_FIELDS
+        assert "input_bytes" not in NON_AGGREGATABLE_FIELDS
+        assert "num_tasks" not in NON_AGGREGATABLE_FIELDS
