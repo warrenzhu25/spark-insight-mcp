@@ -168,57 +168,74 @@ def aggregate_stage_metrics_for_comparison(
     """
     Aggregate stage metrics formatted for comparison tools.
 
-    Returns metrics with keys prefixed by 'total_' and proper unit conversions
-    to match the format expected by compare_app_stages_aggregated and similar tools.
+    Returns metrics with human-readable names and units (minutes, GB) to match
+    the format used by get_app_summary for consistency across tools.
 
     Args:
         stages: Iterable of stage objects
 
     Returns:
-        Dictionary with prefixed keys and converted units:
-        - total_input_bytes, total_output_bytes, etc. (byte metrics)
-        - total_executor_run_time_ms, total_gc_time_ms (ms metrics)
-        - total_executor_cpu_time_ms (ns converted to ms)
-        - total_tasks, total_failed_tasks (counts)
-        - avg_stage_duration_ms
+        Dictionary with converted units matching get_app_summary format:
+        - input_data_size_gb, output_data_size_gb, etc. (GB metrics)
+        - total_executor_runtime_minutes, jvm_gc_time_minutes (minute metrics)
+        - executor_cpu_time_minutes (ns converted to minutes)
+        - total_tasks, failed_tasks (counts)
+        - avg_stage_duration_minutes
     """
+    # Import unit conversion helpers
+    from .common import bytes_to_gb, ms_to_min, ns_to_min
+
     stages_list = list(stages)
 
     if not stages_list:
         return {
             "total_stages": 0,
-            "total_input_bytes": 0,
-            "total_output_bytes": 0,
-            "total_shuffle_read_bytes": 0,
-            "total_shuffle_write_bytes": 0,
-            "total_memory_spilled_bytes": 0,
-            "total_disk_spilled_bytes": 0,
-            "total_executor_run_time_ms": 0,
-            "total_executor_cpu_time_ms": 0,
-            "total_gc_time_ms": 0,
-            "avg_stage_duration_ms": 0,
+            "input_data_size_gb": 0.0,
+            "output_data_size_gb": 0.0,
+            "shuffle_read_size_gb": 0.0,
+            "shuffle_write_size_gb": 0.0,
+            "memory_spilled_gb": 0.0,
+            "disk_spilled_gb": 0.0,
+            "total_executor_runtime_minutes": 0.0,
+            "executor_cpu_time_minutes": 0.0,
+            "jvm_gc_time_minutes": 0.0,
+            "avg_stage_duration_minutes": 0.0,
             "total_tasks": 0,
-            "total_failed_tasks": 0,
+            "failed_tasks": 0,
         }
 
     # Use the base aggregation
     agg = aggregate_stage_metrics(stages_list, include_duration=True)
 
-    # Map to comparison format with total_ prefix
+    # Map to comparison format with human-readable names and unit conversions
     # Values from aggregate_stage_metrics are RAW, so apply unit conversions here
     return {
         "total_stages": agg.get("total_stages", len(stages_list)),
-        "total_input_bytes": agg.get("input_bytes", 0),
-        "total_output_bytes": agg.get("output_bytes", 0),
-        "total_shuffle_read_bytes": agg.get("shuffle_read_bytes", 0),
-        "total_shuffle_write_bytes": agg.get("shuffle_write_bytes", 0),
-        "total_memory_spilled_bytes": agg.get("memory_bytes_spilled", 0),
-        "total_disk_spilled_bytes": agg.get("disk_bytes_spilled", 0),
-        "total_executor_run_time_ms": agg.get("executor_run_time", 0),
-        # executor_cpu_time is in nanoseconds, convert to milliseconds
-        "total_executor_cpu_time_ms": agg.get("executor_cpu_time", 0) / 1_000_000.0,
-        "total_gc_time_ms": agg.get("jvm_gc_time", 0),
-        "avg_stage_duration_ms": agg.get("avg_stage_duration_ms", 0),
+        # Byte metrics converted to GB
+        "input_data_size_gb": round(bytes_to_gb(agg.get("input_bytes", 0)), 3),
+        "output_data_size_gb": round(bytes_to_gb(agg.get("output_bytes", 0)), 3),
+        "shuffle_read_size_gb": round(bytes_to_gb(agg.get("shuffle_read_bytes", 0)), 3),
+        "shuffle_write_size_gb": round(
+            bytes_to_gb(agg.get("shuffle_write_bytes", 0)), 3
+        ),
+        "memory_spilled_gb": round(bytes_to_gb(agg.get("memory_bytes_spilled", 0)), 3),
+        "disk_spilled_gb": round(bytes_to_gb(agg.get("disk_bytes_spilled", 0)), 3),
+        # Time metrics converted to minutes
+        # executor_run_time is in milliseconds
+        "total_executor_runtime_minutes": round(
+            ms_to_min(agg.get("executor_run_time", 0)), 2
+        ),
+        # executor_cpu_time is in nanoseconds
+        "executor_cpu_time_minutes": round(
+            ns_to_min(agg.get("executor_cpu_time", 0)), 2
+        ),
+        # jvm_gc_time is in milliseconds
+        "jvm_gc_time_minutes": round(ms_to_min(agg.get("jvm_gc_time", 0)), 2),
+        # avg_stage_duration is in milliseconds
+        "avg_stage_duration_minutes": round(
+            ms_to_min(agg.get("avg_stage_duration_ms", 0)), 2
+        ),
+        # Task counts
         "total_tasks": int(agg.get("num_tasks", 0)),
-        "total_failed_tasks": int(agg.get("num_failed_tasks", 0)),
+        "failed_tasks": int(agg.get("num_failed_tasks", 0)),
     }

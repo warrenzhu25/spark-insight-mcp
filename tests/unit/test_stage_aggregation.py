@@ -170,47 +170,50 @@ class TestAggregateStageMetricsForComparison:
         result = aggregate_stage_metrics_for_comparison([])
 
         assert result["total_stages"] == 0
-        assert result["total_input_bytes"] == 0
-        assert result["total_executor_run_time_ms"] == 0
-        assert result["total_executor_cpu_time_ms"] == 0
+        assert result["input_data_size_gb"] == 0.0
+        assert result["total_executor_runtime_minutes"] == 0.0
+        assert result["executor_cpu_time_minutes"] == 0.0
 
     def test_key_format(self):
-        """Test that output keys have the expected format with total_ prefix."""
+        """Test that output keys match get_app_summary naming convention."""
         result = aggregate_stage_metrics_for_comparison([make_stage()])
 
-        # Should have total_ prefixed keys
+        # Should have human-readable keys matching get_app_summary
         assert "total_stages" in result
-        assert "total_input_bytes" in result
-        assert "total_output_bytes" in result
-        assert "total_shuffle_read_bytes" in result
-        assert "total_shuffle_write_bytes" in result
-        assert "total_memory_spilled_bytes" in result
-        assert "total_disk_spilled_bytes" in result
-        assert "total_executor_run_time_ms" in result
-        assert "total_executor_cpu_time_ms" in result
-        assert "total_gc_time_ms" in result
+        assert "input_data_size_gb" in result
+        assert "output_data_size_gb" in result
+        assert "shuffle_read_size_gb" in result
+        assert "shuffle_write_size_gb" in result
+        assert "memory_spilled_gb" in result
+        assert "disk_spilled_gb" in result
+        assert "total_executor_runtime_minutes" in result
+        assert "executor_cpu_time_minutes" in result
+        assert "jvm_gc_time_minutes" in result
         assert "total_tasks" in result
-        assert "total_failed_tasks" in result
+        assert "failed_tasks" in result
 
     def test_cpu_time_conversion(self):
-        """Test that executor_cpu_time is converted from ns to ms."""
-        # 1 billion nanoseconds = 1000 milliseconds
-        stage = make_stage(executor_cpu_time=1_000_000_000)
+        """Test that executor_cpu_time is converted from ns to minutes."""
+        # 60 billion nanoseconds = 1 minute
+        stage = make_stage(executor_cpu_time=60_000_000_000)
         result = aggregate_stage_metrics_for_comparison([stage])
 
-        assert result["total_executor_cpu_time_ms"] == 1000.0
+        assert result["executor_cpu_time_minutes"] == 1.0
 
     def test_value_aggregation(self):
-        """Test that values are correctly aggregated."""
+        """Test that values are correctly aggregated and converted."""
+        # Use large values to test unit conversions
+        # 1 GB = 1073741824 bytes
+        # 60000 ms = 1 minute
         stages = [
-            make_stage(input_bytes=1000, executor_run_time=100),
-            make_stage(input_bytes=2000, executor_run_time=200),
+            make_stage(input_bytes=1073741824, executor_run_time=60000),
+            make_stage(input_bytes=1073741824, executor_run_time=60000),
         ]
         result = aggregate_stage_metrics_for_comparison(stages)
 
         assert result["total_stages"] == 2
-        assert result["total_input_bytes"] == 3000
-        assert result["total_executor_run_time_ms"] == 300
+        assert result["input_data_size_gb"] == 2.0
+        assert result["total_executor_runtime_minutes"] == 2.0
 
 
 class TestGetAggregatedFieldNames:
@@ -263,24 +266,24 @@ class TestBackwardCompatibility:
         assert "shuffle_write_time" in result
 
     def test_comparison_format_matches_expected(self):
-        """Test that comparison format matches what compare_app_stages_aggregated expects."""
+        """Test that comparison format matches get_app_summary naming convention."""
         result = aggregate_stage_metrics_for_comparison([make_stage()])
 
-        # Expected keys from the original _calculate_aggregated_stage_metrics
+        # Expected keys matching get_app_summary format
         expected_keys = {
             "total_stages",
-            "total_input_bytes",
-            "total_output_bytes",
-            "total_shuffle_read_bytes",
-            "total_shuffle_write_bytes",
-            "total_memory_spilled_bytes",
-            "total_disk_spilled_bytes",
-            "total_executor_run_time_ms",
-            "total_executor_cpu_time_ms",
-            "total_gc_time_ms",
-            "avg_stage_duration_ms",
+            "input_data_size_gb",
+            "output_data_size_gb",
+            "shuffle_read_size_gb",
+            "shuffle_write_size_gb",
+            "memory_spilled_gb",
+            "disk_spilled_gb",
+            "total_executor_runtime_minutes",
+            "executor_cpu_time_minutes",
+            "jvm_gc_time_minutes",
+            "avg_stage_duration_minutes",
             "total_tasks",
-            "total_failed_tasks",
+            "failed_tasks",
         }
 
         for key in expected_keys:
