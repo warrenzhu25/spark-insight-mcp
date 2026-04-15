@@ -86,9 +86,9 @@ def find_top_stage_differences(
                     "stage1": stage1,
                     "stage2": stage2,
                     "similarity": similarity,
-                    "duration1": duration1,
-                    "duration2": duration2,
-                    "time_difference_seconds": time_diff,
+                    "duration1_ms": duration1,
+                    "duration2_ms": duration2,
+                    "time_difference_seconds": time_diff / 1000.0,
                     "time_difference_percent": time_diff_percent,
                     "slower_app": "app1" if duration1 > duration2 else "app2",
                 }
@@ -118,13 +118,13 @@ def find_top_stage_differences(
                 "stage_id": stage1.stage_id,
                 "name": stage1.name,
                 "status": stage1.status,
-                "duration_seconds": diff["duration1"],
+                "duration_ms": diff["duration1_ms"],
             },
             "app2_stage": {
                 "stage_id": stage2.stage_id,
                 "name": stage2.name,
                 "status": stage2.status,
-                "duration_seconds": diff["duration2"],
+                "duration_ms": diff["duration2_ms"],
             },
             "time_difference": {
                 "absolute_seconds": diff["time_difference_seconds"],
@@ -446,8 +446,8 @@ def _build_executor_analysis(stage1, stage2) -> Dict[str, Any]:
             "app2_ms": getattr(stage2, "executor_run_time", 0) or 0,
         },
         "executor_cpu_time": {
-            "app1_ns": getattr(stage1, "executor_cpu_time", 0) or 0,
-            "app2_ns": getattr(stage2, "executor_cpu_time", 0) or 0,
+            "app1_ms": (getattr(stage1, "executor_cpu_time", 0) or 0) / 1_000_000.0,
+            "app2_ms": (getattr(stage2, "executor_cpu_time", 0) or 0) / 1_000_000.0,
         },
         "gc_time": {
             "app1_ms": getattr(stage1, "jvm_gc_time", 0) or 0,
@@ -457,9 +457,9 @@ def _build_executor_analysis(stage1, stage2) -> Dict[str, Any]:
 
 
 def _compare_stage_level_metrics(
-    stage1, stage2, significance_threshold: float
+    stage1, stage2, significance_threshold: float, top_n: int = 5
 ) -> Dict[str, Any]:
-    """Compare stage-level metrics with significance filtering."""
+    """Compare stage-level metrics with significance filtering, keeping top N."""
 
     def calculate_difference(val1: float, val2: float) -> Optional[Dict[str, Any]]:
         if val1 == 0 and val2 == 0:
@@ -469,25 +469,22 @@ def _compare_stage_level_metrics(
         denominator = max(abs(val1), abs(val2), 1)
         diff_ratio = abs(val1 - val2) / denominator
 
-        if diff_ratio >= significance_threshold:
-            change_pct = ((val2 - val1) / max(abs(val1), 1)) * 100
-            return {
-                "stage1": val1,
-                "stage2": val2,
-                "change": f"{change_pct:+.1f}%",
-                "significance": diff_ratio,
-            }
-        return None
+        change_pct = ((val2 - val1) / max(abs(val1), 1)) * 100
+        return {
+            "stage1": val1,
+            "stage2": val2,
+            "change": f"{change_pct:+.1f}%",
+            "significance": diff_ratio,
+        }
 
-    stage_metrics = {}
+    all_metrics = []
 
     # Duration comparison
     duration1 = calculate_stage_duration(stage1)
     duration2 = calculate_stage_duration(stage2)
-
-    duration_diff = calculate_difference(duration1, duration2)
-    if duration_diff:
-        stage_metrics["duration_seconds"] = duration_diff
+    diff = calculate_difference(duration1, duration2)
+    if diff:
+        all_metrics.append({"name": "duration_ms", **diff})
 
     # Compare numeric stage attributes
     numeric_attrs = [
@@ -513,9 +510,26 @@ def _compare_stage_level_metrics(
     for attr in numeric_attrs:
         val1 = getattr(stage1, attr, 0) or 0
         val2 = getattr(stage2, attr, 0) or 0
+
+        # Convert nanoseconds to milliseconds for consistency in display
+        if attr == "executor_cpu_time":
+            val1 = float(val1) / 1_000_000.0
+            val2 = float(val2) / 1_000_000.0
+
         diff = calculate_difference(float(val1), float(val2))
         if diff:
-            stage_metrics[attr] = diff
+            all_metrics.append({"name": attr, **diff})
+
+    # Sort by significance descending
+    all_metrics.sort(key=lambda x: x["significance"], reverse=True)
+
+    stage_metrics = {}
+    for i, m in enumerate(all_metrics):
+        if (i < top_n and m["significance"] > 0) or m[
+            "significance"
+        ] >= significance_threshold:
+            name = m.pop("name")
+            stage_metrics[name] = m
 
     return stage_metrics
 
@@ -535,8 +549,8 @@ def _compare_task_distributions(
 
     # Compare key distribution metrics (median and max values)
     distribution_fields = [
-        ("executor_deserialize_time", "deserialize_time"),
-        ("executor_deserialize_cpu_time", "deserialize_cpu_time"),
+        ("executor_deserialize_time", "executor_deserialize_time"),
+        ("executor_deserialize_cpu_time", "executor_deserialize_cpu_time"),
         ("executor_run_time", "executor_run_time"),
         ("executor_cpu_time", "executor_cpu_time"),
         ("result_size", "result_size"),
@@ -546,26 +560,12 @@ def _compare_task_distributions(
         ("disk_bytes_spilled", "disk_bytes_spilled"),
     ]
 
-    def safe_get_dist_value(dist, field: str, stat: str) -> float:
-        """Safely extract distribution value."""
-        try:
-            field_data = getattr(dist, field, None)
-            if field_data:
-                value = getattr(field_data, stat, 0.0)
-                # Handle mocked objects and ensure we get a float
-                return (
-                    float(value)
-                    if value is not None and str(value) != "MagicMock"
-                    else 0.0
-                )
-            return 0.0
-        except (TypeError, ValueError, AttributeError):
-            return 0.0
+    median_index = 2
 
     for attr_name, field_name in distribution_fields:
         # Compare median values
-        median1 = safe_get_dist_value(dist1, field_name, "median")
-        median2 = safe_get_dist_value(dist2, field_name, "median")
+        median1 = _get_quantile_value(dist1, field_name, median_index)
+        median2 = _get_quantile_value(dist2, field_name, median_index)
 
         if median1 > 0 or median2 > 0:
             denominator = max(abs(median1), abs(median2), 1)
@@ -619,37 +619,6 @@ def _get_quantile_value(
         return float(value) if value is not None else 0.0
     except (TypeError, ValueError, AttributeError, IndexError):
         return 0.0
-
-
-def _compare_distribution_metric(
-    val1: float, val2: float, threshold: float
-) -> Optional[Dict[str, Any]]:
-    """
-    Calculate difference between two values with significance check.
-
-    Args:
-        val1: Value from first stage
-        val2: Value from second stage
-        threshold: Minimum difference ratio to be significant
-
-    Returns:
-        Dict with stage1, stage2, and change values, or None if not significant
-    """
-    if val1 == 0 and val2 == 0:
-        return None
-
-    denominator = max(abs(val1), abs(val2), 1)
-    diff_ratio = abs(val1 - val2) / denominator
-
-    if diff_ratio < threshold:
-        return None
-
-    change_pct = ((val2 - val1) / max(abs(val1), 1)) * 100
-    return {
-        "stage1": val1,
-        "stage2": val2,
-        "change": f"{change_pct:+.1f}%",
-    }
 
 
 @mcp.tool()
@@ -760,7 +729,8 @@ def compare_stage_metrics_dist(
 
     metric_distributions: Dict[str, Dict[str, Any]] = {}
     total_metrics_compared = 0
-    significant_differences = 0
+
+    all_metrics_list = []
 
     for display_name, field_name, nested_field in metrics_to_compare:
         # Get median and p95 values for both distributions
@@ -775,25 +745,79 @@ def compare_stage_metrics_dist(
 
         total_metrics_compared += 1
 
-        metric_entry: Dict[str, Any] = {}
+        # Calculate max significance between median and p95 for sorting
+        denom_median = max(abs(median1), abs(median2), 1)
+        sig_median = abs(median1 - median2) / denom_median
+
+        denom_p95 = max(abs(p95_1), abs(p95_2), 1)
+        sig_p95 = abs(p95_1 - p95_2) / denom_p95
+
+        max_sig = max(sig_median, sig_p95)
+
+        metric_entry: Dict[str, Any] = {
+            "display_name": display_name,
+            "max_sig": max_sig,
+        }
 
         # Compare medians
-        median_diff = _compare_distribution_metric(
-            median1, median2, significance_threshold
-        )
-        if median_diff:
-            metric_entry["median"] = median_diff
-            significant_differences += 1
+        if median1 != 0 or median2 != 0:
+            change_pct = ((median2 - median1) / max(abs(median1), 1)) * 100
+            metric_entry["median"] = {
+                "stage1": median1,
+                "stage2": median2,
+                "change": f"{change_pct:+.1f}%",
+                "significance": sig_median,
+            }
 
         # Compare p95 (max)
-        p95_diff = _compare_distribution_metric(p95_1, p95_2, significance_threshold)
-        if p95_diff:
-            metric_entry["max"] = p95_diff
-            significant_differences += 1
+        if p95_1 != 0 or p95_2 != 0:
+            change_pct = ((p95_2 - p95_1) / max(abs(p95_1), 1)) * 100
+            metric_entry["max"] = {
+                "stage1": p95_1,
+                "stage2": p95_2,
+                "change": f"{change_pct:+.1f}%",
+                "significance": sig_p95,
+            }
 
-        # Only include metric if there's at least one significant difference
-        if metric_entry:
-            metric_distributions[display_name] = metric_entry
+        all_metrics_list.append(metric_entry)
+
+    # Sort by max significance descending
+    all_metrics_list.sort(key=lambda x: x["max_sig"], reverse=True)
+
+    significant_differences = 0
+    top_n = 5
+
+    for i, entry in enumerate(all_metrics_list):
+        display_name = entry.pop("display_name")
+        max_sig = entry.pop("max_sig")
+
+        # Include if in top 5 (and has difference) or exceeds threshold
+        if (i < top_n and max_sig > 0) or max_sig >= significance_threshold:
+            filtered_entry = {}
+            if "median" in entry:
+                if (i < top_n and entry["median"]["significance"] > 0) or entry[
+                    "median"
+                ]["significance"] >= significance_threshold:
+                    filtered_entry["median"] = {
+                        "stage1": entry["median"]["stage1"],
+                        "stage2": entry["median"]["stage2"],
+                        "change": entry["median"]["change"],
+                    }
+                    significant_differences += 1
+
+            if "max" in entry:
+                if (i < top_n and entry["max"]["significance"] > 0) or entry["max"][
+                    "significance"
+                ] >= significance_threshold:
+                    filtered_entry["max"] = {
+                        "stage1": entry["max"]["stage1"],
+                        "stage2": entry["max"]["stage2"],
+                        "change": entry["max"]["change"],
+                    }
+                    significant_differences += 1
+
+            if filtered_entry:
+                metric_distributions[display_name] = filtered_entry
 
     return {
         "stages": {

@@ -46,25 +46,56 @@ def calculate_safe_ratio(val1: float, val2: float) -> float:
 
 
 def filter_significant_metrics(
-    metrics: Dict[str, Any], threshold: float, show_only_significant: bool = True
+    metrics: Dict[str, Any],
+    threshold: float,
+    show_only_significant: bool = True,
+    top_n: int = 5,
 ) -> Dict[str, Any]:
-    """Filter out metrics below significance threshold."""
+    """
+    Filter out metrics below significance threshold, but always keep top N.
+
+    Args:
+        metrics: Dictionary of metrics with _ratio or _percent_change suffixes
+        threshold: Significance threshold (e.g. 0.1 for 10%)
+        show_only_significant: Whether to filter at all
+        top_n: Always keep at least this many top differences
+
+    Returns:
+        Filtered dictionary of metrics
+    """
     if not show_only_significant or not metrics:
         return metrics
 
-    filtered = {}
+    # Identify metrics that can be compared
+    comparable_metrics = []
     for key, value in metrics.items():
+        if not isinstance(value, (int, float)):
+            continue
+
+        magnitude = 0.0
         if key.endswith("_ratio"):
-            # For ratios, check if significantly different from 1.0
-            if isinstance(value, (int, float)):
-                if abs(value - 1.0) >= threshold:
-                    filtered[key] = value
+            magnitude = abs(value - 1.0)
         elif key.endswith("_percent_change"):
-            # For percent changes, check if above threshold
-            if isinstance(value, (int, float)) and abs(value) >= threshold * 100:
-                filtered[key] = value
+            magnitude = abs(value) / 100.0
         else:
-            # Include non-ratio metrics
+            # For other numeric metrics, we don't have a standard way to measure "significance"
+            # without a baseline, so we'll just treat them as significant for now if they are non-zero
+            magnitude = 1.0 if value != 0 else 0.0
+
+        comparable_metrics.append({"key": key, "value": value, "magnitude": magnitude})
+
+    # Sort by magnitude descending
+    comparable_metrics.sort(key=lambda x: x["magnitude"], reverse=True)
+
+    filtered = {}
+    for i, item in enumerate(comparable_metrics):
+        # Include if it's in the top N (and has some difference) OR it exceeds the threshold
+        if (i < top_n and item["magnitude"] > 0) or item["magnitude"] >= threshold:
+            filtered[item["key"]] = item["value"]
+
+    # Add back any non-numeric metrics that might have been skipped
+    for key, value in metrics.items():
+        if key not in filtered and not isinstance(value, (int, float)):
             filtered[key] = value
 
     return filtered
@@ -82,9 +113,9 @@ def sort_comparison_data(
 
 
 def calculate_stage_duration(stage) -> float:
-    """Calculate stage duration in seconds."""
+    """Calculate stage duration in milliseconds."""
     if stage.completion_time and stage.submission_time:
-        return (stage.completion_time - stage.submission_time).total_seconds()
+        return (stage.completion_time - stage.submission_time).total_seconds() * 1000
     return 0.0
 
 

@@ -29,6 +29,7 @@ class FormatterUtilsMixin:
             "task_time": "Task Time",
             "peak_execution_memory": "Peak Memory",
             "jvm_gc_time": "GC Time",
+            "executor_cpu_time": "Executor CPU Time",
         }
         return metric_names.get(metric_key, metric_key.replace("_", " ").title())
 
@@ -72,6 +73,8 @@ class FormatterUtilsMixin:
     def _get_stage_metric_display_name(self, metric_key: str) -> str:
         """Get user-friendly display name for stage ratio metrics."""
         stage_metric_names = {
+            "duration": "Duration",
+            "duration_ms": "Duration",
             # Legacy ratio-change keys
             "duration_ratio_change": "Total Duration",
             "executor_runtime_ratio_change": "Executor Runtime",
@@ -81,7 +84,7 @@ class FormatterUtilsMixin:
             "output_ratio_change": "Output Data (GB)",
             # Base metric names (used by aggregated stage comparison)
             "avg_stage_duration_ms": "Avg Stage Duration (s)",
-            "total_executor_cpu_time_ns": "CPU Time (min)",
+            "total_executor_cpu_time_ms": "CPU Time (min)",
             "total_executor_run_time_ms": "Executor Runtime (min)",
             "total_gc_time_ms": "GC Time (s)",
             "total_tasks": "Total Tasks",

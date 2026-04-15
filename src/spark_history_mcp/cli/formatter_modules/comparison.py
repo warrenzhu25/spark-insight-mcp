@@ -423,15 +423,15 @@ def format_stage_differences(formatter, stage_deep_dive: Dict[str, Any]) -> None
         # Extract stage IDs and durations
         app1_stage_id = app1_stage.get("stage_id", "N/A")
         app2_stage_id = app2_stage.get("stage_id", "N/A")
-        app1_duration = app1_stage.get("duration_seconds", 0)
-        app2_duration = app2_stage.get("duration_seconds", 0)
+        app1_duration = app1_stage.get("duration_ms", 0)
+        app2_duration = app2_stage.get("duration_ms", 0)
 
         # Format stage column with stage IDs
         stage_display = f"{stage_name} ({app1_stage_id} vs {app2_stage_id})"
 
         # Format durations
-        app1_display = f"{app1_duration:.1f}s"
-        app2_display = f"{app2_duration:.1f}s"
+        app1_display = formatter._format_duration(app1_duration)
+        app2_display = formatter._format_duration(app2_duration)
 
         # Format difference - show only percentage
         percentage = time_diff.get("percentage", 0)
@@ -1480,8 +1480,11 @@ def format_stage_metric_value(formatter, metric_key: str, value) -> str:
         if "avg_stage_duration" in metric_key:
             # Show as seconds
             return f"{value / 1000:.1f}"
+        elif "executor_cpu_time" in metric_key:
+            # Show as minutes (value is already in ms)
+            return f"{value / 60000:.2f}"
         else:
-            # Show as minutes
+            # Default to minutes
             return f"{value / 60000:.2f}"
     elif metric_key.endswith("_ns"):
         # Nanoseconds - convert to minutes for CPU time

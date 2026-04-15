@@ -643,6 +643,46 @@ def execute_summary_comparison(app_id1, app_id2, server, formatter, ctx):
         click.echo(f"Error comparing summaries: {e}")
 
 
+def execute_stage_dist_comparison(stage_id1, stage_id2, server, formatter, ctx):
+    """Execute stage metrics distribution comparison."""
+    try:
+        click.echo(
+            f"Analyzing stage {stage_id1} vs {stage_id2} metrics distribution..."
+        )
+
+        # Load comparison context to get app IDs
+        context = load_comparison_context()
+        if not context:
+            click.echo("Error: No comparison context found.")
+            return
+
+        app_id1, app_id2, _ = context
+
+        # Import and execute stage metrics distribution comparison
+        import spark_history_mcp.tools as tools_module
+        from spark_history_mcp.tools import compare_stage_metrics_dist
+
+        client = get_spark_client(ctx.obj["config_path"], server)
+        with patch_tool_context(client, tools_module):
+            comparison_data = compare_stage_metrics_dist(
+                app_id1=app_id1,
+                app_id2=app_id2,
+                stage_id1=stage_id1,
+                stage_id2=stage_id2,
+                server=server,
+            )
+            formatter.output(
+                comparison_data,
+                f"Stage Metrics Distribution: {app_id1}:stage{stage_id1} vs "
+                f"{app_id2}:stage{stage_id2}",
+            )
+            if formatter.format_type == "human" and _is_interactive():
+                show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
+
+    except Exception as e:
+        click.echo(f"Error executing stage distribution comparison: {e}")
+
+
 def show_post_stage_menu(
     app_id1, app_id2, stage_id1, stage_id2, server, formatter, ctx
 ):
@@ -663,8 +703,9 @@ def show_post_stage_menu(
     menu_lines = ["Choose your next analysis:", ""]
     menu_lines.extend(
         [
-            "\\[t] Compare Application Timeline",
+            f"\\[d] Compare Stage {stage_id1} Task Metric Distributions",
             f"\\[s] Compare Stage {stage_id1} Timeline Patterns",
+            "\\[t] Compare Application Timeline",
             "\\[q] Continue",
         ]
     )
@@ -693,6 +734,9 @@ def show_post_stage_menu(
         # Handle user selection
         if choice == "q":
             return
+        elif choice == "d":
+            # Execute stage distribution comparison
+            execute_stage_dist_comparison(stage_id1, stage_id2, server, formatter, ctx)
         elif choice == "t":
             # Execute application timeline comparison
             execute_timeline_comparison(app_id1, app_id2, server, formatter, ctx)

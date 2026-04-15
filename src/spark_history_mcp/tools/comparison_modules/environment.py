@@ -397,7 +397,7 @@ def _calculate_aggregated_stage_metrics(stages) -> Dict[str, Any]:
             "total_memory_spilled_bytes": 0,
             "total_disk_spilled_bytes": 0,
             "total_executor_run_time_ms": 0,
-            "total_executor_cpu_time_ns": 0,
+            "total_executor_cpu_time_ms": 0,
             "total_gc_time_ms": 0,
             "avg_stage_duration_ms": 0,
             "total_tasks": 0,
@@ -415,8 +415,8 @@ def _calculate_aggregated_stage_metrics(stages) -> Dict[str, Any]:
     total_executor_runtime = sum(
         getattr(s, "executor_run_time", 0) or 0 for s in stages
     )
-    total_executor_cpu_time = sum(
-        getattr(s, "executor_cpu_time", 0) or 0 for s in stages
+    total_executor_cpu_time_ms = (
+        sum(getattr(s, "executor_cpu_time", 0) or 0 for s in stages) / 1_000_000.0
     )
     total_gc_time = sum(getattr(s, "jvm_gc_time", 0) or 0 for s in stages)
     total_tasks = sum(getattr(s, "num_tasks", 0) or 0 for s in stages)
@@ -442,7 +442,7 @@ def _calculate_aggregated_stage_metrics(stages) -> Dict[str, Any]:
         "total_memory_spilled_bytes": total_memory_spilled,
         "total_disk_spilled_bytes": total_disk_spilled,
         "total_executor_run_time_ms": total_executor_runtime,
-        "total_executor_cpu_time_ns": total_executor_cpu_time,
+        "total_executor_cpu_time_ms": total_executor_cpu_time_ms,
         "total_gc_time_ms": total_gc_time,
         "avg_stage_duration_ms": avg_duration,
         "total_tasks": total_tasks,
