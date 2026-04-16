@@ -17,19 +17,144 @@ except ImportError:
 class FormatterUtilsMixin:
     """Mixin class providing formatter utility functions."""
 
+    def _infer_comparison_metric_unit(self, metric_key: str) -> str:
+        """Infer a display-unit suffix for comparison metrics."""
+        metric_key = metric_key.lower()
+
+        if "percent" in metric_key:
+            return " (%)"
+        if (
+            "bytes" in metric_key
+            or metric_key.endswith("_gb")
+            or "spilled" in metric_key
+        ):
+            return " (GB)"
+        if (
+            "time" in metric_key
+            or "duration" in metric_key
+            or "wait" in metric_key
+            or metric_key.endswith("_ms")
+            or metric_key.endswith("_minutes")
+        ):
+            return " (min)"
+        if any(
+            token in metric_key
+            for token in [
+                "count",
+                "tasks",
+                "task",
+                "records",
+                "record",
+                "blocks",
+                "block",
+                "executors",
+                "executor",
+                "stages",
+                "stage",
+                "cores",
+            ]
+        ):
+            return " (count)"
+        return ""
+
+    def _get_comparison_metric_display_name(
+        self, metric_key: str, include_units: bool = False
+    ) -> str:
+        """Get comparison-table display names aligned across summary tables."""
+        metric_names = {
+            # Duration metrics
+            "duration": ("App Duration", "App Duration (min)"),
+            "duration_ms": ("App Duration", "App Duration (min)"),
+            "application_duration_minutes": ("App Duration", "App Duration (min)"),
+            "executor_run_time": ("Executor Runtime", "Executor Runtime (min)"),
+            "total_executor_runtime_minutes": (
+                "Executor Runtime",
+                "Executor Runtime (min)",
+            ),
+            "executor_cpu_time": ("CPU Time", "CPU Time (min)"),
+            "executor_cpu_time_minutes": ("CPU Time", "CPU Time (min)"),
+            "jvm_gc_time": ("GC Time", "GC Time (min)"),
+            "jvm_gc_time_minutes": ("GC Time", "GC Time (min)"),
+            "shuffle_fetch_wait_time": ("Shuffle Read Wait", "Shuffle Read Wait (min)"),
+            "shuffle_read_wait_time_minutes": (
+                "Shuffle Read Wait",
+                "Shuffle Read Wait (min)",
+            ),
+            "shuffle_write_time": ("Shuffle Write Time", "Shuffle Write Time (min)"),
+            "shuffle_write_time_minutes": (
+                "Shuffle Write Time",
+                "Shuffle Write Time (min)",
+            ),
+            # Size metrics
+            "input_bytes": ("Input Data", "Input Data (GB)"),
+            "input_data_size_gb": ("Input Data", "Input Data (GB)"),
+            "output_bytes": ("Output Data", "Output Data (GB)"),
+            "output_data_size_gb": ("Output Data", "Output Data (GB)"),
+            "shuffle_read_bytes": ("Shuffle Read", "Shuffle Read (GB)"),
+            "shuffle_read_size_gb": ("Shuffle Read", "Shuffle Read (GB)"),
+            "shuffle_write_bytes": ("Shuffle Write", "Shuffle Write (GB)"),
+            "shuffle_write_size_gb": ("Shuffle Write", "Shuffle Write (GB)"),
+            "memory_bytes_spilled": ("Memory Spilled", "Memory Spilled (GB)"),
+            "memory_spilled_gb": ("Memory Spilled", "Memory Spilled (GB)"),
+            "disk_bytes_spilled": ("Disk Spilled", "Disk Spilled (GB)"),
+            "disk_spilled_gb": ("Disk Spilled", "Disk Spilled (GB)"),
+            # Percentage metrics
+            "executor_utilization_percent": (
+                "Executor Utilization",
+                "Executor Utilization (%)",
+            ),
+            # Count metrics
+            "total_stages": ("Total Stages", "Total Stages"),
+            "completed_stages": ("Completed Stages", "Completed Stages"),
+            "failed_stages": ("Failed Stages", "Failed Stages"),
+            "failed_tasks": ("Failed Tasks", "Failed Tasks"),
+            "total_tasks": ("Total Tasks", "Total Tasks"),
+        }
+        fallback = metric_key.replace("_", " ").title()
+        base_name, summary_name = metric_names.get(metric_key, (fallback, fallback))
+        if include_units and summary_name == fallback:
+            return f"{fallback}{self._infer_comparison_metric_unit(metric_key)}"
+        return summary_name if include_units else base_name
+
     def _get_metric_display_name(self, metric_key: str) -> str:
         """Get user-friendly display name for metrics."""
         metric_names = {
+            # Duration metrics
             "duration": "Duration",
+            "duration_ms": "Duration",
+            # Executor metrics
             "executor_run_time": "Runtime",
-            "shuffle_read_bytes": "Shuffle Read",
-            "shuffle_fetch_wait_time": "Shuffle Fetch Wait Time",
-            "shuffle_remote_reqs_duration": "Remote Requests",
-            "shuffle_write_bytes": "Shuffle Write",
-            "task_time": "Task Time",
+            "executor_cpu_time": "CPU Time",
+            "executor_deserialize_time": "Deserialize Time",
+            "executor_deserialize_cpu_time": "Deserialize CPU Time",
+            # Memory metrics
             "peak_execution_memory": "Peak Memory",
+            "memory_bytes_spilled": "Memory Spilled",
+            "disk_bytes_spilled": "Disk Spilled",
+            "result_size": "Result Size",
+            "result_serialization_time": "Serialization Time",
+            # GC metrics
             "jvm_gc_time": "GC Time",
-            "executor_cpu_time": "Executor CPU Time",
+            # I/O metrics
+            "input_bytes": "Input",
+            "input_records": "Input Records",
+            "output_bytes": "Output",
+            "output_records": "Output Records",
+            # Shuffle read metrics
+            "shuffle_read_bytes": "Shuffle Read",
+            "shuffle_read_records": "Shuffle Read Records",
+            "shuffle_fetch_wait_time": "Shuffle Fetch Wait",
+            "shuffle_remote_bytes_read": "Shuffle Remote Read",
+            "shuffle_local_bytes_read": "Shuffle Local Read",
+            "shuffle_remote_blocks_fetched": "Remote Blocks Fetched",
+            "shuffle_local_blocks_fetched": "Local Blocks Fetched",
+            "shuffle_remote_reqs_duration": "Remote Requests",
+            # Shuffle write metrics
+            "shuffle_write_bytes": "Shuffle Write",
+            "shuffle_write_records": "Shuffle Write Records",
+            "shuffle_write_time": "Shuffle Write Time",
+            # Task metrics
+            "task_time": "Task Time",
         }
         return metric_names.get(metric_key, metric_key.replace("_", " ").title())
 
@@ -83,18 +208,18 @@ class FormatterUtilsMixin:
             "input_ratio_change": "Input Data (GB)",
             "output_ratio_change": "Output Data (GB)",
             # Base metric names (used by aggregated stage comparison)
-            "avg_stage_duration_ms": "Avg Stage Duration (s)",
-            "total_executor_cpu_time_ms": "CPU Time (min)",
-            "total_executor_run_time_ms": "Executor Runtime (min)",
-            "total_gc_time_ms": "GC Time (s)",
+            "avg_stage_duration_minutes": "Avg Stage Duration (min)",
+            "executor_cpu_time_minutes": "CPU Time (min)",
+            "total_executor_runtime_minutes": "Executor Runtime (min)",
+            "jvm_gc_time_minutes": "GC Time (min)",
             "total_tasks": "Total Tasks",
-            "total_shuffle_read_bytes": "Shuffle Read (GB)",
-            "total_shuffle_write_bytes": "Shuffle Write (GB)",
-            "total_input_bytes": "Input Data (GB)",
-            "total_output_bytes": "Output Data (GB)",
-            "total_memory_spilled": "Memory Spilled (GB)",
+            "shuffle_read_size_gb": "Shuffle Read (GB)",
+            "shuffle_write_size_gb": "Shuffle Write (GB)",
+            "input_data_size_gb": "Input Data (GB)",
+            "output_data_size_gb": "Output Data (GB)",
+            "memory_spilled_gb": "Memory Spilled (GB)",
             "stage_count": "Stage Count",
-            "total_failed_tasks": "Failed Tasks",
+            "failed_tasks": "Failed Tasks",
         }
         return stage_metric_names.get(metric_key, metric_key.replace("_", " ").title())
 

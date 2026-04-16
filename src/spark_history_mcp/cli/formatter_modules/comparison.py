@@ -603,7 +603,9 @@ def format_stage_performance_metrics(formatter, data: Dict[str, Any]) -> None:
     # Metrics are already sorted by the MCP tool, use existing order
     for metric_key in stage_metrics.keys():
         metric_data = stage_metrics[metric_key]
-        display_name = formatter._get_metric_display_name(metric_key)
+        display_name = formatter._get_comparison_metric_display_name(
+            metric_key, include_units=True
+        )
 
         # Format values based on metric type
         if "bytes" in metric_key.lower():
@@ -622,7 +624,9 @@ def format_stage_performance_metrics(formatter, data: Dict[str, Any]) -> None:
     # Metrics are already sorted by the MCP tool, use existing order
     for metric_key in task_dist.keys():
         metric_data = task_dist[metric_key]
-        display_name = formatter._get_metric_display_name(metric_key)
+        display_name = formatter._get_comparison_metric_display_name(
+            metric_key, include_units=True
+        )
 
         # Use median values for primary comparison
         if "median" in metric_data:
@@ -657,7 +661,7 @@ def format_stage_performance_metrics(formatter, data: Dict[str, Any]) -> None:
     # Metrics are already sorted by the MCP tool, use existing order
     for metric_key in exec_dist.keys():
         metric_data = exec_dist[metric_key]
-        display_name = f"Executor {formatter._get_metric_display_name(metric_key)}"
+        display_name = f"Executor {formatter._get_comparison_metric_display_name(metric_key, include_units=True)}"
 
         if "median" in metric_data:
             median_data = metric_data["median"]
@@ -887,27 +891,27 @@ def format_app_summary_diff(
     # Define metric display preferences for formatting
     metric_display_config = {
         # Time metrics
-        "application_duration_minutes": ("App Duration (min)", "time"),
-        "total_executor_runtime_minutes": ("Executor Runtime (min)", "time"),
-        "executor_cpu_time_minutes": ("CPU Time (min)", "time"),
-        "jvm_gc_time_minutes": ("GC Time (min)", "time"),
-        "shuffle_read_wait_time_minutes": ("Shuffle Read Wait (min)", "time"),
-        "shuffle_write_time_minutes": ("Shuffle Write Time (min)", "time"),
+        "application_duration_minutes": "time",
+        "total_executor_runtime_minutes": "time",
+        "executor_cpu_time_minutes": "time",
+        "jvm_gc_time_minutes": "time",
+        "shuffle_read_wait_time_minutes": "time",
+        "shuffle_write_time_minutes": "time",
         # Size metrics (GB)
-        "input_data_size_gb": ("Input Data (GB)", "size"),
-        "output_data_size_gb": ("Output Data (GB)", "size"),
-        "shuffle_read_size_gb": ("Shuffle Read (GB)", "size"),
-        "shuffle_write_size_gb": ("Shuffle Write (GB)", "size"),
-        "memory_spilled_gb": ("Memory Spilled (GB)", "size"),
-        "disk_spilled_gb": ("Disk Spilled (GB)", "size"),
+        "input_data_size_gb": "size",
+        "output_data_size_gb": "size",
+        "shuffle_read_size_gb": "size",
+        "shuffle_write_size_gb": "size",
+        "memory_spilled_gb": "size",
+        "disk_spilled_gb": "size",
         # Percentage metrics
-        "executor_utilization_percent": ("Executor Utilization (%)", "percent"),
+        "executor_utilization_percent": "percent",
         # Count metrics
-        "total_stages": ("Total Stages", "count"),
-        "completed_stages": ("Completed Stages", "count"),
-        "failed_stages": ("Failed Stages", "count"),
-        "failed_tasks": ("Failed Tasks", "count"),
-        "total_tasks": ("Total Tasks", "count"),
+        "total_stages": "count",
+        "completed_stages": "count",
+        "failed_stages": "count",
+        "failed_tasks": "count",
+        "total_tasks": "count",
     }
 
     # Use the sorted order from diff keys (already sorted by MCP tool)
@@ -930,7 +934,10 @@ def format_app_summary_diff(
     for field_name in sorted_metric_names:
         # Get display configuration or use field name as fallback
         if field_name in metric_display_config:
-            display_name, format_type = metric_display_config[field_name]
+            display_name = formatter._get_comparison_metric_display_name(
+                field_name, include_units=True
+            )
+            format_type = metric_display_config[field_name]
         else:
             # Auto-generate display name from field name
             display_name = field_name.replace("_", " ").title()

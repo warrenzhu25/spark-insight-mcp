@@ -642,6 +642,55 @@ class TestMergedSummaryTable:
         assert count == 1, f"Expected 'Summary Comparison' once, found {count} times"
 
 
+class TestComparisonLabelConsistency:
+    def test_stage_performance_labels_match_summary_naming(self, capsys):
+        fmt = OutputFormatter(format_type="human")
+        data = {
+            "stage_comparison": {
+                "stage1": {
+                    "stage_id": 1,
+                    "name": "Stage A",
+                    "status": "COMPLETE",
+                    "app_id": "a1",
+                },
+                "stage2": {
+                    "stage_id": 1,
+                    "name": "Stage A",
+                    "status": "COMPLETE",
+                    "app_id": "a2",
+                },
+            },
+            "significant_differences": {
+                "stage_metrics": {
+                    "executor_run_time": {
+                        "stage1": 1000,
+                        "stage2": 1500,
+                        "change": "+50%",
+                    },
+                    "shuffle_fetch_wait_time": {
+                        "stage1": 300,
+                        "stage2": 450,
+                        "change": "+50%",
+                    },
+                    "shuffle_remote_blocks_fetched": {
+                        "stage1": 10,
+                        "stage2": 15,
+                        "change": "+50%",
+                    },
+                }
+            },
+            "summary": {"total_differences_found": 2},
+        }
+
+        fmt.output(data, title="Stage Compare")
+        out = capsys.readouterr().out
+
+        assert "Executor Runtime (min)" in out
+        assert "Shuffle Read Wait (min)" in out
+        assert "Shuffle Remote Blocks Fetched (count)" in out
+        assert "Shuffle Fetch Wait" not in out
+
+
 class TestOutputFormatterJSON:
     def test_output_json_from_dict(self, capsys):
         fmt = OutputFormatter(format_type="json")
