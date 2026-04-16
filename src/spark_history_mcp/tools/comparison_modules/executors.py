@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from ...core.app import mcp
 from .. import executors as executor_tools
 from .. import fetchers as fetcher_tools
+from ..timelines import merge_intervals
 from .constants import SIGNIFICANCE_THRESHOLD
 from .utils import calculate_safe_ratio, filter_significant_metrics
 
@@ -517,6 +518,9 @@ def _analyze_timeline_differences(timeline1, timeline2, app1, app2) -> Dict[str,
     ) / max(total_intervals2, 1)
 
     return {
+        "interval_comparison": _build_app_interval_comparison(
+            timeline1["interval_analysis"], timeline2["interval_analysis"]
+        ),
         "resource_peak_comparison": {
             "max_executors": {
                 "app1": max_executors1,
@@ -544,6 +548,45 @@ def _analyze_timeline_differences(timeline1, timeline2, app1, app2) -> Dict[str,
             ),
         },
     }
+
+
+def _build_app_interval_comparison(intervals1, intervals2) -> list[Dict[str, Any]]:
+    """Build interval-by-interval active executor comparison for app timelines."""
+    max_intervals = max(len(intervals1), len(intervals2))
+    comparison = []
+    interval_duration = 0
+
+    if intervals1:
+        interval_duration = intervals1[0].get("interval", {}).get("duration_minutes", 0)
+    elif intervals2:
+        interval_duration = intervals2[0].get("interval", {}).get("duration_minutes", 0)
+    if not interval_duration:
+        interval_duration = 1
+
+    for idx in range(max_intervals):
+        app1_interval = intervals1[idx] if idx < len(intervals1) else None
+        app2_interval = intervals2[idx] if idx < len(intervals2) else None
+
+        app1_execs = app1_interval.get("executor_count", 0) if app1_interval else 0
+        app2_execs = app2_interval.get("executor_count", 0) if app2_interval else 0
+
+        start_minute = idx * interval_duration
+        end_minute = start_minute + interval_duration
+        timestamp_range = f"{start_minute:.0f} min to {end_minute:.0f} min"
+
+        comparison.append(
+            {
+                "interval": idx + 1,
+                "timestamp_range": timestamp_range,
+                "app1": {"executor_count": app1_execs},
+                "app2": {"executor_count": app2_execs},
+                "differences": {
+                    "executor_count_diff": app1_execs - app2_execs,
+                },
+            }
+        )
+
+    return merge_intervals(comparison)
 
 
 def _compare_stage_timelines(timeline1, timeline2, stage1, stage2) -> Dict[str, Any]:

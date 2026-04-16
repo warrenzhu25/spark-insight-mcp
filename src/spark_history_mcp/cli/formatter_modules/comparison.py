@@ -77,6 +77,12 @@ def is_timeline_comparison_result(data: Any) -> bool:
     """Detect if data is a timeline comparison result structure."""
     if not isinstance(data, dict):
         return False
+    if (
+        "applications" in data
+        and "timeline_comparison" in data
+        and "analysis_parameters" in data
+    ):
+        return True
     timeline_keys = {
         "app1_info",
         "app2_info",
@@ -120,8 +126,7 @@ def is_resource_comparison_result(data: Any) -> bool:
     """Detect resource comparison results."""
     if not isinstance(data, dict):
         return False
-    resource_keys = {"applications", "resource_comparison"}
-    return len(resource_keys.intersection(data.keys())) >= 1
+    return "resource_comparison" in data
 
 
 def is_app_summary_comparison_result(data: Any) -> bool:
@@ -857,18 +862,7 @@ def format_app_summary_diff(
     app1_summary = app_summary_diff.get("app1_summary", {})
     app2_summary = app_summary_diff.get("app2_summary", {})
 
-    # Add app names header (extract from aggregated_stage_comparison if available)
     agg_stage = app_summary_diff.get("aggregated_stage_comparison", {})
-    applications = agg_stage.get("applications", {})
-    if applications:
-        app1_data = applications.get("app1", {})
-        app2_data = applications.get("app2", {})
-        app1_name = app1_data.get("name", app1_data.get("id", "App1"))
-        app2_name = app2_data.get("name", app2_data.get("id", "App2"))
-
-        console.print(f"[cyan]{app1_name}[/cyan] vs [cyan]{app2_name}[/cyan]")
-        console.print("─" * 80)
-        console.print()  # Empty line for spacing
 
     # Extract and merge unique metrics from aggregated_stage_comparison
     agg_metrics = agg_stage.get("aggregated_stage_metrics", {})
@@ -885,8 +879,7 @@ def format_app_summary_diff(
                 f"{stage_comp['total_tasks_percent_change']:+.1f}%"
             )
 
-    # Create table with static title
-    table = _make_comparison_table("Summary Comparison")
+    table = _make_comparison_table("Summary Metrics")
 
     # Define metric display preferences for formatting
     metric_display_config = {
@@ -983,11 +976,128 @@ def format_timeline_comparison_result(
     if not RICH_AVAILABLE:
         return
 
+    if (
+        "applications" in data
+        and isinstance(data.get("timeline_comparison"), dict)
+        and "analysis_parameters" in data
+    ):
+        format_compact_timeline_comparison_result(formatter, data)
+        return
+
     # Show only the timeline intervals table for compact output.
     format_timeline_overview_header(formatter, data)
     format_timeline_efficiency_panel(formatter, data)
     format_timeline_intervals_table(formatter, data)
     format_timeline_summary(formatter, data)
+
+
+def format_compact_timeline_comparison_result(formatter, data: Dict[str, Any]) -> None:
+    """Format application timeline comparison results from the compact MCP shape."""
+    applications = data.get("applications", {})
+    app1 = applications.get("app1", {})
+    app2 = applications.get("app2", {})
+    app1_name = app1.get("name", app1.get("id", "App1"))
+    app2_name = app2.get("name", app2.get("id", "App2"))
+
+    analysis = data.get("analysis_parameters", {})
+    duration1 = analysis.get("app1_duration_minutes", 0)
+    duration2 = analysis.get("app2_duration_minutes", 0)
+    interval_minutes = analysis.get("interval_minutes", 1)
+
+    if duration2:
+        duration_delta = duration1 - duration2
+        duration_pct = abs(duration_delta) / duration2 * 100
+        if duration_delta > 0:
+            perf_text = (
+                f"App2 finished {duration_delta:.2f} min ({duration_pct:.1f}%) faster"
+            )
+        elif duration_delta < 0:
+            perf_text = f"App1 finished {abs(duration_delta):.2f} min ({duration_pct:.1f}%) faster"
+        else:
+            perf_text = "Both applications finished in the same time"
+    else:
+        perf_text = "Duration comparison unavailable"
+
+    content = f"[bold]App1:[/bold] {app1_name}\n"
+    content += f"Duration: {duration1:.2f} min\n\n"
+    content += f"[bold]App2:[/bold] {app2_name}\n"
+    content += f"Duration: {duration2:.2f} min\n\n"
+    content += f"[bold]Interval:[/bold] {interval_minutes} min\n"
+    content += f"[bold]Performance:[/bold] {perf_text}"
+    console.print(
+        Panel(content, title="Application Timeline Comparison", border_style="blue")
+    )
+
+    comparison = data.get("timeline_comparison", {})
+    table = _make_comparison_table("Timeline Metrics")
+
+    peak = comparison.get("resource_peak_comparison", {})
+    utilization = comparison.get("utilization_efficiency", {})
+    duration_comp = comparison.get("duration_comparison", {})
+
+    metric_rows = [
+        ("Peak Executors", peak.get("max_executors")),
+        ("Max Cores", peak.get("max_cores")),
+        ("Avg Executor Utilization", utilization.get("avg_executor_utilization")),
+    ]
+
+    for label, values in metric_rows:
+        if not isinstance(values, dict):
+            continue
+        app1_val = values.get("app1")
+        app2_val = values.get("app2")
+        ratio = values.get("ratio")
+        if app1_val is None and app2_val is None:
+            continue
+        change = "N/A"
+        if ratio is not None:
+            change = f"{(ratio - 1) * 100:+.1f}%"
+        if isinstance(app1_val, float):
+            app1_display = f"{app1_val:.2f}"
+        else:
+            app1_display = str(app1_val)
+        if isinstance(app2_val, float):
+            app2_display = f"{app2_val:.2f}"
+        else:
+            app2_display = str(app2_val)
+        table.add_row(label, app1_display, app2_display, change)
+
+    if isinstance(duration_comp, dict):
+        ratio = duration_comp.get("duration_ratio")
+        duration_change = "N/A"
+        if ratio is not None:
+            duration_change = f"{(ratio - 1) * 100:+.1f}%"
+        table.add_row(
+            "App Duration (min)",
+            f"{duration_comp.get('app1_duration_minutes', 0):.2f}",
+            f"{duration_comp.get('app2_duration_minutes', 0):.2f}",
+            duration_change,
+        )
+
+    if table.rows:
+        console.print(table)
+
+    interval_comparison = comparison.get("interval_comparison", [])
+    if interval_comparison:
+        interval_table = Table(title="Active Executors by Interval", show_lines=True)
+        interval_table.add_column("Interval", style="cyan")
+        interval_table.add_column("Time Range", style="green")
+        interval_table.add_column("App 1", style="blue")
+        interval_table.add_column("App 2", style="blue")
+        interval_table.add_column("Diff", style="magenta")
+
+        for entry in interval_comparison:
+            diff = entry.get("differences", {}).get("executor_count_diff", 0)
+            diff_display = f"+{diff}" if diff > 0 else str(diff)
+            interval_table.add_row(
+                str(entry.get("interval", "")),
+                str(entry.get("timestamp_range", "")),
+                str(entry.get("app1", {}).get("executor_count", 0)),
+                str(entry.get("app2", {}).get("executor_count", 0)),
+                diff_display,
+            )
+
+        console.print(interval_table)
 
 
 def format_timeline_overview_header(formatter, data: Dict[str, Any]) -> None:
@@ -1528,84 +1638,125 @@ def format_environment_comparison_result(
         )
         for key, vals in jvm_info.items():
             if isinstance(vals, dict):
+                app1_val = str(vals.get("app1", ""))
+                app2_val = str(vals.get("app2", ""))
+                if app1_val == app2_val:
+                    continue
                 jvm_table.add_row(
                     key,
-                    str(vals.get("app1", "")),
-                    str(vals.get("app2", "")),
+                    app1_val,
+                    app2_val,
                 )
         if jvm_table.rows:
             console.print(jvm_table)
-        console.print()
+            console.print()
 
     # Spark properties differences
     spark_props = data.get("spark_properties", {})
     diff_props = spark_props.get("different", {})
+    filtered_spark_props = {"spark.app.name"}
+    hidden_spark_diff_count = 0
+    visible_spark_diff_count = 0
     if diff_props:
         table = _make_comparison_table(
             "Spark Properties Differences", label="Property", show_change=False
         )
         if isinstance(diff_props, list):
             for entry in sorted(diff_props, key=lambda e: e.get("property", "")):
+                prop_name = str(entry.get("property", ""))
+                if prop_name in filtered_spark_props:
+                    hidden_spark_diff_count += 1
+                    continue
                 table.add_row(
-                    str(entry.get("property", "")),
+                    prop_name,
                     str(entry.get("app1_value", "N/A")),
                     str(entry.get("app2_value", "N/A")),
                 )
         else:
             for prop in sorted(diff_props.keys()):
+                if prop in filtered_spark_props:
+                    hidden_spark_diff_count += 1
+                    continue
                 values = diff_props[prop]
                 table.add_row(
                     prop,
                     str(values.get("app1", "N/A")),
                     str(values.get("app2", "N/A")),
                 )
-        console.print(table)
+        visible_spark_diff_count = len(table.rows)
+        if table.rows:
+            console.print(table)
         total = spark_props.get(
             "total_different",
             len(diff_props) if isinstance(diff_props, (list, dict)) else 0,
         )
-        if isinstance(diff_props, list) and total > len(diff_props):
-            console.print(f"  ... and {total - len(diff_props)} more differences")
-        console.print()
+        adjusted_total = max(0, total - hidden_spark_diff_count)
+        if isinstance(diff_props, list) and adjusted_total > visible_spark_diff_count:
+            console.print(
+                f"  ... and {adjusted_total - visible_spark_diff_count} more differences"
+            )
+        if table.rows:
+            console.print()
 
     # System properties differences
     sys_props = data.get("system_properties", {})
     sys_diff = sys_props.get("different", [])
+    filtered_system_props = {"sun.java.command"}
+    hidden_system_diff_count = 0
     if sys_diff:
         table = _make_comparison_table(
             "System Properties Differences", label="Property", show_change=False
         )
         if isinstance(sys_diff, list):
             for item in sys_diff:
+                prop_name = item.get("property", "")
+                if prop_name in filtered_system_props:
+                    hidden_system_diff_count += 1
+                    continue
                 table.add_row(
-                    item.get("property", ""),
+                    prop_name,
                     str(item.get("app1_value", "")),
                     str(item.get("app2_value", "")),
                 )
         else:
             for prop in sorted(sys_diff.keys()):
+                if prop in filtered_system_props:
+                    hidden_system_diff_count += 1
+                    continue
                 values = sys_diff[prop]
                 table.add_row(
                     prop,
                     str(values.get("app1", "N/A")),
                     str(values.get("app2", "N/A")),
                 )
-        console.print(table)
+        if table.rows:
+            console.print(table)
         total = sys_props.get("total_different", len(sys_diff))
-        if total > len(sys_diff):
-            console.print(f"  ... and {total - len(sys_diff)} more differences")
-        console.print()
+        visible_count = len(table.rows)
+        adjusted_total = max(0, total - hidden_system_diff_count)
+        if adjusted_total > visible_count:
+            console.print(
+                f"  ... and {adjusted_total - visible_count} more differences"
+            )
+        if table.rows:
+            console.print()
 
     # Summary counts
     summary_parts = []
-    if spark_props.get("total_different"):
-        summary_parts.append(f"Spark props: {spark_props['total_different']} different")
+    spark_total = max(
+        0, spark_props.get("total_different", 0) - hidden_spark_diff_count
+    )
+    if spark_total:
+        summary_parts.append(f"Spark props: {spark_total} different")
     if spark_props.get("app1_only_count"):
         summary_parts.append(f"{spark_props['app1_only_count']} app1-only")
     if spark_props.get("app2_only_count"):
         summary_parts.append(f"{spark_props['app2_only_count']} app2-only")
-    if sys_props.get("total_different"):
-        summary_parts.append(f"System props: {sys_props['total_different']} different")
+    system_total = max(
+        0, sys_props.get("total_different", 0) - hidden_system_diff_count
+    )
+    if system_total:
+        summary_parts.append(f"System props: {system_total} different")
     if summary_parts:
         console.print("[bold]Summary:[/bold] " + " | ".join(summary_parts))
 

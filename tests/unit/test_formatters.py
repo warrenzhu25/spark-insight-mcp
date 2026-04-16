@@ -128,3 +128,145 @@ def test_environment_comparison_table(monkeypatch):
 
     table = dummy_console.printed[0]
     assert "Spark Properties Differences" in str(table.title)
+
+
+def test_environment_comparison_omits_identical_jvm_info(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    format_environment_comparison_result(
+        formatter,
+        {
+            "jvm_info": {
+                "java_version": {"app1": "17.0.12", "app2": "17.0.12"},
+                "java_home": {"app1": "/opt/java/openjdk", "app2": "/opt/java/openjdk"},
+                "scala_version": {"app1": "2.12.18", "app2": "2.12.18"},
+            },
+            "spark_properties": {
+                "different": {"spark.executor.memory": {"app1": "2g", "app2": "4g"}},
+                "app1_only": {},
+                "app2_only": {},
+                "performance_impact_analysis": [],
+            },
+            "system_properties": {"different": []},
+        },
+    )
+
+    printed_titles = [
+        str(obj.title) for obj in dummy_console.printed if hasattr(obj, "title")
+    ]
+    assert "JVM Information" not in printed_titles
+    assert "Spark Properties Differences" in printed_titles
+
+
+def test_environment_comparison_filters_spark_app_name(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    format_environment_comparison_result(
+        formatter,
+        {
+            "spark_properties": {
+                "different": {
+                    "spark.app.name": {"app1": "job-a", "app2": "job-b"},
+                    "spark.executor.memory": {"app1": "2g", "app2": "4g"},
+                },
+                "app1_only": {},
+                "app2_only": {},
+                "performance_impact_analysis": [],
+            },
+            "system_properties": {"different": []},
+        },
+    )
+
+    spark_table = next(obj for obj in dummy_console.printed if hasattr(obj, "title"))
+    property_cells = list(spark_table.columns[0]._cells)
+    assert "spark.app.name" not in property_cells
+    assert "spark.executor.memory" in property_cells
+
+
+def test_environment_comparison_summary_ignores_filtered_spark_app_name(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    format_environment_comparison_result(
+        formatter,
+        {
+            "spark_properties": {
+                "different": {
+                    "spark.app.name": {"app1": "job-a", "app2": "job-b"},
+                },
+                "total_different": 1,
+                "app1_only_count": 0,
+                "app2_only_count": 0,
+            },
+            "system_properties": {"different": [], "total_different": 0},
+        },
+    )
+
+    printed_text = [obj for obj in dummy_console.printed if isinstance(obj, str)]
+    assert all("Spark props:" not in line for line in printed_text)
+    assert all("more differences" not in line for line in printed_text)
+
+
+def test_environment_comparison_filters_sun_java_command(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    format_environment_comparison_result(
+        formatter,
+        {
+            "spark_properties": {"different": {}},
+            "system_properties": {
+                "different": [
+                    {
+                        "property": "sun.java.command",
+                        "app1_value": "cmd-a",
+                        "app2_value": "cmd-b",
+                    },
+                    {
+                        "property": "java.io.tmpdir",
+                        "app1_value": "/var/data/a",
+                        "app2_value": "/var/data/b",
+                    },
+                ],
+                "total_different": 2,
+            },
+        },
+    )
+
+    system_table = next(obj for obj in dummy_console.printed if hasattr(obj, "title"))
+    property_cells = list(system_table.columns[0]._cells)
+    assert "sun.java.command" not in property_cells
+    assert "java.io.tmpdir" in property_cells
+
+
+def test_environment_comparison_summary_ignores_filtered_sun_java_command(monkeypatch):
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(comparison_module, "console", dummy_console)
+
+    formatter = OutputFormatter()
+    format_environment_comparison_result(
+        formatter,
+        {
+            "spark_properties": {"different": {}, "total_different": 0},
+            "system_properties": {
+                "different": [
+                    {
+                        "property": "sun.java.command",
+                        "app1_value": "cmd-a",
+                        "app2_value": "cmd-b",
+                    }
+                ],
+                "total_different": 1,
+            },
+        },
+    )
+
+    printed_text = [obj for obj in dummy_console.printed if isinstance(obj, str)]
+    assert all("System props:" not in line for line in printed_text)
+    assert all("more differences" not in line for line in printed_text)

@@ -351,6 +351,55 @@ class TestOutputFormatterHuman:
         }
         fmt.output(timeline, title="TimelineFull")
 
+    def test_timeline_comparison_compact_shape(self, capsys):
+        fmt = OutputFormatter(format_type="human")
+        timeline = {
+            "applications": {
+                "app1": {"id": "app-1", "name": "App1"},
+                "app2": {"id": "app-2", "name": "App2"},
+            },
+            "timeline_comparison": {
+                "resource_peak_comparison": {
+                    "max_executors": {"app1": 5, "app2": 5, "ratio": 1.0},
+                    "max_cores": {"app1": 4, "app2": 4, "ratio": 1.0},
+                },
+                "utilization_efficiency": {
+                    "avg_executor_utilization": {
+                        "app1": 4.56,
+                        "app2": 4.33,
+                        "ratio": 0.95,
+                    }
+                },
+                "duration_comparison": {
+                    "app1_duration_minutes": 8.48,
+                    "app2_duration_minutes": 5.07,
+                    "duration_ratio": 0.60,
+                },
+                "interval_comparison": [
+                    {
+                        "interval": 1,
+                        "timestamp_range": "0-1 min",
+                        "app1": {"executor_count": 5},
+                        "app2": {"executor_count": 3},
+                        "differences": {"executor_count_diff": 2},
+                    }
+                ],
+            },
+            "analysis_parameters": {
+                "interval_minutes": 1,
+                "app1_duration_minutes": 8.48,
+                "app2_duration_minutes": 5.07,
+            },
+        }
+
+        fmt.output(timeline, title="TimelineCompact")
+        out = capsys.readouterr().out
+
+        assert "Application Timeline Comparison" in out
+        assert "Timeline Metrics" in out
+        assert "Active Executors by Interval" in out
+        assert "No resource allocation data available for comparison" not in out
+
 
 class TestMakeComparisonTable:
     """_make_comparison_table enforces consistent structure across all comparison tables."""
@@ -547,7 +596,7 @@ class TestTitleDeduplication:
     """Title should only appear once when using registered formatters."""
 
     def test_registered_formatter_does_not_duplicate_title(self, capsys):
-        """When a registered formatter handles data, title should appear only once."""
+        """Registered summary formatters should use the internal summary title."""
         fmt = OutputFormatter(format_type="human")
         # This data matches is_app_summary_comparison_result pattern
         data = {
@@ -559,10 +608,8 @@ class TestTitleDeduplication:
         fmt.output(data, title=title)
         out = capsys.readouterr().out
 
-        # Title should appear exactly once (in the table header)
-        # Before the fix, it appeared twice: once from _output_human and once from formatter
-        count = out.count("Summary Comparison")
-        assert count == 1, f"Expected title to appear once, but found {count} times"
+        assert "Summary Comparison" not in out
+        assert "Summary Metrics" in out
 
     def test_comparison_result_title_in_table(self, capsys):
         """Comparison results should include title in Rich table header."""
@@ -637,9 +684,9 @@ class TestMergedSummaryTable:
         # The merged metrics should appear in the single Summary Comparison table
         assert "Total Tasks" in out
 
-        # Summary Comparison title should appear exactly once (in the single table)
-        count = out.count("Summary Comparison")
-        assert count == 1, f"Expected 'Summary Comparison' once, found {count} times"
+        assert "Summary Comparison" not in out
+        assert "Summary Metrics" in out
+        assert "App One vs App Two" not in out
 
 
 class TestComparisonLabelConsistency:

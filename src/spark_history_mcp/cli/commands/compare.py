@@ -635,7 +635,7 @@ def execute_summary_comparison(app_id1, app_id2, server, formatter, ctx):
             data = compare_app_summaries(
                 app_id1=app_id1, app_id2=app_id2, server=server
             )
-            formatter.output(data, f"Summary Comparison: {app_id1} vs {app_id2}")
+            formatter.output(data)
             if formatter.format_type == "human" and _is_interactive():
                 show_generic_follow_up_menu(app_id1, app_id2, server, formatter, ctx)
 
@@ -1514,10 +1514,7 @@ if CLI_AVAILABLE:
                 comparison_data = compare_app_summaries(
                     app_id1=app_id1, app_id2=app_id2, server=final_server
                 )
-                formatter.output(
-                    comparison_data,
-                    f"Summary Comparison: {app_id1} vs {app_id2}",
-                )
+                formatter.output(comparison_data)
                 if output_format == "human" and _is_interactive():
                     show_generic_follow_up_menu(
                         app_id1, app_id2, final_server, formatter, ctx

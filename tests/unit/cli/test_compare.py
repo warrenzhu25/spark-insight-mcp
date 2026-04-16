@@ -28,6 +28,7 @@ from spark_history_mcp.cli.commands.compare import (
     create_mock_context,
     execute_stage_comparison,
     execute_stage_timeline_comparison,
+    execute_summary_comparison,
     execute_timeline_comparison,
     extract_stage_menu_options,
     get_app_context,
@@ -1135,6 +1136,23 @@ class TestExecuteHelpers:
         out = capsys.readouterr().out
         assert "Analyzing stage 7 vs 8 timeline" in out
         mock_compare_stage_tl.assert_called_once()
+
+    @patch("spark_history_mcp.cli.commands.compare.get_spark_client")
+    @patch("spark_history_mcp.tools.compare_app_summaries")
+    def test_execute_summary_comparison_omits_title(
+        self, mock_compare_summaries, mock_get_client, capsys
+    ):
+        mock_get_client.return_value = MagicMock()
+        mock_compare_summaries.return_value = {"diff": {}}
+        ctx = SimpleNamespace(obj={"config_path": CONFIG_PATH})
+        formatter = DummyFormatter()
+
+        execute_summary_comparison("app-1", "app-2", "local", formatter, ctx)
+
+        out = capsys.readouterr().out
+        assert "Comparing application summaries" in out
+        assert formatter.outputs == [({"diff": {}}, None)]
+        mock_compare_summaries.assert_called_once()
 
     @patch(
         "spark_history_mcp.cli.commands.compare.load_comparison_context",
