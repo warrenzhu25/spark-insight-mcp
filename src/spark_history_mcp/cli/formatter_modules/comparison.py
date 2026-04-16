@@ -1586,10 +1586,14 @@ def format_aggregated_stage_comparison_result(
 
 def _format_number_with_commas(value) -> str:
     """Format large numbers with comma separators for readability."""
-    if isinstance(value, (int, float)) and abs(value) > 9999:
-        if isinstance(value, float):
-            return f"{value:,.1f}"
-        return f"{value:,}"
+    if isinstance(value, (int, float)):
+        if abs(value) > 9999:
+            if isinstance(value, float) and value.is_integer():
+                return f"{int(value):,}"
+            elif isinstance(value, float):
+                return f"{value:,.1f}"
+            elif isinstance(value, int):
+                return f"{value:,}"
     return str(value)
 
 
