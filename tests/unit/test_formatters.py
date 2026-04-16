@@ -270,3 +270,20 @@ def test_environment_comparison_summary_ignores_filtered_sun_java_command(monkey
     printed_text = [obj for obj in dummy_console.printed if isinstance(obj, str)]
     assert all("System props:" not in line for line in printed_text)
     assert all("more differences" not in line for line in printed_text)
+
+
+def test_format_number_with_commas():
+    from spark_history_mcp.cli.formatter_modules.comparison import (
+        _format_number_with_commas,
+    )
+
+    assert _format_number_with_commas(10000) == "10,000"
+    assert _format_number_with_commas(9999) == "9999"
+    assert _format_number_with_commas(1) == "1"
+    assert _format_number_with_commas(0) == "0"
+
+    assert _format_number_with_commas(10000.0) == "10,000.0"
+    assert _format_number_with_commas(123.45) == "123.45"
+
+    assert _format_number_with_commas(-10000) == "-10,000"
+    assert _format_number_with_commas(-15000.5) == "-15,000.5"

@@ -953,8 +953,8 @@ def format_app_summary_diff(
             app1_str = f"{app1_val:.2f}"
             app2_str = f"{app2_val:.2f}"
         else:
-            app1_str = str(app1_val)
-            app2_str = str(app2_val)
+            app1_str = _format_number_with_commas(app1_val)
+            app2_str = _format_number_with_commas(app2_val)
 
         # Get change percentage dynamically
         change_key = f"{field_name}_change"
@@ -1055,11 +1055,11 @@ def format_compact_timeline_comparison_result(formatter, data: Dict[str, Any]) -
         if isinstance(app1_val, float):
             app1_display = f"{app1_val:.2f}"
         else:
-            app1_display = str(app1_val)
+            app1_display = _format_number_with_commas(app1_val)
         if isinstance(app2_val, float):
             app2_display = f"{app2_val:.2f}"
         else:
-            app2_display = str(app2_val)
+            app2_display = _format_number_with_commas(app2_val)
         table.add_row(label, app1_display, app2_display, change)
 
     if isinstance(duration_comp, dict):
@@ -1582,6 +1582,15 @@ def format_aggregated_stage_comparison_result(
 
     if table.rows:
         console.print(table)
+
+
+def _format_number_with_commas(value) -> str:
+    """Format large numbers with comma separators for readability."""
+    if isinstance(value, (int, float)) and abs(value) > 9999:
+        if isinstance(value, float):
+            return f"{value:,.1f}"
+        return f"{value:,}"
+    return str(value)
 
 
 def format_stage_metric_value(formatter, metric_key: str, value) -> str:
