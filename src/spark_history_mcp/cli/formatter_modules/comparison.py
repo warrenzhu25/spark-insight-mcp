@@ -620,8 +620,8 @@ def format_stage_performance_metrics(formatter, data: Dict[str, Any]) -> None:
             app1_val = formatter._format_duration(metric_data.get("stage1", 0))
             app2_val = formatter._format_duration(metric_data.get("stage2", 0))
         else:
-            app1_val = str(metric_data.get("stage1", 0))
-            app2_val = str(metric_data.get("stage2", 0))
+            app1_val = _format_number_with_commas(metric_data.get("stage1", 0))
+            app2_val = _format_number_with_commas(metric_data.get("stage2", 0))
 
         change = metric_data.get("change", "N/A")
         table.add_row(display_name, app1_val, app2_val, change)
@@ -641,9 +641,12 @@ def format_stage_performance_metrics(formatter, data: Dict[str, Any]) -> None:
             if metric_key in ["shuffle_read_bytes", "shuffle_write_bytes"]:
                 app1_val = formatter._format_bytes(median_data.get("stage1", 0))
                 app2_val = formatter._format_bytes(median_data.get("stage2", 0))
-            else:
+            elif "time" in metric_key.lower() or "duration" in metric_key.lower():
                 app1_val = formatter._format_duration(median_data.get("stage1", 0))
                 app2_val = formatter._format_duration(median_data.get("stage2", 0))
+            else:
+                app1_val = _format_number_with_commas(median_data.get("stage1", 0))
+                app2_val = _format_number_with_commas(median_data.get("stage2", 0))
 
             change = median_data.get("change", "N/A")
             table.add_row(f"Median {display_name}", app1_val, app2_val, change)
